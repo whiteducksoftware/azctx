@@ -36,7 +36,7 @@ brews:
     tap:
       owner: whiteducksoftware
       name: homebrew-tap
-      branch: master
+      branch: main
       token: "{{ .Env.AUTH_GITHUB }}"
     dependencies:
       - azure-cli
