@@ -26,25 +26,27 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+      - '^.github:'
+      - '^.vscode:'
 archives:
   - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: zip
 brews:
   - name: azctx
     tap:
-      owner: stiviik
+      owner: whiteducksoftware
       name: homebrew-tap
       branch: master
       token: "{{ .Env.AUTH_GITHUB }}"
     dependencies:
       - azure-cli
-    url_template: "https://github.com/StiviiK/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: Stefan Kürzeder
       email: stefan.kuerzeder@whiteduck.de
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     folder: Formula
-    homepage: "https://githubs.com/StiviiK/azctx"
+    homepage: "https://githubs.com/whiteducksoftware/azctx"
     description: "Switch faster between subscriptions in your azure cli."
     license: "MIT"
     install: |

@@ -68,6 +68,12 @@ export AZURE_CONFIG_DIR=$HOME/.azure
 
 -----
 
-## Todos
+## Migrate from stiviik/azctx
 
-* [ ] Implement Unit Tests
+Use the following commands to migrate from the old `stiviik/azctx` to the new `whiteducksoftware/azctx` repository:
+
+```bash
+brew uninstall azctx
+brew untap stiviik/tap
+brew install whiteducksoftware/tap/azctx
+```
