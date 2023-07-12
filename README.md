@@ -1,4 +1,4 @@
-# `azctx`: Power tool for the Azure CLI
+# <img src='assets/img/DB-WD-Iconsazctx-1200px.png' height=40> &nbsp; `azctx`: Power tool for the Azure CLI 
 
 ![azctx promo](assets/img/DB-WD-azctx-TW-440x220px@2x.png)
 
@@ -11,6 +11,12 @@
 
 ![azctx demo GIF](assets/img/azctx-demo.png)
 
+## 🗣️Colaborate with us
+
+* Feel free to give us your **feedback**, make **suggestions** or let us discuss in our 📢 [**discussions tab**](../../discussions/).
+* To report **issues** or search for existing issues go to the 🔎 [**issues tab**](../../issues/).
+
+_And please star this repo ⭐_
 
 # azctx(1)
 #
