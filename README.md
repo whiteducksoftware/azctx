@@ -3,9 +3,9 @@
 ![azctx promo](assets/img/DB-WD-azctx-TW-440x220px@2x.png)
 
 ![Proudly written in Go](https://img.shields.io/badge/written%20in-go-29BEB0.svg)
-![Latest GitHub release](https://img.shields.io/github/v/release/StiviiK/azctx.svg)
-![GitHub stars](https://img.shields.io/github/stars/stiviik/azctx.svg?label=github%20stars)
-![GitHub contributors](https://img.shields.io/github/contributors/stiviik/azctx.svg?label=github%20contributors)
+![Latest GitHub release](https://img.shields.io/github/v/release/whiteducksoftware/azctx.svg)
+![GitHub stars](https://img.shields.io/github/stars/whiteducksoftware/azctx.svg?label=github%20stars)
+![GitHub contributors](https://img.shields.io/github/contributors/whiteducksoftware/azctx.svg?label=github%20contributors)
 
 **`azctx`** helps you switch between azure cli subscriptions back and forth:
 
