@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	"github.com/StiviiK/azctx/azurecli"
-	"github.com/StiviiK/azctx/log"
-	"github.com/StiviiK/azctx/utils"
+	"github.com/whiteducksoftware/azctx/azurecli"
+	"github.com/whiteducksoftware/azctx/log"
+	"github.com/whiteducksoftware/azctx/utils"
+
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )

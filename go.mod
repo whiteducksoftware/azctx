@@ -1,4 +1,4 @@
-module github.com/StiviiK/azctx
+module github.com/whiteducksoftware/azctx
 
 go 1.18
 

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/StiviiK/azctx/cmd"
+import "github.com/whiteducksoftware/azctx/cmd"
 
 func main() {
 	cmd.Execute()

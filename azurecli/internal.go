@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/StiviiK/azctx/log"
-	"github.com/StiviiK/azctx/utils"
+	"github.com/whiteducksoftware/azctx/log"
+	"github.com/whiteducksoftware/azctx/utils"
 )
 
 const (

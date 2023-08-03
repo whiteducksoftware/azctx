@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/StiviiK/azctx/utils"
+	"github.com/whiteducksoftware/azctx/utils"
+
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 

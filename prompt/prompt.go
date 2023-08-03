@@ -6,10 +6,11 @@ import (
 	"strings"
 	templates "text/template"
 
+	"github.com/whiteducksoftware/azctx/azurecli"
+	"github.com/whiteducksoftware/azctx/log"
+	"github.com/whiteducksoftware/azctx/utils"
+
 	"github.com/Masterminds/sprig/v3"
-	"github.com/StiviiK/azctx/azurecli"
-	"github.com/StiviiK/azctx/log"
-	"github.com/StiviiK/azctx/utils"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/manifoldco/promptui"
 	"github.com/olekukonko/ts"

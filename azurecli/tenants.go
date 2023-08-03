@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/StiviiK/azctx/log"
-	"github.com/StiviiK/azctx/utils"
+	"github.com/whiteducksoftware/azctx/log"
+	"github.com/whiteducksoftware/azctx/utils"
 )
 
 // Tenants returns all tenants
