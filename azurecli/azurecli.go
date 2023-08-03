@@ -4,7 +4,8 @@ import (
 	"errors"
 	"os"
 
-	"github.com/StiviiK/azctx/utils"
+	"github.com/whiteducksoftware/azctx/utils"
+
 	"github.com/spf13/afero"
 )
 

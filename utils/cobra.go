@@ -3,7 +3,8 @@ package utils
 import (
 	"os"
 
-	"github.com/StiviiK/azctx/log"
+	"github.com/whiteducksoftware/azctx/log"
+
 	"github.com/spf13/cobra"
 )
 

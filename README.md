@@ -18,8 +18,8 @@
 
 _And please star this repo ⭐_
 
-# azctx(1)
-#
+## azctx
+
 ```bash
 azctx is a CLI tool for managing azure cli subscriptions.
 	It is a helper for the azure cli and provides a simple interface for managing subscriptions.
@@ -51,13 +51,17 @@ Use "azctx [command] --help" for more information about a command.
 
 ## Installation
 
-### Homebrew
+### Homebrew (macOS)
 
-* Install `azctx` with `brew install stiviik/tap/azctx`
+* Install `azctx` with `brew install whiteducksoftware/tap/azctx`
 
-### Linux
+### Chocolatey (Windows)
 
-* Install the `azctx` binary from the [repository](https://github.com/StiviiK/azctx/releases)
+* Install `azctx` with `choco install azctx`
+
+### Binary (Windows, Linux, macOS)
+
+* Install the `azctx` binary from the [repository](https://github.com/whiteducksoftware/azctx/releases)
 * Add the `azctx` binary to your PATH
 
 -----
@@ -66,7 +70,7 @@ Use "azctx [command] --help" for more information about a command.
 
 ### Error: `AZURE_CONFIG_DIR is not set / a valid directory. [...]`
 
-Run once `az configure` to create the configuration directory.
+Run `az configure` once to create the configuration directory.
 
 Check the [Microsoft Documentation](https://docs.microsoft.com/en-us/cli/azure/azure-cli-configuration?view=azure-cli-latest#cli-configuration-file) for the correct path to the azure cli config directory and export it as AZURE_CONFIG_DIR environment variable.  
 
@@ -78,7 +82,7 @@ export AZURE_CONFIG_DIR=$HOME/.azure
 
 ## Migrate from stiviik/azctx
 
-Use the following commands to migrate from the old `stiviik/azctx` to the new `whiteducksoftware/azctx` repository:
+Are you an existing user of `stiviik/azctx`? Use the following commands to migrate from the old `stiviik/azctx` to the new `whiteducksoftware/azctx` repository:
 
 ```bash
 brew uninstall azctx
