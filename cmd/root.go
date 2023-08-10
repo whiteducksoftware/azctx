@@ -73,7 +73,7 @@ func rootRunE(cmd *cobra.Command, args []string) error {
 		return getActiveSubscription(cli)
 	case cmd.Flags().Changed("refresh"):
 		log.Warn("Deprecated flag --refresh/-r used. Please use `azctx login` instead.")
-		return refreshSubscriptions(cli, args)
+		return refreshSubscriptions(cmd, cli, args)
 	case len(args) == 1:
 		// check if the user passed -
 		if args[0] == "-" {

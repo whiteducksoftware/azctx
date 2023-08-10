@@ -3,9 +3,11 @@ package azurecli
 import (
 	"bytes"
 	"errors"
-	"os"
+	"io"
 	"strings"
+	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/whiteducksoftware/azctx/log"
 	"github.com/whiteducksoftware/azctx/utils"
 
@@ -55,24 +57,20 @@ func (cli *CLI) Refresh() error {
 	return nil
 }
 
-// Login executes the az login command
-func (cli CLI) Login(extraArgs []string) error {
+func (cli CLI) execLogin(extraArgs []string) error {
 	// Create a buffer to store the stdErr output
 	var stdErrBuffer bytes.Buffer
 
 	// Execute the az login command
 	args := []string{"login"}
 	args = append(args, extraArgs...)
-	err := utils.ExecuteCommandBare(AZ_COMMAND, os.Stdout, &stdErrBuffer, args...)
+	err := utils.ExecuteCommandBare(AZ_COMMAND, io.Discard, &stdErrBuffer, args...)
 	if err != nil {
-		log.Error("Failed to execute 'az login': %s", err)
 		return err
 	}
 
-	// Convert the stdErr buffer to a string
+	// Print the stdErr output if it contains "WARNING:"
 	stdErrString := stdErrBuffer.String()
-
-	// Only print lines starting with "WARNING:" to the user
 	lines := strings.Split(stdErrString, "\n")
 	for _, line := range lines {
 		// Check if the line starts with "WARNING:" but ignore the "A web browser has been opened at" line
@@ -85,9 +83,59 @@ func (cli CLI) Login(extraArgs []string) error {
 	// Check if the output contains "mfa" or "multi-factor authentication"
 	stdErrLower := strings.ToLower(stdErrString)
 	if strings.Contains(stdErrLower, "mfa") || strings.Contains(stdErrLower, "multi-factor authentication") {
-		log.Warn(strings.Repeat("-", 80))
-		log.Warn("Multi-factor authentication is required. Please run 'azctx login -- --tenant TENANT_ID' to login to a specific tenant using MFA. See above output for the tenant ids.")
-		log.Warn(strings.Repeat("-", 80))
+		log.Error(strings.Repeat("-", 80))
+		log.Error("Some tenants require Multi-factor authentication. Please run 'azctx login --force-mfa --' to login into each tenant separately using MFA.")
+		log.Error(strings.Repeat("-", 80))
+	}
+
+	return nil
+}
+
+// InteractiveLogin executes the az login command
+func (cli CLI) InteractiveLogin(extraArgs []string) error {
+	// Create a spinner
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Color("green", "italic", "bold")
+	s.Suffix = " Logging in... Please check your browser for the login prompt."
+	s.Start()
+	defer s.Stop()
+
+	// Execute the az login command
+	err := cli.execLogin(extraArgs)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IterativeTenantLogin explicitly executes the az login command for each tenant
+func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
+	// Create a spinner
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Color("green", "italic", "bold")
+	s.Start()
+	defer s.Stop()
+
+	// Fetch all available tenants
+	tenants := cli.Tenants()
+	if len(tenants) == 0 {
+		return errors.New("no tenants found. Please run 'azctx login --' to normally login to Azure and fetch the tenants, after which you can try again logging in with MFA")
+	}
+
+	// Loop through the tenants and execute the az login command
+	for _, tenant := range tenants {
+		// Update the spinner suffix
+		s.Suffix = " Logging in to tenant '" + tenant.Name + "'... Please check your browser for the login prompt."
+
+		// Execute the az login command
+		args := []string{"--tenant", tenant.Id}
+		args = append(args, extraArgs...)
+		err := cli.execLogin(args)
+		if err != nil {
+			log.Error("Failed to login to tenant '%s': %s", tenant.Name, err)
+			continue
+		}
 	}
 
 	return nil
