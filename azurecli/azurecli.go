@@ -3,6 +3,7 @@ package azurecli
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -133,6 +134,7 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 		args = append(args, extraArgs...)
 		err := cli.execLogin(args)
 		if err != nil {
+			fmt.Println()
 			log.Error("Failed to login to tenant '%s': %s", tenant.Name, err)
 			continue
 		}
