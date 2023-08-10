@@ -13,12 +13,13 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Login to Azure",
 	Long: `Login to Azure (wrapped around 'az login')
-	It will refresh the subscriptions and fetch the tenant names.
+	Authenticates the CLI instance to Azure and fetches all available tenants and subscriptions.
 	All args after -- are directly passed to the 'az login' command.`,
 	Run: utils.WrapCobraCommandHandler(loginRunE),
 }
 
 func init() {
+	loginCmd.Flags().Bool("force-mfa", false, "force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)")
 	rootCmd.AddCommand(loginCmd)
 }
 
@@ -30,7 +31,7 @@ func loginRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	// Refresh the subscriptions and tenants
-	err = refreshSubscriptions(cli, args)
+	err = refreshSubscriptions(cmd, cli, args)
 	if err != nil {
 		return err
 	}
@@ -45,9 +46,17 @@ func loginRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func refreshSubscriptions(cli azurecli.CLI, extraArgs []string) error {
+func refreshSubscriptions(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error {
+	var err error
+
 	// Try to refresh the subscriptions
-	err := cli.Login(extraArgs)
+	switch {
+	case cmd.Flags().Changed("force-mfa"):
+		err = cli.IterativeTenantLogin(extraArgs)
+	default:
+		err = cli.InteractiveLogin(extraArgs)
+	}
+
 	if err != nil {
 		return err
 	}

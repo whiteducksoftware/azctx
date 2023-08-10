@@ -47,6 +47,19 @@ Flags:
 Use "azctx [command] --help" for more information about a command.
 ```
 
+```bash
+Login to Azure (wrapped around 'az login')
+        Authenticates the CLI instance to Azure and fetches all available tenants and subscriptions.
+        All args after -- are directly passed to the 'az login' command.
+
+Usage:
+  azctx login [flags]
+
+Flags:
+      --force-mfa   force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)
+  -h, --help        help for login
+```
+
 -----
 
 ## Installation
