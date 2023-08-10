@@ -33,7 +33,7 @@ archives:
     format: zip
 brews:
   - name: azctx
-    tap:
+    repository:
       owner: whiteducksoftware
       name: homebrew-tap
       branch: main
