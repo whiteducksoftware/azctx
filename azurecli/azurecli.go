@@ -59,7 +59,7 @@ func (cli *CLI) Reload() error {
 // InteractiveLogin executes the az login command
 func (cli CLI) InteractiveLogin(extraArgs []string) error {
 	// Create a spinner
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithHiddenCursor(false))
 	s.Color("green", "italic", "bold")
 	s.Suffix = " Logging in... Please check your browser for the login prompt."
 	s.Start()
@@ -77,7 +77,7 @@ func (cli CLI) InteractiveLogin(extraArgs []string) error {
 // IterativeTenantLogin explicitly executes the az login command for each tenant
 func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 	// Create a spinner
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithHiddenCursor(false))
 	s.Color("green", "italic", "bold")
 	s.Start()
 	defer s.Stop()
