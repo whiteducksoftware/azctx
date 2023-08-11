@@ -22,9 +22,9 @@ _And please star this repo ⭐_
 
 ```bash
 azctx is a CLI tool for managing azure cli subscriptions.
-	It is a helper for the azure cli and provides a simple interface for managing subscriptions.
-	Pass a subscription name to select a specific subscription.
-	Pass - to switch to the previous subscription.
+        It is a helper for the azure cli and provides a simple interface for managing subscriptions.
+        Pass a subscription name to select a specific subscription.
+        Pass - to switch to the previous subscription.
 
 Usage:
   azctx [- / -- NAME] [flags]
@@ -40,9 +40,8 @@ Flags:
   -c, --current               Display the current active subscription
       --filter-tenant-level   Filter tenant level accounts with no available subscriptions (default true)
   -h, --help                  help for azctx
-  -r, --refresh               Re-Authenticate and refresh the subscriptions.
-                              	Deprecated. Please use azctx login instead.
-  -s, --short                 Use a short prompt
+  -s, --short                 Use a short prompt.
+                                Deprecated. Size is now automatically determined.
 
 Use "azctx [command] --help" for more information about a command.
 ```

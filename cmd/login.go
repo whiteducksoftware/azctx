@@ -50,10 +50,8 @@ func loginRunE(cmd *cobra.Command, args []string) error {
 }
 
 func refreshData(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error {
-	var err error
-
 	// Fetch all available tenants
-	err = cli.UpdateTenants()
+	err := cli.UpdateTenants()
 	if err != nil {
 		log.Warn(`
 ` +

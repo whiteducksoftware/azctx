@@ -83,11 +83,10 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 	defer s.Stop()
 
 	// Loop through the tenants and execute the az login command
-	tenantStringColor := color.New(color.FgHiGreen)
 	tenants := cli.Tenants()
 	for _, tenant := range tenants {
 		// Update the spinner suffix
-		s.Suffix = " Logging into tenant " + tenantStringColor.Sprint(tenant.Name) + "... Please check your browser for the login prompt."
+		s.Suffix = " Logging into tenant " + color.HiGreenString(tenant.Name) + "... Please check your browser for the login prompt."
 
 		// Execute the az login command
 		args := []string{"--tenant", tenant.Id}
@@ -95,7 +94,7 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 		err := cli.execLogin(args)
 		if err != nil {
 			fmt.Println() // Force a new line after the spinner
-			log.Error("Failed to login to tenant '%s': %s", tenant.Name, err)
+			log.Error("Failed to login to tenant %s. Azure CLI returned the following error: %s", tenant.Name, color.RedString(err.Error()))
 			continue
 		}
 	}
