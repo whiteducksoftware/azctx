@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"strings"
+
+	"github.com/fatih/color"
 	"github.com/whiteducksoftware/azctx/azurecli"
 	"github.com/whiteducksoftware/azctx/log"
 	"github.com/whiteducksoftware/azctx/utils"
@@ -31,13 +34,13 @@ func loginRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	// Refresh the subscriptions and tenants
-	err = refreshSubscriptions(cmd, cli, args)
+	err = refreshData(cmd, cli, args)
 	if err != nil {
 		return err
 	}
 
-	// Refresh the cli instance
-	err = cli.Refresh()
+	// az login will update the subscriptions file, so we need to reload the data
+	err = cli.Reload()
 	if err != nil {
 		return err
 	}
@@ -46,23 +49,31 @@ func loginRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func refreshSubscriptions(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error {
+func refreshData(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error {
 	var err error
+
+	// Fetch all available tenants
+	err = cli.UpdateTenants()
+	if err != nil {
+		log.Warn(`
+` +
+			strings.Repeat("-", 80) + `
+Failed fetching available tenants, only tenants which do not require explicit MFA / Individual Authentication will be available.
+This may be due to the azure cli being completely logged out or due to a network error.
+Subsequent logins should no longer have this issue.
+
+Feel free to open an issue at ` + color.New(color.FgCyan).Sprint("https://github.com/whiteducksoftware/azctx/issues") + ` if this issue persists.
+` + strings.Repeat("-", 80))
+	}
 
 	// Try to refresh the subscriptions
 	switch {
-	case cmd.Flags().Changed("force-mfa"):
+	case cmd.Flags().Changed("force-mfa") && err == nil: // Only force MFA if the user explicitly requested it & we were able to fetch the tenants
 		err = cli.IterativeTenantLogin(extraArgs)
 	default:
 		err = cli.InteractiveLogin(extraArgs)
 	}
 
-	if err != nil {
-		return err
-	}
-
-	// Fetch all available tenants
-	err = cli.UpdateTenants()
 	if err != nil {
 		return err
 	}
