@@ -30,7 +30,8 @@ func (cli CLI) SubscriptionNames() []string {
 // SetSubscription sets the default subscription in the azure config file
 func (cli *CLI) SetSubscription(subscription Subscription) error {
 	// Execute az account set command
-	_, err := utils.ExecuteCommand(AZ_COMMAND, "account", "set", "--subscription", subscription.Id)
+	args := []string{"account", "set", "--subscription", subscription.Id}
+	_, err := utils.ExecuteCommand(AZ_COMMAND, args...)
 	if err != nil {
 		return err
 	}
