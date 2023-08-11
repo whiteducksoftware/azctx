@@ -101,3 +101,15 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 
 	return nil
 }
+
+// SetSubscription sets the default subscription in the azure config file
+func (CLI) SetSubscription(subscription Subscription) error {
+	// Execute az account set command
+	args := []string{"account", "set", "--subscription", subscription.Id}
+	_, err := utils.ExecuteCommand(AZ_COMMAND, args...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

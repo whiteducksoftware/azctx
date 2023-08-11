@@ -27,18 +27,6 @@ func (cli CLI) SubscriptionNames() []string {
 	return cli.Subscriptions().Names()
 }
 
-// SetSubscription sets the default subscription in the azure config file
-func (cli *CLI) SetSubscription(subscription Subscription) error {
-	// Execute az account set command
-	args := []string{"account", "set", "--subscription", subscription.Id}
-	_, err := utils.ExecuteCommand(AZ_COMMAND, args...)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // ActiveSubscription returns the active subscription
 func (cli CLI) ActiveSubscription() (Subscription, error) {
 	// select the subscription with the is default flag set to true
