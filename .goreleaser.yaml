@@ -79,14 +79,8 @@ winget:
     # # Templates: allowed
     # copyright_url: "https://goreleaser.com/copyright"
 
-    # Setting this will prevent goreleaser to actually try to commit the updated
-    # package - instead, it will be stored on the dist folder only,
-    # leaving the responsibility of publishing it to the user.
-    #
     # If set to auto, the release will not be uploaded to the repository
     # in case there is an indicator for prerelease in the tag e.g. v1.0.0-rc1
-    #
-    # Templates: allowed
     skip_upload: auto
 
     # # Release notes.
@@ -96,7 +90,7 @@ winget:
     # #
     # # Templates: allowed
     # release_notes: "{{.Changelog}}"
-    release_notes_url: "https://github.com/whiteducksoftware/azctx/releases/tag/{{.Version}}"
+    release_notes_url: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
     tags:
       - azure
       - azure-cli
