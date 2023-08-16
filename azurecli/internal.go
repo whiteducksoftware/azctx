@@ -1,8 +1,12 @@
 package azurecli
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/whiteducksoftware/azctx/log"
 	"github.com/whiteducksoftware/azctx/utils"
@@ -79,7 +83,7 @@ func (cli CLI) writeProfile() error {
 	}
 
 	// Open the azureProfile.json file
-	configFilePath := fmt.Sprintf("%s/%s", configDir, profilesJson)
+	configFilePath := fmt.Sprintf("%s/%s", configDir, PROFILES_JSON)
 	configFile, err := cli.fs.OpenFile(configFilePath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
@@ -152,5 +156,50 @@ func (cli CLI) writeTenants() error {
 	}
 
 	configFile.Close()
+	return nil
+}
+
+// execLogin executes the az login command
+func (cli CLI) execLogin(extraArgs []string) error {
+	// Create a buffer to store the stdErr output
+	var stdErrBuffer bytes.Buffer
+
+	// Execute the az login command
+	args := []string{"login"}
+	args = append(args, extraArgs...)
+	err := utils.ExecuteCommandBare(AZ_COMMAND, io.Discard, &stdErrBuffer, args...)
+	if err != nil {
+		// Only return lines which start with "ERROR: "
+		errs := make([]string, 0)
+		stdErrString := stdErrBuffer.String()
+		lines := strings.Split(stdErrString, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "ERROR: ") {
+				errs = append(errs, strings.TrimPrefix(line, "ERROR: "))
+			}
+		}
+
+		return errors.New(strings.Join(errs, "\n"))
+	}
+
+	// Print the stdErr output if it contains "WARNING:"
+	stdErrString := stdErrBuffer.String()
+	lines := strings.Split(stdErrString, "\n")
+	for _, line := range lines {
+		// Check if the line starts with "WARNING:" but ignore the "A web browser has been opened at" line
+		if strings.HasPrefix(line, "WARNING:") && !strings.Contains(line, "A web browser has been opened at") {
+			// Remove the "WARNING: " prefix and print the line
+			log.Warn(strings.TrimPrefix(line, "WARNING: "))
+		}
+	}
+
+	// Check if the output contains "mfa" or "multi-factor authentication"
+	stdErrLower := strings.ToLower(stdErrString)
+	if strings.Contains(stdErrLower, "mfa") || strings.Contains(stdErrLower, "multi-factor authentication") {
+		log.Error(strings.Repeat("-", 80))
+		log.Error("Some tenants require explicit MFA / Individual Authentication. Please run 'azctx login --force-mfa --' to login into each tenant separately.")
+		log.Error(strings.Repeat("-", 80))
+	}
+
 	return nil
 }
