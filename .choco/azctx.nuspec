@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>azctx</id>
+    <version>2023.08.2</version>
+    <title>azctx</title>
+    <authors>Martin Brandl</authors>
+    <owners>Martin Brandl</owners>
+    <licenseUrl>https://github.com/whiteducksoftware/azctx/blob/main/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/whiteducksoftware/azctx</projectUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <description>azctx helps you switch between azure cli subscriptions back and forth.
+    </description>
+    <summary>azctx helps you switch between azure cli subscriptions back and forth.</summary>
+    <releaseNotes>https://github.com/whiteducksoftware/azctx/releases</releaseNotes>
+    <copyright>Copyright 2022 white duck GmbH</copyright>
+    <tags>azctx azure cli</tags>
+    <bugTrackerUrl>https://github.com/whiteducksoftware/azctx/issues</bugTrackerUrl>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

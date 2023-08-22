@@ -1,0 +1,5 @@
+VERIFICATION
+azctx_windows_amd64.zip
+SHA256 Checksum Value: f13f825913c2d459ed19619c5f087d075829ffdb723467f708a23510dea860af
+
+
