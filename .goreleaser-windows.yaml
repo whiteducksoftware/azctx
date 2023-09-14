@@ -64,8 +64,8 @@ winget:
     package_identifier: whiteducksoftware.azctx
     url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
-      name: "GitHub Actions Bot"
-      email: ""
+      name: "{{ .Env.GITHUB_ACTOR }}"
+      email: "{{ .Env.GITHUB_ACTOR_ID }}+{{ .Env.GITHUB_ACTOR }}@users.noreply.github.com"
     commit_msg_template: "WinGet manifest update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/whiteducksoftware/azctx"
     license_url: "https://github.com/whiteducksoftware/azctx/blob/main/LICENSE"

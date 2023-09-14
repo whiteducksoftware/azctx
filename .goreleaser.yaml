@@ -46,8 +46,8 @@ brews:
       - azure-cli
     url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
-      name: "GitHub Actions Bot"
-      email: ""
+      name: "{{ .Env.GITHUB_ACTOR }}"
+      email: "{{ .Env.GITHUB_ACTOR_ID }}+{{ .Env.GITHUB_ACTOR }}@users.noreply.github.com"
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     folder: Formula
     homepage: "https://github.com/whiteducksoftware/azctx"
