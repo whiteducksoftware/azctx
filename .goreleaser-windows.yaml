@@ -86,7 +86,7 @@ winget:
       branch: master
       token: "{{ .Env.AUTH_GITHUB }}"
       pull_request:
-        enabled: false
+        enabled: true
         draft: true
         base:
           owner: whiteducksoftware
