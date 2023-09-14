@@ -61,7 +61,7 @@ winget:
     license: "mit"
     publisher_url: "https://whiteduck.de/en/"
     publisher_support_url: "https://whiteduck.de/en/contact/"
-    package_identifier: whiteduck.azctx
+    package_identifier: whiteducksoftware.azctx
     url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: Stefan Kürzeder
@@ -70,8 +70,6 @@ winget:
     homepage: "https://github.com/whiteducksoftware/azctx"
     license_url: "https://github.com/whiteducksoftware/azctx/blob/main/LICENSE"
     copyright: "Copyright 2023 white duck GmbH"
-    # If set to auto, the release will not be uploaded to the repository
-    # in case there is an indicator for prerelease in the tag e.g. v1.0.0-rc1
     skip_upload: auto
     release_notes: "{{.Changelog}}"
     release_notes_url: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
