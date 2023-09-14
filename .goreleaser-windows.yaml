@@ -34,9 +34,6 @@ archives:
   - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: zip
 
-release:
-  disable: true
-
 chocolateys:
   - name: azctx
     dependencies:
