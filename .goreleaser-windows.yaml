@@ -52,39 +52,3 @@ archives:
 #     bug_tracker_url: "https://github.com/whiteducksoftware/azctx/issues"
 #     release_notes: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
 #     copyright: "Copyright 2023 white duck GmbH"
-
-winget:
-  - name: azctx
-    publisher: "white duck GmbH"
-    path: "manifests/w/whiteducksoftware/azctx/{{ .Version }}"
-    short_description: "Faster switching between Azure Subscriptions in your Azure CLI"
-    license: "mit"
-    publisher_url: "https://whiteduck.de/en/"
-    publisher_support_url: "https://whiteduck.de/en/contact/"
-    package_identifier: whiteducksoftware.azctx
-    url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    commit_author:
-      name: "{{ .Env.GITHUB_ACTOR }}"
-      email: "{{ .Env.GITHUB_ACTOR_ID }}+{{ .Env.GITHUB_ACTOR }}@users.noreply.github.com"
-    commit_msg_template: "WinGet manifest update for {{ .ProjectName }} version {{ .Tag }}"
-    homepage: "https://github.com/whiteducksoftware/azctx"
-    license_url: "https://github.com/whiteducksoftware/azctx/blob/main/LICENSE"
-    copyright: "Copyright 2023 white duck GmbH"
-    skip_upload: auto
-    release_notes: "{{.Changelog}}"
-    release_notes_url: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
-    tags:
-      - azure
-      - azure-cli
-    repository:
-      owner: whiteducksoftware
-      name: winget-pkgs
-      branch: azctx-{{ .Version }}
-      token: "{{ .Env.AUTH_GITHUB }}"
-      pull_request:
-        enabled: true
-        draft: true
-        base:
-          owner: microsoft
-          name: winget-pkgs
-          branch: master
