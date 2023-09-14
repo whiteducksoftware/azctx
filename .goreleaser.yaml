@@ -1,12 +1,12 @@
 before:
   hooks:
     - go mod tidy
+    
 builds:
   - env:
       - CGO_ENABLED=0
     goos:
-      - linux
-      - darwin
+      - windows
     goarch:
       - amd64
       - arm
@@ -17,8 +17,10 @@ builds:
       - -X go.szostok.io/version.buildDate={{.Date}}
 checksum:
   name_template: 'linux_darwin_checksums.txt'
+
 snapshot:
   name_template: "{{ incpatch .Version }}"
+
 changelog:
   sort: asc
   filters:
@@ -27,9 +29,11 @@ changelog:
       - '^test:'
       - '^.github:'
       - '^.vscode:'
+
 archives:
   - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: zip
+    
 brews:
   - name: azctx
     repository:
@@ -46,8 +50,7 @@ brews:
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     folder: Formula
     homepage: "https://github.com/whiteducksoftware/azctx"
-    description: "Faster switching between Azure Subscriptions in your Azure CLI."
+    description: "Faster switching between Azure Subscriptions in your Azure CLI"
     license: "MIT"
     install: |
       bin.install "azctx"
-      
