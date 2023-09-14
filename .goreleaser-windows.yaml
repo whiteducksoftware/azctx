@@ -34,27 +34,30 @@ archives:
   - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: zip
 
-chocolateys:
-  - name: azctx
-    dependencies:
-      - id: azure-cli
-    owners: "Martin Brandl"
-    authors: "Martin Brandl"
-    url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    tags: "azctx azure cli"
-    require_license_acceptance: true
-    description: "Faster switching between Azure Subscriptions in your Azure CLI."
-    api_key: "{{ .Env.CHOCO_API_KEY }}"
-    source_repo: "https://push.chocolatey.org/"
-    project_url: "https://github.com/whiteducksoftware/azctx"
-    license_url: "https://github.com/whiteducksoftware/azctx/blob/main/LICENSE"
-    bug_tracker_url: "https://github.com/whiteducksoftware/azctx/issues"
-    release_notes: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
-    copyright: "Copyright 2023 white duck GmbH"
+release:
+  disable: true
+
+# chocolateys:
+#   - name: azctx
+#     dependencies:
+#       - id: azure-cli
+#     owners: "Martin Brandl"
+#     authors: "Martin Brandl"
+#     url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+#     tags: "azctx azure cli"
+#     require_license_acceptance: true
+#     description: "Faster switching between Azure Subscriptions in your Azure CLI."
+#     api_key: "{{ .Env.CHOCO_API_KEY }}"
+#     source_repo: "https://push.chocolatey.org/"
+#     project_url: "https://github.com/whiteducksoftware/azctx"
+#     license_url: "https://github.com/whiteducksoftware/azctx/blob/main/LICENSE"
+#     bug_tracker_url: "https://github.com/whiteducksoftware/azctx/issues"
+#     release_notes: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
+#     copyright: "Copyright 2023 white duck GmbH"
 
 winget:
   - name: azctx
-    publisher: "white duck Gesellschaft für Softwareentwicklung mbH"
+    publisher: "white duck GmbH"
     path: "manifests/w/whiteducksoftware/azctx/{{ .Version }}"
     short_description: "Faster switching between Azure Subscriptions in your Azure CLI"
     license: "mit"
@@ -77,15 +80,15 @@ winget:
     tags:
       - azure
       - azure-cli
-    repository:
-      owner: whiteducksoftware
-      name: winget-pkgs
-      branch: master
-      token: "{{ .Env.AUTH_GITHUB }}"
-      pull_request:
-        enabled: true
-        draft: true
-        base:
-          owner: whiteducksoftware
-          name: winget-pkgs
-          branch: master
+    # repository:
+    #   owner: whiteducksoftware
+    #   name: winget-pkgs
+    #   branch: master
+    #   token: "{{ .Env.AUTH_GITHUB }}"
+    #   pull_request:
+    #     enabled: true
+    #     draft: true
+    #     base:
+    #       owner: whiteducksoftware
+    #       name: winget-pkgs
+    #       branch: master
