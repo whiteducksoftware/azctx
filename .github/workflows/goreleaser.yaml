@@ -63,4 +63,5 @@ jobs:
           args: release --clean --config .goreleaser-windows.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTH_GITHUB: ${{ secrets.AUTH_GITHUB }}
           CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
