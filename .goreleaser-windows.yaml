@@ -80,15 +80,15 @@ winget:
     tags:
       - azure
       - azure-cli
-    # repository:
-    #   owner: whiteducksoftware
-    #   name: winget-pkgs
-    #   branch: master
-    #   token: "{{ .Env.AUTH_GITHUB }}"
-    #   pull_request:
-    #     enabled: true
-    #     draft: true
-    #     base:
-    #       owner: whiteducksoftware
-    #       name: winget-pkgs
-    #       branch: master
+    repository:
+      owner: whiteducksoftware
+      name: winget-pkgs
+      branch: master
+      token: "{{ .Env.AUTH_GITHUB }}"
+      pull_request:
+        enabled: true
+        draft: true
+        base:
+          owner: whiteducksoftware
+          name: winget-pkgs
+          branch: master
