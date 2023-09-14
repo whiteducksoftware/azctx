@@ -14,8 +14,6 @@ builds:
       - -s -w
       - -X go.szostok.io/version.version={{.Version}}
       - -X go.szostok.io/version.buildDate={{.Date}}
-checksum:
-  name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ incpatch .Version }}"
 changelog:
