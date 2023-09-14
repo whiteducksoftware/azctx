@@ -85,6 +85,6 @@ winget:
         enabled: true
         draft: true
         base:
-          owner: whiteducksoftware
+          owner: microsoft
           name: winget-pkgs
           branch: master
