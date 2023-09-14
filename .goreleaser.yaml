@@ -16,7 +16,7 @@ builds:
       - -X go.szostok.io/version.version={{.Version}}
       - -X go.szostok.io/version.buildDate={{.Date}}
 checksum:
-  name_template: 'windows_checksums.txt'
+  name_template: 'linux_darwin_checksums.txt'
 
 snapshot:
   name_template: "{{ incpatch .Version }}"
@@ -49,7 +49,7 @@ brews:
       email: stefan.kuerzeder@whiteduck.de
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     folder: Formula
-    homepage: "https://githubs.com/whiteducksoftware/azctx"
+    homepage: "https://github.com/whiteducksoftware/azctx"
     description: "Faster switching between Azure Subscriptions in your Azure CLI"
     license: "MIT"
     install: |

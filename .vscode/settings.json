@@ -1,6 +1,0 @@
-{
-    "yaml.schemas": {
-        "https://json.schemastore.org/github-workflow.json": "file:///Users/stivik/Dev/whiteduck/azctx/.github/workflows/goreleaser.yaml",
-        "https://goreleaser.com/static/schema.json": "file:///Users/stivik/Dev/whiteduck/azctx/.goreleaser-windows.yaml"
-    }
-}
