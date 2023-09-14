@@ -79,7 +79,7 @@ winget:
     repository:
       owner: whiteducksoftware
       name: winget-pkgs
-      branch: master
+      branch: azctx-{{ .Version }}
       token: "{{ .Env.AUTH_GITHUB }}"
       pull_request:
         enabled: true
