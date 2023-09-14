@@ -6,7 +6,6 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
       - darwin
     goarch:
       - amd64
@@ -17,7 +16,7 @@ builds:
       - -X go.szostok.io/version.version={{.Version}}
       - -X go.szostok.io/version.buildDate={{.Date}}
 checksum:
-  name_template: 'checksums.txt'
+  name_template: 'linux_darwin_checksums.txt'
 snapshot:
   name_template: "{{ incpatch .Version }}"
 changelog:

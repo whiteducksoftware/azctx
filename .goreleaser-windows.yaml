@@ -1,0 +1,48 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm
+      - arm64
+    ldflags:
+      - -s -w
+      - -X go.szostok.io/version.version={{.Version}}
+      - -X go.szostok.io/version.buildDate={{.Date}}
+checksum:
+  name_template: 'windows_checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^.github:'
+      - '^.vscode:'
+archives:
+  - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    format: zip
+chocolateys:
+  - name: azctx
+    dependencies:
+      - id: azure-cli
+    owners: "Martin Brandl"
+    authors: "Martin Brandl"
+    url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    tags: "azctx azure cli"
+    require_license_acceptance: true
+    description: "Faster switching between Azure Subscriptions in your Azure CLI."
+    api_key: "{{ .Env.CHOCO_API_KEY }}"
+    source_repo: "https://push.chocolatey.org/"
+    project_url: "https://github.com/whiteducksoftware/azctx"
+    license_url: "https://github.com/whiteducksoftware/azctx/blob/main/LICENSE"
+    bug_tracker_url: "https://github.com/whiteducksoftware/azctx/issues"
+    release_notes: "https://github.com/whiteducksoftware/azctx/releases/tag/{{ .Tag }}"
+    copyright: "Copyright 2023 white duck GmbH"

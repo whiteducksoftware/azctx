@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/briandowns/spinner v1.23.0
+	github.com/fatih/color v1.15.0
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/manifoldco/promptui v0.9.0
 	github.com/olekukonko/ts v0.0.0-20171002115256-78ecb04241c0
@@ -22,7 +23,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fatih/color v1.15.0 // indirect
 	github.com/goccy/go-yaml v1.11.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
