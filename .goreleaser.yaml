@@ -80,13 +80,16 @@ winget:
     tags:
       - azure
       - azure-cli
+    dependencies:
+      - package_identifier: Microsoft.AzureCLI
+        minimum_version: 2.50.0
     repository:
       owner: whiteducksoftware
       name: winget-pkgs
       branch: azctx-{{ .Version }}
       token: "{{ .Env.AUTH_GITHUB }}"
       pull_request:
-        enabled: true
+        enabled: false
         draft: true
         base:
           owner: microsoft
