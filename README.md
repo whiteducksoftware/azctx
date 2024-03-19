@@ -11,7 +11,7 @@
 
 ![azctx demo GIF](assets/img/azctx-demo.png)
 
-## Colaborate with us 👋
+## Collaborate with us 👋
 
 * Feel free to give us your **feedback**, make **suggestions** or let us discuss in our 📢 [**discussions tab**](../../discussions/).
 * To report **issues** or search for existing issues go to the 🔎 [**issues tab**](../../issues/).
