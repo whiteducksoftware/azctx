@@ -11,7 +11,7 @@ require (
 	github.com/olekukonko/ts v0.0.0-20171002115256-78ecb04241c0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.9.5
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.1
 	go.szostok.io/version v1.2.0
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
 )
