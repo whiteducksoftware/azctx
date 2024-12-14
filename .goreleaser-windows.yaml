@@ -17,23 +17,23 @@ builds:
       - -X go.szostok.io/version.buildDate={{.Date}}
 
 snapshot:
-  name_template: "{{ incpatch .Version }}"
+  version_template: "{{ incpatch .Version }}"
 
 changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^.github:'
-      - '^.vscode:'
+      - "^docs:"
+      - "^test:"
+      - "^.github:"
+      - "^.vscode:"
 
 archives:
   - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: zip
 
 release:
-    disable: true # Linux runner will publish the release (including the windows binaries)
+  disable: true # Linux runner will publish the release (including the windows binaries)
 
 chocolateys:
   - name: azctx

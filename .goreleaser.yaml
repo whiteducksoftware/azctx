@@ -1,7 +1,7 @@
 before:
   hooks:
     - go mod tidy
-    
+
 builds:
   - env:
       - CGO_ENABLED=0
@@ -18,24 +18,24 @@ builds:
       - -X go.szostok.io/version.version={{.Version}}
       - -X go.szostok.io/version.buildDate={{.Date}}
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
 snapshot:
-  name_template: "{{ incpatch .Version }}"
+  version_template: "{{ incpatch .Version }}"
 
 changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^.github:'
-      - '^.vscode:'
+      - "^docs:"
+      - "^test:"
+      - "^.github:"
+      - "^.vscode:"
 
 archives:
   - name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format: zip
-    
+
 brews:
   - name: azctx
     repository:
@@ -50,7 +50,7 @@ brews:
       name: "{{ .Env.GITHUB_ACTOR }}"
       email: "{{ .Env.GITHUB_ACTOR_ID }}+{{ .Env.GITHUB_ACTOR }}@users.noreply.github.com"
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-    folder: Formula
+    directory: Formula
     homepage: "https://github.com/whiteducksoftware/azctx"
     description: "Faster switching between Azure Subscriptions in your Azure CLI"
     license: "MIT"
