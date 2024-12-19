@@ -18,7 +18,8 @@ builds:
     ldflags:
       - -s -w
       - -X go.szostok.io/version.version={{.Version}}
-      - -X go.szostok.io/version.buildDate={{.Date}}
+      - -X go.szostok.io/version.buildDate={{.CommitDate}}
+    mod_timestamp: "{{.CommitTimestamp}}"
 
 changelog:
   sort: asc
