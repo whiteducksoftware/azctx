@@ -38,6 +38,9 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_Windows_checksums.txt"
+
 chocolateys:
   - name: azctx
     dependencies:

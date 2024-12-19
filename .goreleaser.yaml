@@ -39,6 +39,9 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_Darwin_Linux_checksums.txt"
+
 brews:
   - name: azctx
     repository:
