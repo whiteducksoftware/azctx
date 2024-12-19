@@ -35,6 +35,7 @@ jobs:
           AUTH_GITHUB: ${{ secrets.AUTH_GITHUB }}
   goreleaser-windows:
     name: goreleaser-windows
+    needs: goreleaser-linux
     runs-on: windows-latest
     steps:
       - name: Checkout
