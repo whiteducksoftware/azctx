@@ -1,10 +1,12 @@
 version: 2
 updates:
   - package-ecosystem: gomod
-    directory: "/"
+    directory: /
+    open-pull-requests-limit: 10
     schedule:
       interval: monthly
+  - package-ecosystem: github-actions
+    directory: /
     open-pull-requests-limit: 10
-    labels:
-      - enhancement
-      - dependency-management
+    schedule:
+      interval: monthly
