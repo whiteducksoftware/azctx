@@ -28,6 +28,10 @@ changelog:
       - "^.github:"
       - "^.vscode:"
 
+sboms:
+  - artifacts: archive
+    cmd: syft
+
 archives:
   - format: tar.gz
     # this name template makes the OS and Arch compatible with the results of `uname`.
