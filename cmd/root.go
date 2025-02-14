@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// Respository Owner
+	// Repository Owner
 	owner = "whiteducksoftware"
 
 	// Repository Name

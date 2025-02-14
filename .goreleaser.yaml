@@ -29,7 +29,11 @@ changelog:
       - "^.vscode:"
 
 sboms:
-  - artifacts: archive
+  - id: archive
+    artifacts: archive
+    cmd: syft
+  - id: source
+    artifacts: source
     cmd: syft
 
 archives:

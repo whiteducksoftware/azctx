@@ -26,8 +26,7 @@ var (
 func template(terminalWidth int, maxSubscriptionsLength, maxTenantsLength, maxTenantsWithIdLength int) promptTemplate {
 	// Determine the template based on the terminal width
 	switch {
-
-	// +50, subscriptionId is 36 chars, + 4 spaces / seperator, + 10 from the previous case
+	// +50, subscriptionId is 36 chars, + 4 spaces / separator, + 10 from the previous case
 	case terminalWidth > maxSubscriptionsLength+maxTenantsWithIdLength+36+4+10:
 		return template_Long
 
@@ -37,6 +36,5 @@ func template(terminalWidth int, maxSubscriptionsLength, maxTenantsLength, maxTe
 
 	default:
 		return template_VeryShort
-
 	}
 }
