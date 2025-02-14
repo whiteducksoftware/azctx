@@ -32,7 +32,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6.3.0
         with:
           version: latest
-          args: --issues-exit-code=0  --config=.golangci.yml
+          args: --issues-exit-code=1  --config=.golangci.yml
 
   ci-linux:
     name: ci-linux
