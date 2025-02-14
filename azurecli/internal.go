@@ -57,7 +57,7 @@ func (cli *CLI) readProfile() error {
 	}
 
 	// Open the azureProfile.json file
-	configFile, err := cli.fs.OpenFile(configFilePath, os.O_RDONLY, 0644)
+	configFile, err := cli.fs.OpenFile(configFilePath, os.O_RDONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
 	}
@@ -117,7 +117,7 @@ func (cli *CLI) readTenants() error {
 	}
 
 	// Open the azctxTenants.json file
-	configFile, err := cli.fs.OpenFile(configFilePath, os.O_RDONLY, 0644)
+	configFile, err := cli.fs.OpenFile(configFilePath, os.O_RDONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
 	}
@@ -143,7 +143,7 @@ func (cli CLI) writeTenants() error {
 
 	// Open the azctxTenants.json file
 	configFilePath := fmt.Sprintf("%s/%s", configDir, TENANTS_JSON)
-	configFile, err := cli.fs.OpenFile(configFilePath, os.O_CREATE|os.O_WRONLY, 0644)
+	configFile, err := cli.fs.OpenFile(configFilePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
 	}
