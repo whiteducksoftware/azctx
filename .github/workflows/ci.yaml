@@ -32,7 +32,7 @@ jobs:
           git diff --exit-code go.sum
 
       - name: lint
-        uses: golangci/golangci-lint-action@2226d7cb06a077cd73e56eedd38eecad18e5d837 #v6.5.0
+        uses: golangci/golangci-lint-action@4696ba8babb6127d732c3c6dde519db15edab9ea #v6.5.1
         with:
           version: latest
           args: --issues-exit-code=1  --config=.golangci.yml
