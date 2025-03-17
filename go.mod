@@ -4,7 +4,7 @@ go 1.23.6
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/briandowns/spinner v1.23.1
+	github.com/briandowns/spinner v1.23.2
 	github.com/fatih/color v1.18.0
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/manifoldco/promptui v0.9.0
