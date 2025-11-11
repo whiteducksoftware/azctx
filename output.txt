@@ -1,0 +1,12 @@
+❯ ./azctx
+Use the arrow keys to navigate: ↓ ↑ → ←  and / toggles search
+    Name                                                 Tenant
+↑   Azure subscription 1                                 | 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53
+    euronet-mpa-dev                                      | 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53
+    euronet-mpa-hub                                      | 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53
+    euronet-mpa-prod                                     | 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53
+    euronet-mpa-test                                     | 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53
+    Azure Subscription Prod. Spoke (Bezahlung über ADN) | 9e65562d-b901-4409-871b-b48100b9d122
+    Azure Subscription Test Spoke (Bezahlung über ADN)  | 9e65562d-b901-4409-871b-b48100b9d122
+    Azure subscription Hub (Bezahlung über ADN)         | 9e65562d-b901-4409-871b-b48100b9d122
+    Microsoft Azure Sponsorship                          | 9e65562d-b901-4409-871b-b48100b9d122

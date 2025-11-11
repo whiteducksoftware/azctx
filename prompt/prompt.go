@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	templates "text/template"
@@ -13,21 +14,19 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/manifoldco/promptui"
-	"github.com/olekukonko/ts"
+	"golang.org/x/term"
 )
 
 // BuildPrompt builds a prompt for the user to select a subscription
 func BuildPrompt(subscriptions utils.ComparableNamedSlice[azurecli.Subscription]) promptui.Select {
 	// Get the terminal dimensions
-	var terminalWidth, terminalHeigth int
-	if size, err := ts.GetSize(); err != nil {
-		terminalWidth = 100 // Default width
-		terminalHeigth = 20 // Default height
+	// Detect terminal size; default to safe dimensions for non-interactive sessions.
+	terminalWidth, terminalHeigth := 100, 20
+	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err != nil {
 		log.Warn("Unable to get terminal dimensions, using default values (width: %d, height: %d)", terminalWidth, terminalHeigth)
 	} else {
-		// Set the terminal dimensions
-		terminalWidth = size.Col()
-		terminalHeigth = size.Row()
+		terminalWidth = width
+		terminalHeigth = height
 	}
 
 	// Sort the subscriptions by name
@@ -80,6 +79,7 @@ func newTemplateFuncMap() templates.FuncMap {
 	ret["cyan"] = promptui.Styler(promptui.FGCyan)
 	ret["bold"] = promptui.Styler(promptui.FGBold)
 	ret["faint"] = promptui.Styler(promptui.FGFaint)
+	ret["pad"] = pad
 	return ret
 }
 

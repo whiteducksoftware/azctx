@@ -1,6 +1,10 @@
 package utils
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mattn/go-runewidth"
+)
 
 // StringSlice is a slice of strings, helper type used for extension methods
 type StringSlice []string
@@ -9,8 +13,8 @@ type StringSlice []string
 func (slice StringSlice) LongestLength() int {
 	longestLength := 0
 	for _, s := range slice {
-		if len(s) > longestLength {
-			longestLength = len(s)
+		if width := runewidth.StringWidth(s); width > longestLength {
+			longestLength = width
 		}
 	}
 	return longestLength

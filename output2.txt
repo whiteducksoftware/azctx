@@ -1,0 +1,13 @@
+❯ go run .
+Use the arrow keys to navigate: ↓ ↑ → ←  and / toggles search
+<nil>
+  {2d501e73-49ee-4fc0-84e4-2cc2baaa0897 DE1000-Dev Enabled {stephan.huettner@whiteduck.de user} false 4a607258-f067-49d3-bbd4-0a4cf611160b 4a607258-f067-49d3-bbd4-0a4cf611160b AzureCloud 4a607258-f067-49d3-bbd4-0a4cf611160b []}
+  {d0190d68-364b-4409-b629-f5904fd992cb DE1000-Prod Enabled {stephan.huettner@whiteduck.de user} false 4a607258-f067-49d3-bbd4-0a4cf611160b 4a607258-f067-49d3-bbd4-0a4cf611160b AzureCloud 4a607258-f067-49d3-bbd4-0a4cf611160b [{5f166d1f-49bb-4430-bb98-f80df478e632}]}
+  {9603c431-3ffc-443f-9340-a68ba626b432 i4Designer Enabled {stephan.huettner@whiteduck.de user} false 6b3e3388-6123-4327-aa06-2d82a999567d 6b3e3388-6123-4327-aa06-2d82a999567d AzureCloud 6b3e3388-6123-4327-aa06-2d82a999567d []}
+  {532cd3b3-d581-4ddd-9ac9-5c642cd45377 i4connected Enabled {stephan.huettner@whiteduck.de user} false 6b3e3388-6123-4327-aa06-2d82a999567d 6b3e3388-6123-4327-aa06-2d82a999567d AzureCloud 6b3e3388-6123-4327-aa06-2d82a999567d []}
+  {bb356733-885c-4c04-974f-0d6f38703ebb i4designer development Enabled {stephan.huettner@whiteduck.de user} false 6b3e3388-6123-4327-aa06-2d82a999567d 6b3e3388-6123-4327-aa06-2d82a999567d AzureCloud 6b3e3388-6123-4327-aa06-2d82a999567d []}
+  {63192c20-b43d-4435-937e-a58f4a0daff9 i4designer production Enabled {stephan.huettner@whiteduck.de user} false 6b3e3388-6123-4327-aa06-2d82a999567d 6b3e3388-6123-4327-aa06-2d82a999567d AzureCloud 6b3e3388-6123-4327-aa06-2d82a999567d []}
+  {758e0200-f997-4791-a164-7892273d6e67 Azure subscription 1 Enabled {stephan.huettner@whiteduck.de user} false 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 AzureCloud 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 []}
+  {c60bcd7f-f941-4500-90fb-608a43d152b4 euronet-mpa-dev Enabled {stephan.huettner@whiteduck.de user} false 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 AzureCloud 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 []}
+  {a5feeca9-905a-4f80-be9b-4d913a96c1ab euronet-mpa-hub Enabled {stephan.huettner@whiteduck.de user} false 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 AzureCloud 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 []}
+↓ {9eb9b34e-39b1-4441-acbb-9d0f287cc4d5 euronet-mpa-prod Enabled {stephan.huettner@whiteduck.de user} false 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 AzureCloud 78d1ce4e-e22b-4c15-b9bd-bfcc1d87aa53 []}

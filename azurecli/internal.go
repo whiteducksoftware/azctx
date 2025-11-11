@@ -189,16 +189,17 @@ func (cli CLI) execLogin(extraArgs []string) error {
 		// Check if the line starts with "WARNING:" but ignore the "A web browser has been opened at" line
 		if strings.HasPrefix(line, "WARNING:") && !strings.Contains(line, "A web browser has been opened at") {
 			// Remove the "WARNING: " prefix and print the line
-			log.Warn(strings.TrimPrefix(line, "WARNING: "))
+			log.Warn("%s", strings.TrimPrefix(line, "WARNING: "))
 		}
 	}
 
 	// Check if the output contains "mfa" or "multi-factor authentication"
 	stdErrLower := strings.ToLower(stdErrString)
 	if strings.Contains(stdErrLower, "mfa") || strings.Contains(stdErrLower, "multi-factor authentication") {
-		log.Error(strings.Repeat("-", 80))
+		separator := strings.Repeat("-", 80)
+		log.Error("%s", separator)
 		log.Error("Some tenants require explicit MFA / Individual Authentication. Please run 'azctx login --force-mfa --' to login into each tenant separately.")
-		log.Error(strings.Repeat("-", 80))
+		log.Error("%s", separator)
 	}
 
 	return nil

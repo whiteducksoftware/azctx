@@ -13,7 +13,7 @@ func WrapCobraCommandHandler(fun func(cmd *cobra.Command, args []string) error) 
 	return func(cmd *cobra.Command, args []string) {
 		err := fun(cmd, args)
 		if err != nil {
-			log.Error(err.Error())
+			log.Error("%s", err)
 			os.Exit(1)
 		}
 	}

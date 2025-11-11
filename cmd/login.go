@@ -53,15 +53,15 @@ func refreshData(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error
 	// Fetch all available tenants
 	err := cli.UpdateTenants()
 	if err != nil {
-		log.Warn(`
-` +
-			strings.Repeat("-", 80) + `
+		separator := strings.Repeat("-", 80)
+		warnMsg := "\n" + separator + `
 Failed fetching available tenants, only tenants which do not require explicit MFA / Individual Authentication will be available.
 This may be due to the azure cli being completely logged out or due to a network error.
 Subsequent logins should no longer have this issue.
 
 Feel free to open an issue at ` + color.New(color.FgCyan).Sprint("https://github.com/whiteducksoftware/azctx/issues") + ` if this issue persists.
-` + strings.Repeat("-", 80))
+` + separator
+		log.Warn("%s", warnMsg)
 	}
 
 	// Try to refresh the subscriptions
