@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   tests: true
   allow-parallel-runners: true
@@ -5,10 +7,7 @@ run:
 
 # https://github.com/golangci/golangci-lint/blob/master/.golangci.reference.yml
 linters:
-  # Disable all linters.
-  # Default: false
-  disable-all: true
-  # Enable specific linter
+  default: none
   enable:
     - asciicheck
     - bidichk
@@ -17,15 +16,12 @@ linters:
     - errorlint
     - funlen
     #- errcheck
-    - gofmt
     - goconst
-    - gofumpt
     - gocyclo
     - godox
     - gosec
     #- gocritic
     #- govet
-    - goimports
     - goheader
     - misspell
     - nolintlint
@@ -38,97 +34,99 @@ linters:
     - unparam
     - whitespace
     #- nilerr
+  settings:
+    dupl:
+      # Tokens count to trigger issue.
+      # Default: 150
+      threshold: 100
 
-linters-settings:
-  dupl:
-    # Tokens count to trigger issue.
-    # Default: 150
-    threshold: 100
+    errorlint:
+      # Check whether fmt.Errorf uses the %w verb for formatting errors.
+      # Default: true
+      asserts: false
 
-  errorlint:
-    # Check whether fmt.Errorf uses the %w verb for formatting errors.
-    # Default: true
-    asserts: false
+    funlen:
+      # Checks the number of lines in a function.
+      # Default: 60
+      lines: -1
+      # Default: 40
+      statements: 50
+      # Ignore comments when counting lines.
+      # Default false
+      ignore-comments: true
 
-  funlen:
-    # Checks the number of lines in a function.
-    # Default: 60
-    lines: -1
-    # Default: 40
-    statements: 50
-    # Ignore comments when counting lines.
-    # Default false
-    ignore-comments: true
+    goconst:
+      # Minimal length of string constant.
+      # Default: 3
+      min-len: 2
+      # Default: 3
+      min-occurrences: 3
 
-  goconst:
-    # Minimal length of string constant.
-    # Default: 3
-    min-len: 2
-    # Default: 3
-    min-occurrences: 3
+    # gocritic:
+    #   enabled-tags:
+    #     - diagnostic
+    #     - experimental
+    #     - opinionated
+    #     - performance
+    #     - style
+    #   disabled-checks:
+    #     - dupImport # https://github.com/go-critic/go-critic/issues/845
+    #     - ifElseChain
+    #     - octalLiteral
+    #     - whyNoLint
 
-  # gocritic:
-  #   enabled-tags:
-  #     - diagnostic
-  #     - experimental
-  #     - opinionated
-  #     - performance
-  #     - style
-  #   disabled-checks:
-  #     - dupImport # https://github.com/go-critic/go-critic/issues/845
-  #     - ifElseChain
-  #     - octalLiteral
-  #     - whyNoLint
+    gocyclo:
+      # Minimal code complexity to report.
+      # Default: 30 (but we recommend 10-20)
+      min-complexity: 15
 
-  gocyclo:
-    # Minimal code complexity to report.
-    # Default: 30 (but we recommend 10-20)
-    min-complexity: 15
+    godox:
+      keywords:
+        - FIXME
+        #- TODO
+        - FIX
+        - NOTE
+        - OPTIMIZE # marks code that should be optimized before merging
+        - HACK # marks hack-around that should be removed before merging
 
-  godox:
-    keywords:
-      - FIXME
-      #- TODO
-      - FIX
-      - NOTE
-      - OPTIMIZE # marks code that should be optimized before merging
-      - HACK # marks hack-around that should be removed before merging
+    # govet:
+    #   enable-all: true
+    #   disable:
+    #     - fieldalignment
 
-  gofmt:
-    # Simplify code: gofmt with `-s` option.
-    # Default: true
-    simplify: false
-    # Apply the rewrite rules to the source before reformatting.
-    # https://pkg.go.dev/cmd/gofmt
-    # Default: []
-    rewrite-rules:
-      # - pattern: 'interface{}'
-      #   replacement: 'any'
-      - pattern: 'a[b:len(a)]'
-        replacement: 'a[b:]'
+    misspell:
+      # Correct spellings using locale preferences for US or UK.
+      locale: US
 
-  goimports:
-    local-prefixes: github.com/golangci/golangci-lint
+    nolintlint:
+      # Disable to ensure that all nolint directives actually have an effect.
+      allow-unused: false # report any unused nolint directives
+      require-explanation: true # require an explanation for nolint directives
+      require-specific: true # require nolint directives to be specific about which linter is being skipped
 
-  # govet:
-  #   enable-all: true
-  #   disable:
-  #     - fieldalignment
+    # revive:
+    #   rules:
+    #     - name: indent-error-flow
+    #     - name: unexported-return
+    #       disabled: true
+    #     - name: unused-parameter
+    #     - name: unused-receiver
 
-  misspell:
-    # Correct spellings using locale preferences for US or UK.
-    locale: US
-
-  nolintlint:
-    # Disable to ensure that all nolint directives actually have an effect.
-    allow-unused: false # report any unused nolint directives
-    require-explanation: true # require an explanation for nolint directives
-    require-specific: true # require nolint directives to be specific about which linter is being skipped
-
-  # revive:
-  #   rules:
-  #     - name: indent-error-flow
-  #     - name: unexported-return
-  #       disabled: true
-  #     - name: unused-parameter
-  #     - name: unused-receiver
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gofmt:
+      # Simplify code: gofmt with `-s` option.
+      # Default: true
+      simplify: false
+      # Apply the rewrite rules to the source before reformatting.
+      # https://pkg.go.dev/cmd/gofmt
+      # Default: []
+      rewrite-rules:
+        # - pattern: 'interface{}'
+        #   replacement: 'any'
+        - pattern: "a[b:len(a)]"
+          replacement: "a[b:]"

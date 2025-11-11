@@ -60,7 +60,9 @@ func (cli *CLI) Reload() error {
 func (cli CLI) InteractiveLogin(extraArgs []string) error {
 	// Create a spinner
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithHiddenCursor(false))
-	s.Color("green", "italic", "bold")
+	if err := s.Color("green", "italic", "bold"); err != nil {
+		log.Warn("Failed to set spinner color: %v", err)
+	}
 	s.Suffix = " Logging in... Please check your browser for the login prompt."
 	s.Start()
 	defer s.Stop()
@@ -78,7 +80,9 @@ func (cli CLI) InteractiveLogin(extraArgs []string) error {
 func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 	// Create a spinner
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithHiddenCursor(false))
-	s.Color("green", "italic", "bold")
+	if err := s.Color("green", "italic", "bold"); err != nil {
+		log.Warn("Failed to set spinner color: %v", err)
+	}
 	s.Start()
 	defer s.Stop()
 

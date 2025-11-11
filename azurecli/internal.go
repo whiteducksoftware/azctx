@@ -36,7 +36,7 @@ func ensureConfigDir() (string, error) {
 
 	// Verify that the config dir exists
 	if !utils.FileExists(configDir) {
-		return "", fmt.Errorf("%s (%s) is not a valid directory. Please run `az configure` and try again.", CONFIG_DIR_ENV, configDir)
+		return "", fmt.Errorf("%s (%s) is not a valid directory; run `az configure` and try again", CONFIG_DIR_ENV, configDir)
 	}
 
 	return configDir, nil
@@ -53,7 +53,7 @@ func (cli *CLI) readProfile() error {
 	// Verify that the azureProfile.json file exists
 	configFilePath := fmt.Sprintf("%s/%s", configDir, PROFILES_JSON)
 	if !utils.FileExists(configFilePath) {
-		return fmt.Errorf("%s is not a valid file. Please run `az configure` and try again.", configFilePath)
+		return fmt.Errorf("%s is not a valid file; run `az configure` and try again", configFilePath)
 	}
 
 	// Open the azureProfile.json file
@@ -62,14 +62,17 @@ func (cli *CLI) readProfile() error {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
 	}
 
+	defer func() {
+		if cerr := configFile.Close(); cerr != nil {
+			log.Warn("Failed to close %s: %v", configFilePath, cerr)
+		}
+	}()
+
 	// Unmarshal the config file
 	err = utils.ReadJson(configFile, &cli.profile)
 	if err != nil {
-		configFile.Close()
 		return err
 	}
-
-	configFile.Close()
 	return nil
 }
 
@@ -122,14 +125,17 @@ func (cli *CLI) readTenants() error {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
 	}
 
+	defer func() {
+		if cerr := configFile.Close(); cerr != nil {
+			log.Warn("Failed to close %s: %v", configFilePath, cerr)
+		}
+	}()
+
 	// Unmarshal the config file
 	err = utils.ReadJson(configFile, &cli.tenants)
 	if err != nil {
-		configFile.Close()
 		return err
 	}
-
-	configFile.Close()
 	return nil
 }
 
@@ -148,14 +154,17 @@ func (cli CLI) writeTenants() error {
 		return fmt.Errorf("%s is not a valid file: %s", configFilePath, err.Error())
 	}
 
+	defer func() {
+		if cerr := configFile.Close(); cerr != nil {
+			log.Warn("Failed to close %s: %v", configFilePath, cerr)
+		}
+	}()
+
 	// Marshal the config file
 	err = utils.WriteJson(configFile, cli.tenants)
 	if err != nil {
-		configFile.Close()
 		return err
 	}
-
-	configFile.Close()
 	return nil
 }
 

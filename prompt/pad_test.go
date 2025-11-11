@@ -17,9 +17,9 @@ func TestPad(t *testing.T) {
 		},
 		{
 			name:     "handles multibyte characters without shifting",
-			value:    "Bezahlung über ADN",
+			value:    "Bezahlung über AND",
 			width:    22,
-			expected: "Bezahlung über ADN    ",
+			expected: "Bezahlung über AND    ",
 		},
 		{
 			name:     "truncates without breaking utf8",
