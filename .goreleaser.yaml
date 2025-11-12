@@ -57,7 +57,8 @@ homebrew_casks:
       name: homebrew-tap
       branch: main
       token: "{{ .Env.AUTH_GITHUB }}"
-    binary: azctx
+    binaries:
+      - azctx
     directory: Casks
     homepage: "https://github.com/whiteducksoftware/azctx"
     description: "Faster switching between Azure Subscriptions in your Azure CLI"
