@@ -20,6 +20,7 @@ import (
 
 	"github.com/whiteducksoftware/azctx/internal/storage"
 	"github.com/whiteducksoftware/azctx/internal/version"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
 const interval = 24 * time.Hour
@@ -111,11 +112,15 @@ func (c Checker) Check(owner, repo string) error {
 
 func readCache(name string) (cachedRelease, error) {
 	data, err := os.ReadFile(name)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) {
+		return cachedRelease{}, nil
+	}
+	if err != nil {
 		return cachedRelease{}, fmt.Errorf("read update cache: %w", err)
 	}
 	var cached cachedRelease
-	if json.Unmarshal(data, &cached) != nil {
+	if err := json.Unmarshal(data, &cached); err != nil {
+		log.Debug("decode update cache: %v", err)
 		return cachedRelease{}, nil
 	}
 	return cached, nil
