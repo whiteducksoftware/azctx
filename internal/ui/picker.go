@@ -1,14 +1,14 @@
-package prompt
+package ui
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	templates "text/template"
 
-	"github.com/whiteducksoftware/azctx/azurecli"
+	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/log"
-	"github.com/whiteducksoftware/azctx/utils"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -17,7 +17,7 @@ import (
 )
 
 // BuildPrompt builds a prompt for the user to select a subscription
-func BuildPrompt(subscriptions utils.ComparableNamedSlice[azurecli.Subscription]) promptui.Select {
+func BuildPrompt(subscriptions []profile.Subscription) promptui.Select {
 	// Get the terminal dimensions
 	var terminalWidth, terminalHeigth int
 	if size, err := ts.GetSize(); err != nil {
@@ -31,13 +31,21 @@ func BuildPrompt(subscriptions utils.ComparableNamedSlice[azurecli.Subscription]
 	}
 
 	// Sort the subscriptions by name
-	sort.Sort(subscriptions)
+	slices.SortFunc(subscriptions, func(a, b profile.Subscription) int {
+		if strings.EqualFold(a.TenantName, b.TenantName) {
+			return cmp.Compare(a.Name, b.Name)
+		}
+		return cmp.Compare(a.TenantName, b.TenantName)
+	})
 
 	// Prepare the prompt
-	subscriptionNames := utils.StringSlice(subscriptions.Names())
-	maxSubscriptionsLength := subscriptionNames.LongestLength()
-	tenantNames := calculateTenantNames(subscriptions)
-	tenantNamesMaxLength := tenantNames.LongestLength()
+	subscriptionNames := make([]string, len(subscriptions))
+	maxSubscriptionsLength, tenantNamesMaxLength := 0, 0
+	for i, subscription := range subscriptions {
+		subscriptionNames[i] = subscription.Name
+		maxSubscriptionsLength = max(maxSubscriptionsLength, len(subscription.Name))
+		tenantNamesMaxLength = max(tenantNamesMaxLength, len(subscription.TenantName))
+	}
 
 	// Fetch the correct template                                                subscriptionId is 36 chars, + 3 for () and a space
 	tpl := template(terminalWidth, maxSubscriptionsLength, tenantNamesMaxLength, tenantNamesMaxLength+36+3)
@@ -63,8 +71,8 @@ func BuildPrompt(subscriptions utils.ComparableNamedSlice[azurecli.Subscription]
 		Searcher: func(input string, index int) bool {
 			return fuzzy.MatchNormalized(strings.ToLower(input), strings.ToLower(subscriptionNames[index]))
 		},
-		Size:   utils.Min(len(subscriptions), utils.Max(utils.Min(terminalHeigth-3, 10), 1)),
-		Stdout: utils.NoBellStdout,
+		Size:   min(len(subscriptions), max(min(terminalHeigth-3, 10), 1)),
+		Stdout: &noBellStdout{},
 	}
 }
 
@@ -83,11 +91,9 @@ func newTemplateFuncMap() templates.FuncMap {
 	return ret
 }
 
-// calculateTenantNames returns the tenant names of the given subscriptions
-func calculateTenantNames(subscriptions []azurecli.Subscription) (tenantNames utils.StringSlice) {
-	for _, subscription := range subscriptions {
-		tenantNames = append(tenantNames, subscription.TenantName)
-	}
-
-	return
+// Select runs the existing picker and returns an index into the sorted slice.
+func Select(subscriptions []profile.Subscription) (int, error) {
+	picker := BuildPrompt(subscriptions)
+	index, _, err := picker.Run()
+	return index, err
 }

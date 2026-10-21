@@ -1,4 +1,6 @@
-package azurecli
+// Package azcli delegates Azure operations to an injected Runner and reads the
+// Azure CLI configuration without handling credentials.
+package azcli
 
 import (
 	"errors"
@@ -9,22 +11,20 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/afero"
 
+	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/log"
-	"github.com/whiteducksoftware/azctx/utils"
 )
 
-// New creates a new CLI instance
-func New(fs afero.Fs) (CLI, error) {
-	// Ensure that the azure cli is installed
-	if !utils.IsCommandInstalled(AZ_COMMAND) {
-		return CLI{}, errors.New("azure cli is not installed. please install it and try again. See here: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli")
-	}
-
-	// Create a new CLI instance
+// New loads the profile and legacy tenant cache using an already resolved runner.
+// An empty configDir selects AZURE_CONFIG_DIR or the user's .azure directory.
+func New(fs afero.Fs, runner Runner, configDir string) (CLI, error) {
 	cli := CLI{
-		fs:      fs,
-		profile: Profile{},
-		tenants: make([]Tenant, 0),
+		fs:                       fs,
+		runner:                   runner,
+		configDir:                configDir,
+		profile:                  profile.Profile{},
+		tenants:                  make([]Tenant, 0),
+		FilterTenantLevelAccount: true,
 	}
 
 	// Refresh the CLI instance
@@ -102,11 +102,11 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 	return nil
 }
 
-// SetSubscription sets the default subscription in the azure config file
-func (CLI) SetSubscription(subscription Subscription) error {
+// SetSubscription asks az to set the default subscription.
+func (cli CLI) SetSubscription(subscription profile.Subscription) error {
 	// Execute az account set command
 	args := []string{"account", "set", "--subscription", subscription.Id}
-	_, err := utils.ExecuteCommand(AZ_COMMAND, args...)
+	_, err := cli.capture(args)
 	if err != nil {
 		return err
 	}
