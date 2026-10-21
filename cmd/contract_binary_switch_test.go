@@ -8,7 +8,7 @@ import (
 )
 
 func TestBinaryContractCommandNamesAndDelimiter(t *testing.T) {
-	names := []string{listCommand, loginCommand, versionCommand, "help", "completion", verboseFlag, "--output=json"}
+	names := []string{listCommand, loginCommand, versionCommand, envCommand, execSubcommand, guardCommand, "help", "completion", verboseFlag, "--output=json"}
 	fixture := `{"args":["account","set","--subscription","` + productionID + `"]}`
 	binary, config, record := fakeBinary(t, "["+strings.TrimSuffix(strings.Repeat(fixture+",", len(names)), ",")+"]")
 	for _, name := range names {
