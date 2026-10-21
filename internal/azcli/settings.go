@@ -59,7 +59,13 @@ func (s Settings) Bool(section, name string, fallback bool) (bool, error) {
 	}
 }
 
-func (s Settings) ActiveCloud() string { return s.Get("cloud", "name", "AzureCloud") }
+func (s Settings) ActiveCloud() string {
+	cloud := strings.TrimSpace(s.Get("cloud", "name", "AzureCloud"))
+	if cloud == "" {
+		return "AzureCloud"
+	}
+	return cloud
+}
 
 func iniValue(sections map[string]map[string]string, section, name string) (string, bool) {
 	name = strings.ToLower(name)

@@ -15,6 +15,27 @@ const (
 	syntheticSubName = "Synthetic"
 )
 
+func TestTenantLabelFallbacks(t *testing.T) {
+	const tenantName = "Example"
+	const tenantID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	const tenantDomain = "example.invalid"
+	for _, tc := range []struct {
+		name, domain, want string
+	}{
+		{tenantName, tenantDomain, tenantName},
+		{tenantName, "", tenantName},
+		{"", tenantDomain, tenantDomain},
+		{"", "", tenantID},
+		{" \t", tenantDomain, tenantDomain},
+		{"", " \t", tenantID},
+	} {
+		sub := profile.Subscription{Tenant: tenantID, TenantName: tc.name, TenantDomain: tc.domain}
+		if got := sub.TenantLabel(); got != tc.want {
+			t.Errorf("name=%q domain=%q: label=%q want=%q", tc.name, tc.domain, got, tc.want)
+		}
+	}
+}
+
 func TestModernTenantMetadata(t *testing.T) {
 	files := fstest.MapFS{profileName: &fstest.MapFile{Data: []byte("\xef\xbb\xbf" + `{"subscriptions":[{
 		"id":"11111111-1111-1111-1111-111111111111",

@@ -14,7 +14,7 @@ const (
 	profileJSON  = "azureProfile.json"
 )
 
-func resolveConfigDir(configDir string) (string, error) {
+func resolveConfigDir(configDir string, allowMissing bool) (string, error) {
 	if configDir == "" {
 		configDir = os.Getenv(configDirEnv)
 	}
@@ -26,6 +26,9 @@ func resolveConfigDir(configDir string) (string, error) {
 		configDir = filepath.Join(home, ".azure")
 	}
 	info, err := os.Stat(configDir) //nolint:gosec // AZURE_CONFIG_DIR intentionally selects the read-only profile directory.
+	if allowMissing && os.IsNotExist(err) {
+		return configDir, nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("%s (%s) is not a valid directory. Please run `az login` and try again: %w", configDirEnv, configDir, err)
 	}
