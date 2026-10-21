@@ -32,8 +32,10 @@ Usage:
   azctx [command]
 
 Available Commands:
+  alias       Manage subscription aliases
   auth        Manage Azure CLI authentication
   completion  Generate the autocompletion script for the specified shell
+  config      Print effective configuration or its path
   doctor      Show safe, offline Azure CLI diagnostics
   help        Help about any command
   login       Login to Azure
@@ -41,11 +43,13 @@ Available Commands:
   version     Print the CLI version
 
 Flags:
+      --all             Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
   -c, --current         Display the current active subscription
   -h, --help            help for azctx
       --no-input        Never open a picker or prompt (also AZCTX_NO_INPUT=1)
   -o, --output string   Output format (depends on command)
       --verbose         Enable debug diagnostics
+      --yes             Confirm switching to a protected subscription without prompting
 
 Use "azctx [command] --help" for more information about a command.
 ```
@@ -103,6 +107,14 @@ before switching to a subscription in another cloud. Tables/pickers label
 account types, delegation and attention states. See the
 [CLI contract](docs/cli-contract.md) for JSON, matching and per-cloud defaults.
 
+Use `azctx alias set dev SUBSCRIPTION_GUID` for a short name, `azctx config`
+for effective YAML or `azctx config path` for its location. Configuration can
+pin, hide or protect subscription/tenant IDs and disable update checks.
+Protected switches require confirmation or `--yes`; configured hidden entries
+require `--all`. `AZCTX_CONFIG_DIR` isolates azctx configuration and state.
+See [configuration and completion](docs/configuration.md) for the version-1
+schema, deterministic ranking and offline shell completion.
+
 ### Homebrew (macOS)
 
 * Install `azctx` with `brew install whiteducksoftware/tap/azctx`
@@ -156,9 +168,10 @@ and an update-check function without resolving a real `az` or accessing a tenant
 
 The internal packages separate Azure CLI execution (`azcli`), the read-only
 `io/fs` profile parser (`profile`), subscription search (`match`), the existing
-picker (`ui`), update checks (`update`), private previous-subscription state
-(`state`) and atomic private-file storage (`storage`). `config` remains a
-placeholder for a later release layer.
+picker (`ui`), update checks (`update`), private previous/recent-subscription state
+(`state`), strict YAML configuration (`config`) and atomic private-file storage
+(`storage`). The read-only `selection.Catalog` combines visibility and matching
+without IO, a runner, prompts or mutations.
 
 `azcli.Runner.Run` captures stdout, stderr, and the exit code by default.
 Supplying `azcli.Options.Terminal` attaches the supplied streams (or the process
@@ -177,7 +190,7 @@ Switch diagnostics and optional update-check failures are silent unless
 Interactive runs check for a stable CalVer update at most once per 24 hours,
 with a two-second network deadline and a private cache at
 `os.UserCacheDir()/azctx/update.json`. Update failures never fail a switch.
-Set `AZCTX_NO_UPDATE_CHECK=1` to disable checks; they are also skipped when `CI`
+Set `AZCTX_NO_UPDATE_CHECK=1` or `updateCheck: false` to disable checks; they are also skipped when `CI`
 is set (even to an empty value) or stdout is not a terminal. State and cache
 destinations that overlap Azure configuration are rejected, including symlinks.
 

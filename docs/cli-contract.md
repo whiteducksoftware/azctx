@@ -12,8 +12,8 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | Invocation | Behavior and output |
 | --- | --- |
 | `azctx` | Open the subscription picker when input is interactive; otherwise print the same table as `azctx list`. |
-| `azctx <query>` | Switch by subscription name, subscription ID or `tenant/subscription`. Successful switches are quiet. |
-| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `login`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
+| `azctx <query> [--all] [--yes]` | Switch by subscription name, alias, subscription ID or `tenant/subscription`. Successful switches are quiet. Protected targets require confirmation or `--yes`. |
+| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
 | `azctx -` | Switch to the previous subscription, preserving the layer-06 private-state/rollback behavior. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
 | `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
@@ -22,22 +22,33 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | `azctx auth broker status` | Read effective platform broker settings and check Azure CLI availability, without a profile or mutations. Default/text output only. |
 | `azctx auth broker enable\|disable [--yes]` | Require a supported platform/version and explicit confirmation, then `az account clear`, `az config set` for the platform broker key, attached `az login`. Default/text output only; stops on the first failure. |
 | `azctx doctor [-o text\|json]` | Offline, profile-independent diagnostics, including cached update status. Default: text. Missing dependencies/broken configuration are report findings, not fatal command errors. |
+| `azctx config [path]` | Print effective version-1 YAML or its path. Default/text output; no Azure installation/profile required. |
+| `azctx alias set NAME ID`, `alias rm NAME`, `alias list` | Atomically manage case-insensitive aliases or list them sorted by name. Default/text output; no Azure installation/profile required. |
+| `azctx completion bash\|zsh\|fish\|powershell` | Generate shell scripts; argument completion reads the profile/config without running Azure CLI, network calls or state writes. |
 
-`-o`/`--output`, `--verbose` and `--no-input` are persistent flags, accepted before
+`-o`/`--output`, `--verbose`, `--all` and `--no-input` are persistent flags, accepted before
 or after a subcommand. Formats are case-sensitive. Unsupported formats and
 invalid arguments/flags fail with exit 1 before an Azure subprocess is started.
-`-c` does not accept a query. `--all` belongs only to `list`.
+`-c` does not accept a query. Root `--yes` explicitly confirms a protected switch.
+Root `--all` exposes configured hidden records without bypassing Azure cloud/state
+switching policy; `list --all` also exposes Azure-filtered records for inspection.
 `--short`, `-s` and `--filter-tenant-level` are removed, not deprecated.
 
-Unqualified queries retain case-insensitive fuzzy matching of subscription names,
-profile tenant display names, default domains, tenant IDs and subscription IDs;
-an exact subscription ID wins.
+Unqualified queries first match case-insensitive exact subscription IDs, then
+exact names/aliases, then fuzzy subscription names, profile tenant display names,
+default domains, tenant IDs and subscription IDs. Exact name/alias collisions
+remain ambiguous; unavailable aliases do not fall back to unrelated fuzzy matches.
 A qualified query splits at the first `/`: the tenant selector must exactly
 match a tenant ID, profile display name or default domain, ignoring case. Within that
-tenant, the subscription selector matches only subscription names/IDs, using
-the same fuzzy/exact-ID rules. Both selectors must be nonempty.
+tenant, the subscription selector matches names/IDs/aliases, using
+the same exact/fuzzy rules (not tenant fields). Both selectors must be nonempty.
 Use an ID for names containing literal `/`.
 Duplicate names retain their subscription and tenant identities.
+Pinned subscription/tenant IDs precede recent IDs (most recent first); ties retain
+stable profile order for query candidates and tenant/name/ID order in the built-in
+picker. Ranking never auto-resolves ambiguity. Configured hidden entries are
+excluded from lists, selection and completion unless `--all` is supplied.
+See [configuration](configuration.md) for the exact schema and path rules.
 
 The active cloud comes from `[cloud] name` in Azure CLI's `config`, overridden
 by `AZURE_CLOUD_NAME`, with `AzureCloud` as the absent/blank-setting default.
@@ -50,8 +61,10 @@ Current selection uses a unique active-cloud profile `isDefault`, falling back
 to that cloud's `subscription` GUID in `clouds.config` only when no active-cloud
 profile default exists. A stale/foreign remembered ID or multiple defaults
 cannot identify a current subscription. Listing, current output, switching and
-previous-state capture use the same resolved selection. Hidden current entries
-remain hidden in ordinary current output.
+previous-state capture use the same resolved selection. Current entries hidden
+by Azure cloud/state policy remain hidden in ordinary current output.
+Configured hiding does not conceal the actual current subscription; protected
+current text gains `[protected]`, without changing JSON or plain-field formats.
 
 Tables and picker labels distinguish user, service principal, system-assigned
 identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
@@ -98,7 +111,8 @@ schema and safety boundaries are in [authentication](authentication.md).
   `CI` also disables input. `--no-input=false` cannot override the environment.
 - Bare azctx lists rather than waiting when input is disabled. Ambiguous queries
   fail immediately with exit 2 and candidates instead of opening a picker.
-  A unique query still switches without input.
+  A unique query still switches without input, except protected targets need
+  explicit `--yes`; otherwise they exit 1 without mutation.
 - Explicit `-o table` on bare azctx requests a list even with a TTY.
   JSON mode is non-interactive: bare `azctx -o json` lists; ambiguous switches
   fail with candidates even with a TTY. Successful `azctx -o json <query>`
@@ -116,7 +130,8 @@ schema and safety boundaries are in [authentication](authentication.md).
   diagnostics, including verbose messages, so failures have exactly one JSON
   error object on stderr and no error text on stdout.
 - Optional update checks run only after successful switches, with stdout a TTY,
-  `CI` absent and `AZCTX_NO_UPDATE_CHECK` not `1`. JSON mode also suppresses them.
+  `CI` absent, `AZCTX_NO_UPDATE_CHECK` not `1` and config `updateCheck: true`.
+  JSON mode also suppresses them.
   The inherited daily cache and two-second deadline remain; a check failure
   cannot fail a successful switch. Listing/current/version never check updates.
   Doctor only reads an existing private update cache; it never checks the
@@ -191,7 +206,7 @@ is one object on stderr:
 `code` is a string, `message` is a human-readable string, and `exit_code` is an
 integer from the table above. This error envelope is not a subscription envelope
 and does not carry `schemaVersion`. Only ambiguity adds `candidates`, an array
-of complete version-1 subscription objects in profile order, including IDs and
+of complete version-1 subscription objects in stable priority order, including IDs and
 tenant IDs. Its code is `ambiguous_match` and its exit status is 2.
 
 Codes in this layer are `error`, `no_match`, `ambiguous_match` and `interrupted`.
@@ -215,10 +230,13 @@ Tokens after `--` are never output flags, including forwarded login arguments.
 | `CI` | Presence, even empty, disables picker input and optional update checks. |
 | `NO_COLOR` | Presence, even empty, disables azctx colors on all streams. |
 | `AZCTX_NO_UPDATE_CHECK=1` | Disable optional update checks. |
-| `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `APPDATA` | Platform-standard user configuration resolution for private previous-subscription state. |
+| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml` and `state.json`; must remain outside Azure configuration, including symlink targets. |
+| `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `APPDATA` | Platform-standard user configuration resolution for private config and previous/recent subscription state. |
 | `XDG_CACHE_HOME`, `LOCALAPPDATA` | Platform-standard user cache resolution for update-check data (with the platform's home-directory fallback). |
 
 Private state/cache must stay outside both the resolved and environment Azure
 configuration roots, including overlapping directories and symlink targets.
 An unsafe location or corrupt previous/default GUID is an explicit error, never
-a silent fallback. Failed Azure switches roll back previous-subscription state.
+a silent fallback. Failed Azure switches roll back previous/recent subscription state.
+Missing YAML uses defaults; existing YAML must declare `version: 1`, rejects unknown
+keys and reports malformed values with filename/line diagnostics.

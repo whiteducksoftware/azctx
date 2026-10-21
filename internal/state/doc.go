@@ -1,2 +1,2 @@
-// Package state stores the previous subscription in azctx's private configuration.
+// Package state stores previous and recent subscription IDs in private configuration.
 package state

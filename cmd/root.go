@@ -13,7 +13,9 @@ import (
 	"golang.org/x/term"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/config"
 	"github.com/whiteducksoftware/azctx/internal/profile"
+	"github.com/whiteducksoftware/azctx/internal/selection"
 	"github.com/whiteducksoftware/azctx/internal/state"
 	"github.com/whiteducksoftware/azctx/internal/ui"
 	"github.com/whiteducksoftware/azctx/internal/update"
@@ -43,9 +45,6 @@ type Dependencies struct {
 
 // NewRootCommand constructs an independent command tree, including flag state.
 func NewRootCommand(deps Dependencies) *cobra.Command {
-	if deps.Select == nil {
-		deps.Select = ui.Select
-	}
 	if deps.Platform == "" {
 		deps.Platform = runtime.GOOS
 	}
@@ -98,9 +97,14 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug diagnostics")
 	rootCmd.PersistentFlags().Bool("no-input", false, "Never open a picker or prompt (also AZCTX_NO_INPUT=1)")
 	rootCmd.PersistentFlags().StringP("output", "o", "", "Output format (depends on command)")
+	rootCmd.PersistentFlags().Bool("all", false, "Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts")
 
 	rootCmd.Flags().BoolP("current", "c", false, "Display the current active subscription")
+	rootCmd.Flags().Bool("yes", false, "Confirm switching to a protected subscription without prompting")
+	rootCmd.ValidArgsFunction = completeSubscriptions(deps)
 	rootCmd.AddCommand(newListCommand(loadCLI))
+	rootCmd.AddCommand(newConfigCommand(deps))
+	rootCmd.AddCommand(newAliasCommand(deps))
 	rootCmd.AddCommand(newLoginCommand(func() (azcli.CLI, error) { return newCLI(true) }, deps))
 	rootCmd.AddCommand(newAuthCommand(resolveRunner, deps))
 	rootCmd.AddCommand(newDoctorCommand(resolveRunner, deps))
@@ -124,41 +128,128 @@ func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error
 	if err := validateRootOutput(cmd, current, len(args) != 0); err != nil {
 		return err
 	}
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
 	// Initialize the CLI
 	cli, err := newCLI()
 	if err != nil {
 		return err
 	}
-	selectItem := func(subscriptions []profile.Subscription) (int, error) {
+	cfg, err := config.Load(cli.ConfigDir())
+	if err != nil {
+		return err
+	}
+	all, _ := cmd.Flags().GetBool("all")
+	if current {
+		return getActiveSubscription(cmd, cli, cfg)
+	}
+	if len(args) == 0 && (outputFormat(cmd) != "" || !inputIsTerminal(cmd, deps)) {
+		cli.IncludeAll = all
+		return listSubscriptions(cmd, cli)
+	}
+	recent, err := state.Recent(cli.ConfigDir())
+	if err != nil {
+		return err
+	}
+	catalog := selection.Catalog{Subscriptions: cli.Subscriptions(), Config: cfg, Recent: recent}
+	candidates, err := switchCandidates(cmd, args, cli, deps, catalog, all)
+	if err != nil {
+		return err
+	}
+	target, err := pickSubscription(args, candidates, rankedSelector(cmd, deps, catalog))
+	if err != nil {
+		return err
+	}
+	cli.Context = cmd.Context()
+	return switchConfigured(cmd, cli, deps, cfg, target)
+}
+
+func rankedSelector(cmd *cobra.Command, deps Dependencies, catalog selection.Catalog) func([]profile.Subscription) (int, error) {
+	return func(subscriptions []profile.Subscription) (int, error) {
 		legacyProfileHint(cmd, subscriptions)
+		if deps.Select == nil {
+			ui.SortSubscriptions(subscriptions)
+			catalog.Options().Rank(subscriptions)
+			return ui.SelectOrdered(subscriptions)
+		}
+		catalog.Options().Rank(subscriptions)
 		return deps.Select(subscriptions)
 	}
+}
 
-	// check the flags
-	switch {
-	case current:
-		return getActiveSubscription(cmd, cli)
-	case len(args) == 1:
-		// check if the user passed -
-		if args[0] == "-" {
-			err = selectPreviousSubscription(cli)
-		} else {
-			err = selectSubscriptionByName(cli, args[0], selectItem, inputIsTerminal(cmd, deps) && outputFormat(cmd) != formatJSON)
-		}
+func switchCandidates(cmd *cobra.Command, args []string, cli azcli.CLI, deps Dependencies, catalog selection.Catalog, all bool) ([]profile.Subscription, error) {
+	if len(args) == 0 {
+		return catalog.Visible(all), nil
+	}
+	var candidates []profile.Subscription
+	if args[0] == "-" {
+		id, err := state.Load(cli.ConfigDir())
 		if err != nil {
-			return err
+			return nil, err
 		}
-	default:
-		if outputFormat(cmd) != "" || !inputIsTerminal(cmd, deps) {
-			return listSubscriptions(cmd, cli)
+		for _, sub := range catalog.Visible(all) {
+			if strings.EqualFold(sub.Id, id) {
+				candidates = append(candidates, sub)
+			}
 		}
-		err = interactivelySelectSubscription(cli, selectItem)
+		if len(candidates) == 0 {
+			return nil, &ExitError{Code: CodeNoMatch, Message: fmt.Sprintf("previous subscription %s is no longer available", id), Status: ExitNoMatch}
+		}
+	} else {
+		var err error
+		candidates, err = catalog.Find(args[0], all)
 		if err != nil {
+			return nil, &ExitError{Code: CodeNoMatch, Message: err.Error(), Status: ExitNoMatch, Cause: err}
+		}
+	}
+	if len(candidates) > 1 && (!inputIsTerminal(cmd, deps) || outputFormat(cmd) == formatJSON) {
+		return nil, &ExitError{
+			Code: CodeAmbiguousMatch, Message: fmt.Sprintf("multiple subscriptions match %q; use a subscription ID or tenant/subscription", args[0]),
+			Status: ExitNoMatch, Candidates: SubscriptionOutputs(candidates),
+		}
+	}
+	return candidates, nil
+}
+
+func pickSubscription(args []string, candidates []profile.Subscription, selectItem func([]profile.Subscription) (int, error)) (profile.Subscription, error) {
+	if len(candidates) == 0 {
+		return profile.Subscription{}, &ExitError{Code: CodeNoMatch, Message: "no subscription found", Status: ExitNoMatch}
+	}
+	index := 0
+	if len(args) == 0 || len(candidates) > 1 {
+		var err error
+		index, err = selectItem(candidates)
+		if err != nil {
+			return profile.Subscription{}, err
+		}
+		if index < 0 || index >= len(candidates) {
+			return profile.Subscription{}, errors.New("invalid picker selection")
+		}
+	}
+	return candidates[index], nil
+}
+
+func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg config.Config, target profile.Subscription) error {
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
+	if config.Contains(cfg.Protected, target) {
+		confirmed, err := confirmProtected(cmd, deps, target)
+		if err != nil || !confirmed {
 			return err
 		}
 	}
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
+	if err := switchSubscription(cli, target); err != nil {
+		return err
+	}
 
-	checkForUpdates(cmd, deps, cli.ConfigDir())
+	if cfg.UpdateCheck {
+		checkForUpdates(cmd, deps, cli.ConfigDir())
+	}
 	return nil
 }
 
@@ -203,81 +294,18 @@ func inputIsTerminal(command *cobra.Command, deps Dependencies) bool {
 	return streamIsTerminal(command.InOrStdin())
 }
 
-func interactivelySelectSubscription(cli azcli.CLI, selectItem func([]profile.Subscription) (int, error)) error {
-	// Ask the user to select a subscription
-	subscriptions := cli.Subscriptions()
-
-	// Run the prompt
-	idx, err := selectItem(subscriptions)
-	if err != nil {
-		return err
-	}
-	if idx < 0 || idx >= len(subscriptions) {
-		return errors.New("invalid picker selection")
-	}
-	return switchSubscription(cli, subscriptions[idx])
-}
-
-func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]profile.Subscription) (int, error), interactive bool) error {
-	subscriptions, err := cli.TryFindSubscription(name)
-	if err != nil {
-		return &ExitError{Code: CodeNoMatch, Message: err.Error(), Status: ExitNoMatch, Cause: err}
-	}
-
-	// Check if we found more than one subscription
-	var subscription profile.Subscription
-	switch length := len(subscriptions); {
-	case length > 1:
-		if !interactive {
-			return &ExitError{
-				Code: CodeAmbiguousMatch, Message: fmt.Sprintf("multiple subscriptions match %q; use a subscription ID or tenant/subscription", name),
-				Status: ExitNoMatch, Candidates: SubscriptionOutputs(subscriptions),
-			}
-		}
-		// Run the prompt
-		idx, err := selectItem(subscriptions)
-		if err != nil {
-			return err
-		}
-		if idx < 0 || idx >= len(subscriptions) {
-			return errors.New("invalid picker selection")
-		}
-
-		subscription = subscriptions[idx]
-	case length == 1:
-		subscription = subscriptions[0]
-	default:
-		return &ExitError{Code: CodeNoMatch, Message: "no subscription found", Status: ExitNoMatch}
-	}
-
-	// Set the selected subscription as the default
-	return switchSubscription(cli, subscription)
-}
-
-func selectPreviousSubscription(cli azcli.CLI) error {
-	id, err := state.Load(cli.ConfigDir())
-	if err != nil {
-		return err
-	}
-	for _, subscription := range cli.Subscriptions() {
-		if strings.EqualFold(subscription.Id, id) {
-			return switchSubscription(cli, subscription)
-		}
-	}
-	return &ExitError{Code: CodeNoMatch, Message: fmt.Sprintf("previous subscription %s is no longer available", id), Status: ExitNoMatch}
-}
-
 func switchSubscription(cli azcli.CLI, subscription profile.Subscription) error {
 	if err := profile.ValidateGUID(subscription.Id); err != nil {
 		return err
 	}
 	current, err := cli.ActiveSubscription()
-	var rollback func() error
+	previous := ""
 	if err == nil && !strings.EqualFold(current.Id, subscription.Id) {
-		rollback, err = state.Record(cli.ConfigDir(), current.Id)
-		if err != nil {
-			return fmt.Errorf("save previous subscription: %w", err)
-		}
+		previous = current.Id
+	}
+	rollback, err := state.RecordSelection(cli.ConfigDir(), previous, subscription.Id)
+	if err != nil {
+		return fmt.Errorf("save previous subscription: %w", err)
 	}
 	log.Debug("Setting active subscription to %s/%s (%s/%s)", subscription.TenantLabel(), subscription.Name, subscription.Tenant, subscription.Id)
 	err = cli.SetSubscription(subscription)
@@ -289,16 +317,38 @@ func switchSubscription(cli azcli.CLI, subscription profile.Subscription) error 
 	return err
 }
 
-func getActiveSubscription(command *cobra.Command, cli azcli.CLI) error {
+func getActiveSubscription(command *cobra.Command, cli azcli.CLI, cfg config.Config) error {
 	// Try to get the active subscription
 	subscription, err := cli.ActiveSubscription()
 	if err != nil {
 		return err
 	}
 
-	if err := writeCurrent(command, subscription); err != nil {
+	if err := writeCurrent(command, subscription, config.Contains(cfg.Protected, subscription)); err != nil {
 		return err
 	}
+
 	legacyProfileHint(command, []profile.Subscription{subscription})
 	return nil
+}
+
+func confirmProtected(command *cobra.Command, deps Dependencies, sub profile.Subscription) (bool, error) {
+	if yes, _ := command.Flags().GetBool("yes"); yes {
+		return true, nil
+	}
+	if !inputIsTerminal(command, deps) || outputFormat(command) == formatJSON {
+		return false, errors.New("protected subscription requires confirmation; use --yes to explicitly confirm without an azctx prompt")
+	}
+	if _, err := fmt.Fprintf(command.ErrOrStderr(), "Switch to protected subscription %s/%s (%s)? [y/N] ", sub.TenantLabel(), sub.Name, sub.Id); err != nil {
+		return false, err
+	}
+	answer, err := readConfirmation(command.InOrStdin())
+	if err != nil {
+		return false, fmt.Errorf("read protected subscription confirmation (no changes made): %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(answer), "y") && !strings.EqualFold(strings.TrimSpace(answer), "yes") {
+		_, err := fmt.Fprintln(command.ErrOrStderr(), "Switch canceled; no changes made.")
+		return false, err
+	}
+	return true, nil
 }
