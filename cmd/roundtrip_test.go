@@ -18,6 +18,7 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 	dir := testutil.BuildFakeAZ(t)
 	binary := filepath.Join(dir, testutil.ExecutableName("azctx"))
 	testutil.Build(t, binary, "github.com/whiteducksoftware/azctx")
+	testutil.IsolateUserDirs(t)
 	config := filepath.Join(dir, "config")
 	if err := os.Mkdir(config, 0o700); err != nil {
 		t.Fatal(err)
@@ -48,13 +49,13 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		input string
 		data  bool
 	}{
-		{args: []string{"-c"}, text: "Active subscription:", data: true},
+		{args: []string{currentFlag}, text: "Active subscription:", data: true},
 		{args: []string{versionCommand}, text: "azctx version ", data: true},
 		{args: []string{versionCommand, outputFlag, jsonFormat}, text: `"goVersion":"go`, data: true},
 		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 0 tenants and 2 subscriptions."},
 		{args: []string{loginCommand}, code: 1, text: "failed to login: denied"},
 		{args: []string{productionName}, code: 1, text: "Error: unknown command \"Production\" for \"azctx\"\nRun 'azctx --help' for usage.\n"},
-		{args: []string{"-"}, code: 1, text: "not implemented"},
+		{args: []string{"-"}, code: 1, text: "no previous subscription found"},
 		{input: "\x03", code: 130},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {

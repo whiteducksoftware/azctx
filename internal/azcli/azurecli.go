@@ -3,7 +3,7 @@
 package azcli
 
 import (
-	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 
@@ -70,7 +70,7 @@ func (cli CLI) InteractiveLogin(extraArgs []string) error {
 	// Execute the az login command
 	err := cli.execLogin(extraArgs)
 	if err != nil {
-		return errors.New("failed to login: " + err.Error())
+		return fmt.Errorf("failed to login: %w", err)
 	}
 
 	return nil
@@ -81,6 +81,9 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 	// Loop through the tenants and execute the az login command
 	tenants := cli.Tenants()
 	for _, tenant := range tenants {
+		if err := profile.ValidateGUID(tenant.Id); err != nil {
+			return fmt.Errorf("invalid tenant: %w", err)
+		}
 		log.Info("Logging into tenant %s... Please check your browser for the login prompt.", tenant.Name)
 
 		// Execute the az login command
@@ -98,6 +101,9 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 
 // SetSubscription asks az to set the default subscription.
 func (cli CLI) SetSubscription(subscription profile.Subscription) error {
+	if err := profile.ValidateGUID(subscription.Id); err != nil {
+		return fmt.Errorf("invalid subscription: %w", err)
+	}
 	// Execute az account set command
 	args := []string{"account", "set", "--subscription", subscription.Id}
 	_, err := cli.capture(args)
@@ -107,3 +113,6 @@ func (cli CLI) SetSubscription(subscription profile.Subscription) error {
 
 	return nil
 }
+
+// ConfigDir is the protected, read-only Azure configuration directory.
+func (cli CLI) ConfigDir() string { return cli.configDir }

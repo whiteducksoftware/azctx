@@ -10,11 +10,13 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
 
+const profileFilename = "azureProfile.json"
+
 func TestCLIReadsInjectedConfiguration(t *testing.T) {
 	const tenant = "tenant-id"
 	profile := `{"subscriptions":[{"id":"sub","name":"Production","tenantId":"tenant-id"},{"id":"tenant-id","name":"N/A(tenant level account)","isDefault":true}]}`
 	files := fstest.MapFS{
-		"azureProfile.json": &fstest.MapFile{Data: []byte(profile)},
+		profileFilename:     &fstest.MapFile{Data: []byte(profile)},
 		"azctxTenants.json": &fstest.MapFile{Data: []byte("\xef\xbb\xbf" + `[{"tenantId":"tenant-id","displayName":"Acme"}]`)},
 	}
 	t.Setenv("AZURE_CONFIG_DIR", filepath.Join("fixture", "azure"))
@@ -42,7 +44,7 @@ func TestCLIReadsInjectedConfiguration(t *testing.T) {
 	if len(fake.Calls) != 0 {
 		t.Fatalf("read-only operations invoked az: %+v", fake.Calls)
 	}
-	contents, err := fs.ReadFile(files, "azureProfile.json")
+	contents, err := fs.ReadFile(files, profileFilename)
 	if err != nil || string(contents) != profile {
 		t.Fatalf("profile changed: %q, %v", contents, err)
 	}
@@ -53,7 +55,7 @@ func TestCLIConfigurationErrors(t *testing.T) {
 	if _, err := azcli.New(files, &testutil.FakeRunner{}, "absent"); err == nil {
 		t.Fatal("missing profile must fail")
 	}
-	files["azureProfile.json"] = &fstest.MapFile{Data: []byte(`{}`)}
+	files[profileFilename] = &fstest.MapFile{Data: []byte(`{}`)}
 	cli, err := azcli.New(files, &testutil.FakeRunner{}, "config")
 	if err != nil {
 		t.Fatal(err)

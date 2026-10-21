@@ -12,6 +12,16 @@ import (
 
 var directoryID atomic.Uint64
 
+// IsolateUserDirs keeps state and cache tests away from the real user's files.
+func IsolateUserDirs(t *testing.T) string {
+	t.Helper()
+	dir := WorkDir(t)
+	for _, key := range []string{"HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "APPDATA", "LOCALAPPDATA"} {
+		t.Setenv(key, dir)
+	}
+	return dir
+}
+
 // WorkDir allocates scratch space below the package's working directory, never
 // the host temporary directory. It is removed when the test finishes.
 func WorkDir(t *testing.T) string {
