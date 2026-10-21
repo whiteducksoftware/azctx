@@ -24,4 +24,4 @@ go.work
 bin
 dist/
 
-azctx
+/azctx
