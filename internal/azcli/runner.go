@@ -3,6 +3,7 @@ package azcli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -39,6 +40,9 @@ type execRunner struct {
 	path string
 }
 
+// Path is the executable resolved once by NewRunner, for safe diagnostics.
+func (r *execRunner) Path() string { return r.path }
+
 // NewRunner resolves az exactly once, before any invocation.
 func NewRunner() (Runner, error) {
 	path, err := exec.LookPath("az")
@@ -68,6 +72,9 @@ func (r *execRunner) Run(ctx context.Context, args []string, options Options) (R
 		command.Stderr = io.MultiWriter(&stderr, terminalErr)
 	}
 	err := command.Run()
+	if err != nil && ctx.Err() != nil {
+		err = errors.Join(ctx.Err(), err)
+	}
 	result := Result{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1}
 	if command.ProcessState != nil {
 		result.ExitCode = command.ProcessState.ExitCode()

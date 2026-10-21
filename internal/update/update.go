@@ -87,7 +87,7 @@ func (c Checker) Check(owner, repo string) error {
 		return err
 	}
 	defer release()
-	cached, err := readCache(name)
+	cached, err := readCache(name, false)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (c Checker) Check(owner, repo string) error {
 	return c.notice(owner, repo, tag)
 }
 
-func readCache(name string) (cachedRelease, error) {
+func readCache(name string, strict bool) (cachedRelease, error) {
 	data, err := os.ReadFile(name)
 	if errors.Is(err, os.ErrNotExist) {
 		return cachedRelease{}, nil
@@ -120,6 +120,9 @@ func readCache(name string) (cachedRelease, error) {
 	}
 	var cached cachedRelease
 	if err := json.Unmarshal(data, &cached); err != nil {
+		if strict {
+			return cachedRelease{}, fmt.Errorf("decode update cache: %w", err)
+		}
 		log.Debug("decode update cache: %v", err)
 		return cachedRelease{}, nil
 	}
