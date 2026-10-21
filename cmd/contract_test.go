@@ -93,6 +93,28 @@ func TestContractJSONGoldens(t *testing.T) {
 	}
 }
 
+func TestContractGoldensUseCanonicalLF(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("testdata", "contract", "*.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no contract goldens found")
+	}
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.ContainsRune(data, '\r') || bytes.Count(data, []byte{'\n'}) != 1 ||
+				!bytes.HasSuffix(data, []byte{'\n'}) {
+				t.Fatalf("contract golden must use exactly one trailing LF and no CR: %q", data)
+			}
+		})
+	}
+}
+
 func assertContractGolden(t *testing.T, name, got string) {
 	t.Helper()
 	want, err := os.ReadFile(filepath.Join("testdata", "contract", name+".golden"))
@@ -100,6 +122,6 @@ func assertContractGolden(t *testing.T, name, got string) {
 		t.Fatal(err)
 	}
 	if got != string(want) {
-		t.Fatalf("%s golden mismatch\ngot:  %s\nwant: %s", name, got, want)
+		t.Fatalf("%s golden mismatch\ngot:  %q\nwant: %q", name, got, want)
 	}
 }
