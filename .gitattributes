@@ -1,5 +1,8 @@
 # Exact JSON contract fixtures must retain LF on every checkout, including Windows.
 /cmd/testdata/contract/*.golden text eol=lf
 
+# Shell and pipeline exports are exact LF, independently of the host shell.
+/cmd/testdata/env/*.golden text eol=lf
+
 # MFA stderr fixtures are exact LF lines; parser tests construct CRLF explicitly.
 /internal/azcli/testdata/mfa/*.stderr.golden text eol=lf

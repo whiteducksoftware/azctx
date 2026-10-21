@@ -105,6 +105,9 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	rootCmd.AddCommand(newListCommand(loadCLI))
 	rootCmd.AddCommand(newTenantCommand(loadCLI, deps))
 	rootCmd.AddCommand(newHistoryCommand(deps))
+	rootCmd.AddCommand(newEnvCommand(deps))
+	rootCmd.AddCommand(newGuardCommand(deps))
+	rootCmd.AddCommand(newExecCommand(deps))
 	rootCmd.AddCommand(newConfigCommand(deps))
 	rootCmd.AddCommand(newAliasCommand(deps))
 	rootCmd.AddCommand(newLoginCommand(func() (azcli.CLI, error) { return newCLI(true) }, deps))
@@ -360,6 +363,7 @@ func getActiveSubscription(command *cobra.Command, cli azcli.CLI, cfg config.Con
 		return err
 	}
 
+	warnProjectContext(command, subscription)
 	legacyProfileHint(command, []profile.Subscription{subscription})
 	return nil
 }
