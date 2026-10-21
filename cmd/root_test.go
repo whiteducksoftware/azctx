@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -39,12 +40,20 @@ func commandDependencies(t *testing.T, fake *testutil.FakeRunner) cmd.Dependenci
 	t.Helper()
 	t.Setenv("PATH", "")
 	testutil.IsolateUserDirs(t)
+	t.Setenv("CI", "")
+	if err := os.Unsetenv("CI"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AZCTX_NO_INPUT", "")
+	t.Setenv("AZCTX_NO_UPDATE_CHECK", "")
 	files := fstest.MapFS{
 		profileFile: &fstest.MapFile{Data: []byte(fixtureProfile)},
 	}
 	return cmd.Dependencies{
 		Runner: fake, FS: files, ConfigDir: "config",
 		CheckUpdates: func(string, string) error { return nil },
+		StdinTTY:     func() bool { return true },
+		StdoutTTY:    func() bool { return true },
 		Select: func(subscriptions []profile.Subscription) (int, error) {
 			if len(subscriptions) != 2 {
 				t.Fatalf("picker subscriptions = %+v", subscriptions)
@@ -101,18 +110,17 @@ func TestCurrentSubscription(t *testing.T) {
 	}
 }
 
-func TestSwitchMessagesUseStderr(t *testing.T) {
+func TestSwitchIsQuietOnBothStreams(t *testing.T) {
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 	root := cmd.NewRootCommand(commandDependencies(t, fake))
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"-s", argumentDelimiter, productionName})
+	root.SetArgs([]string{argumentDelimiter, productionName})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	want := "Warning: Deprecated flag --short/-s used. Size is now automatically determined.\n"
-	if stdout.Len() != 0 || stderr.String() != want {
+	if stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -124,7 +132,7 @@ func TestCommandsReturnErrors(t *testing.T) {
 	}{
 		{args: []string{argumentDelimiter, productionName}, want: "Error executing command: denied"},
 		{args: []string{argumentDelimiter, "missing"}, want: "no azure subscription found for 'missing'"},
-		{args: []string{productionName}, want: `unknown command "Production" for "azctx"`},
+		{args: []string{productionName}, want: "Error executing command: denied"},
 		{args: []string{"-"}, want: "no previous subscription found"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -202,13 +210,13 @@ func TestCanceledPickerAndIndependentFlags(t *testing.T) {
 	fake := &testutil.FakeRunner{}
 	deps := commandDependencies(t, fake)
 	deps.Select = func(subscriptions []profile.Subscription) (int, error) {
-		if len(subscriptions) != 3 {
-			t.Fatalf("unfiltered subscriptions = %+v", subscriptions)
+		if len(subscriptions) != 2 {
+			t.Fatalf("filtered subscriptions = %+v", subscriptions)
 		}
 		return -1, errors.New("canceled")
 	}
 	root := cmd.NewRootCommand(deps)
-	root.SetArgs([]string{"--filter-tenant-level=false"})
+	root.SetArgs([]string{"--verbose"})
 	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "canceled") || len(fake.Calls) != 0 {
 		t.Fatalf("canceled picker = %v, calls = %+v", err, fake.Calls)
 	}
