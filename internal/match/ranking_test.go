@@ -52,3 +52,19 @@ func TestDeterministicSelectionRanking(t *testing.T) {
 		t.Fatalf("ID query lost distinct token tenant identities: %+v, %v", got, err)
 	}
 }
+
+func TestAliasNameCollisionKeepsProfileOrder(t *testing.T) {
+	const (
+		query   = "Collision"
+		aliasID = "alias-target"
+		nameID  = "named-target"
+	)
+	subs := []profile.Subscription{
+		{Id: aliasID, Name: "Other"},
+		{Id: nameID, Name: query},
+	}
+	got, err := match.FindWithOptions(subs, query, match.Options{Aliases: map[string]string{query: aliasID}})
+	if err != nil || len(got) != 2 || got[0].Id != aliasID || got[1].Id != nameID {
+		t.Fatalf("equal-priority exact candidates must retain profile order: %+v, %v", got, err)
+	}
+}

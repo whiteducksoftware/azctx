@@ -95,8 +95,9 @@ func find(subscriptions []profile.Subscription, query, original string, options 
 		}
 	}
 	if len(targets) != 0 {
+		found = nil
 		for _, sub := range subscriptions {
-			if targets[strings.ToLower(sub.Id)] {
+			if strings.EqualFold(sub.Name, query) || targets[strings.ToLower(sub.Id)] {
 				found = append(found, sub)
 			}
 		}
