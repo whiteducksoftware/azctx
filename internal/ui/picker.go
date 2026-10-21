@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/sahilm/fuzzy"
 	"golang.org/x/term"
 
@@ -139,6 +140,12 @@ func (picker Picker) View() string { return picker.list.View() }
 func (picker Picker) Selection() (int, error) { return picker.selected, picker.err }
 
 func Select(subscriptions []profile.Subscription) (int, error) {
+	_, noColor := os.LookupEnv("NO_COLOR")
+	if noColor || !term.IsTerminal(int(os.Stderr.Fd())) {
+		previous := lipgloss.ColorProfile()
+		lipgloss.SetColorProfile(termenv.Ascii)
+		defer lipgloss.SetColorProfile(previous)
+	}
 	width, height, err := term.GetSize(int(os.Stderr.Fd()))
 	if err != nil {
 		width, height = 100, 20

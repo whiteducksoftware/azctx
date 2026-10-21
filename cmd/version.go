@@ -10,13 +10,16 @@ import (
 )
 
 func newVersionCommand() *cobra.Command {
-	format := "text"
 	command := &cobra.Command{
 		Use:   "version",
 		Short: "Print azctx version information",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			info := version.Get()
+			format := outputFormat(command)
+			if format == "" {
+				format = formatText
+			}
 			switch format {
 			case "text":
 				_, err := fmt.Fprintf(command.OutOrStdout(), "azctx version %s (commit %s, built %s, %s)\n", info.Version, info.Commit, info.BuildDate, info.GoVersion)
@@ -28,6 +31,5 @@ func newVersionCommand() *cobra.Command {
 			}
 		},
 	}
-	command.Flags().StringVarP(&format, "output", "o", format, "Output format: text or json")
 	return command
 }
