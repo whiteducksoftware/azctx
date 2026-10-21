@@ -7,9 +7,6 @@ on:
 
 permissions: {}
 
-env:
-  GOTOOLCHAIN: local
-
 jobs:
   lint:
     name: lint
@@ -32,6 +29,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check active Go toolchain
+        shell: bash
+        run: |
+          go version
+          go env GOTOOLCHAIN
+          grep -E '^(go|toolchain) ' go.mod
+
       - name: Check go mod
         run: |
           go mod tidy
@@ -45,6 +49,9 @@ jobs:
 
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Test CI configuration
+        run: ruby .github/scripts/test_ci_config.rb
 
       - name: Lint workflows
         run: actionlint
@@ -84,6 +91,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check active Go toolchain
+        shell: bash
+        run: |
+          go version
+          go env GOTOOLCHAIN
+          grep -E '^(go|toolchain) ' go.mod
+
       - name: Test with race detector and coverage
         run: make test
 
@@ -107,6 +121,13 @@ jobs:
         uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version-file: go.mod
+
+      - name: Check active Go toolchain
+        shell: bash
+        run: |
+          go version
+          go env GOTOOLCHAIN
+          grep -E '^(go|toolchain) ' go.mod
 
       - name: Verify modules
         run: go mod verify
@@ -146,6 +167,14 @@ jobs:
         uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Check active Go toolchain
+        shell: bash
+        run: |
+          go version
+          go env GOTOOLCHAIN
+          grep -E '^(go|toolchain) ' go.mod
 
       - name: Build with Goreleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
@@ -176,6 +205,14 @@ jobs:
         uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Check active Go toolchain
+        shell: bash
+        run: |
+          go version
+          go env GOTOOLCHAIN
+          grep -E '^(go|toolchain) ' go.mod
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1

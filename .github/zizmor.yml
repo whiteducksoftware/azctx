@@ -1,5 +1,5 @@
 # Release-pipeline hardening belongs to #98 (layer 17). Keep scanning that
-# workflow, with only its existing credential and workflow-permission debt
+# workflow, with only its existing credential, workflow-permission and cache debt
 # excepted at their current locations. Remove these when #98 replaces it.
 rules:
   artipacked:
@@ -10,3 +10,7 @@ rules:
     ignore:
       - goreleaser.yaml:9
       - goreleaser.yaml:10
+  cache-poisoning:
+    ignore:
+      - goreleaser.yaml:25
+      - goreleaser.yaml:56
