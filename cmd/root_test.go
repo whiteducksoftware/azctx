@@ -21,7 +21,7 @@ const (
 	productionID   = "11111111-1111-1111-1111-111111111111"
 	developmentID  = "22222222-2222-2222-2222-222222222222"
 	tenantID       = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-	fixtureProfile = `{"subscriptions":[{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","isDefault":true},{"id":"` + developmentID + `","name":"Development","tenantId":"` + tenantID + `"},{"id":"` + tenantID + `","name":"N/A(tenant level account)"}]}`
+	fixtureProfile = `{"subscriptions":[{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","tenantDisplayName":"` + tenantID + `","tenantDefaultDomain":"example.invalid","environmentName":"AzureCloud","isDefault":true},{"id":"` + developmentID + `","name":"Development","tenantId":"` + tenantID + `","tenantDisplayName":"` + tenantID + `","tenantDefaultDomain":"example.invalid","environmentName":"AzureCloud"},{"id":"` + tenantID + `","name":"N/A(tenant level account)","environmentName":"AzureCloud"}]}`
 )
 
 const argumentDelimiter = "--"
@@ -46,11 +46,12 @@ func commandDependencies(t *testing.T, fake *testutil.FakeRunner) cmd.Dependenci
 	}
 	t.Setenv("AZCTX_NO_INPUT", "")
 	t.Setenv("AZCTX_NO_UPDATE_CHECK", "")
+	t.Setenv("AZURE_CLOUD_NAME", azureCloudName)
 	files := fstest.MapFS{
 		profileFile: &fstest.MapFile{Data: []byte(fixtureProfile)},
 	}
 	return cmd.Dependencies{
-		Runner: fake, FS: files, ConfigDir: "config",
+		Runner: fake, FS: files, ConfigDir: azureConfigFile,
 		CheckUpdates: func(string, string) error { return nil },
 		StdinTTY:     func() bool { return true },
 		StdoutTTY:    func() bool { return true },
@@ -80,7 +81,7 @@ func TestCommandSelection(t *testing.T) {
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
-			if len(fake.Calls) != 1 || !reflect.DeepEqual(fake.Calls[0].Args, []string{"account", "set", "--subscription", tc.want}) {
+			if len(fake.Calls) != 1 || !reflect.DeepEqual(fake.Calls[0].Args, []string{accountCommand, setCommand, subscriptionFlag, tc.want}) {
 				t.Fatalf("az calls = %+v", fake.Calls)
 			}
 			contents, err := fs.ReadFile(deps.FS, profileFile)
@@ -150,16 +151,16 @@ func TestCommandsReturnErrors(t *testing.T) {
 
 func TestLoginPassesThroughArguments(t *testing.T) {
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{
-		{Result: azcli.Result{Stdout: `{"value":[]}`}}, {},
+		{Result: azcli.Result{Stdout: `{"azure-cli":"2.61.0"}`}}, {},
 	}}
 	root := cmd.NewRootCommand(commandDependencies(t, fake))
-	root.SetArgs([]string{loginCommand, argumentDelimiter, deviceCodeFlag, "--tenant", tenantID})
+	root.SetArgs([]string{loginCommand, argumentDelimiter, deviceCodeFlag, tenantFlag, tenantID})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	want := [][]string{
-		{"rest", "--method", "get", "--url", "/tenants?api-version=2020-01-01", "--output", jsonFormat},
-		{loginCommand, deviceCodeFlag, "--tenant", tenantID},
+		{versionCommand, outputFlag, jsonFormat},
+		{loginCommand, deviceCodeFlag, tenantFlag, tenantID},
 	}
 	var got [][]string
 	for _, call := range fake.Calls {
@@ -191,7 +192,7 @@ func TestPickerInterruptReachesExitBoundary(t *testing.T) {
 		// Duplicate names must also propagate interruption from the narrowed picker.
 		if args != nil {
 			deps.FS = fstest.MapFS{
-				profileFile: &fstest.MapFile{Data: []byte(`{"subscriptions":[{"id":"one","name":"Production"},{"id":"two","name":"Production"}]}`)},
+				profileFile: &fstest.MapFile{Data: []byte(`{"subscriptions":[{"id":"one","name":"Production","environmentName":"AzureCloud"},{"id":"two","name":"Production","environmentName":"AzureCloud"}]}`)},
 			}
 		}
 		deps.CheckUpdates = func(string, string) error {

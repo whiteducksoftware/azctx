@@ -13,7 +13,7 @@ func TestContractInvalidFormatsFailBeforeDependencies(t *testing.T) {
 	for _, args := range [][]string{
 		{currentFlag, outputFlag, "table"},
 		{listCommand, outputFlag, nameFormat},
-		{productionName, outputFlag, "id"},
+		{productionName, outputFlag, idFormat},
 		{outputFlag, textFormat},
 		{versionCommand, outputFlag, "yaml"},
 	} {

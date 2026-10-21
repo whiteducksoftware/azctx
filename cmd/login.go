@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/spf13/cobra"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
@@ -14,7 +12,8 @@ func newLoginCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 		Use:   "login",
 		Short: "Login to Azure",
 		Long: `Login to Azure (wrapped around 'az login')
-	Authenticates the CLI instance to Azure and fetches all available tenants and subscriptions.
+	Requires Azure CLI 2.61.0 or newer; tenant metadata comes from its profile.
+	Azure CLI's subscription selector is disabled only for this login process.
 	All args after -- are directly passed to the 'az login' command.`,
 		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
 			return loginRunE(cmd, args, newCLI)
@@ -47,28 +46,14 @@ func loginRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, erro
 		return err
 	}
 
-	log.Info("Successfully fetched %d tenants and %d subscriptions.", len(cli.Tenants()), len(cli.Subscriptions()))
+	log.Info("Successfully fetched %d tenants and %d subscriptions.", cli.TenantCount(), len(cli.Subscriptions()))
 	return nil
 }
 
 func refreshData(cmd *cobra.Command, cli azcli.CLI, extraArgs []string) error {
-	// Fetch all available tenants
-	err := cli.UpdateTenants()
-	if err != nil {
-		log.Warn("%s", `
-`+
-			strings.Repeat("-", 80)+`
-Failed fetching available tenants, only tenants which do not require explicit MFA / Individual Authentication will be available.
-This may be due to the azure cli being completely logged out or due to a network error.
-Subsequent logins should no longer have this issue.
-
-Feel free to open an issue at https://github.com/whiteducksoftware/azctx/issues if this issue persists.
-`+strings.Repeat("-", 80))
-	}
-
-	// Try to refresh the subscriptions
+	var err error
 	switch {
-	case cmd.Flags().Changed("force-mfa") && err == nil: // Only force MFA if the user explicitly requested it & we were able to fetch the tenants
+	case cmd.Flags().Changed("force-mfa") && cli.TenantCount() > 0:
 		err = cli.IterativeTenantLogin(extraArgs)
 	default:
 		err = cli.InteractiveLogin(extraArgs)

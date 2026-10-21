@@ -111,6 +111,10 @@ func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error
 	if err != nil {
 		return err
 	}
+	selectItem := func(subscriptions []profile.Subscription) (int, error) {
+		legacyProfileHint(cmd, cli)
+		return deps.Select(subscriptions)
+	}
 
 	// check the flags
 	switch {
@@ -121,7 +125,7 @@ func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error
 		if args[0] == "-" {
 			err = selectPreviousSubscription(cli)
 		} else {
-			err = selectSubscriptionByName(cli, args[0], deps.Select, inputIsTerminal(cmd, deps) && outputFormat(cmd) != formatJSON)
+			err = selectSubscriptionByName(cli, args[0], selectItem, inputIsTerminal(cmd, deps) && outputFormat(cmd) != formatJSON)
 		}
 		if err != nil {
 			return err
@@ -130,7 +134,7 @@ func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error
 		if outputFormat(cmd) != "" || !inputIsTerminal(cmd, deps) {
 			return listSubscriptions(cmd, cli)
 		}
-		err = interactivelySelectSubscription(cli, deps.Select)
+		err = interactivelySelectSubscription(cli, selectItem)
 		if err != nil {
 			return err
 		}
@@ -257,7 +261,7 @@ func switchSubscription(cli azcli.CLI, subscription profile.Subscription) error 
 			return fmt.Errorf("save previous subscription: %w", err)
 		}
 	}
-	log.Debug("Setting active subscription to %s/%s (%s/%s)", subscription.TenantName, subscription.Name, subscription.Tenant, subscription.Id)
+	log.Debug("Setting active subscription to %s/%s (%s/%s)", subscription.TenantLabel(), subscription.Name, subscription.Tenant, subscription.Id)
 	err = cli.SetSubscription(subscription)
 	if err != nil && rollback != nil {
 		if restoreErr := rollback(); restoreErr != nil {
@@ -274,5 +278,9 @@ func getActiveSubscription(command *cobra.Command, cli azcli.CLI) error {
 		return err
 	}
 
-	return writeCurrent(command, subscription)
+	if err := writeCurrent(command, subscription); err != nil {
+		return err
+	}
+	legacyProfileHint(command, cli)
+	return nil
 }
