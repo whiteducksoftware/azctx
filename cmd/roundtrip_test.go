@@ -1,12 +1,15 @@
 package cmd_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
@@ -34,19 +37,29 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 	t.Setenv("FAKEAZ_RECORD", record)
 	t.Setenv("FAKEAZ_ENV_KEYS", "AZURE_CONFIG_DIR")
 	for _, tc := range []struct {
-		args []string
-		code int
-		text string
+		args  []string
+		code  int
+		text  string
+		input string
+		data  bool
 	}{
-		{args: []string{"-c"}, text: "Active subscription:"},
+		{args: []string{"-c"}, text: "Active subscription:", data: true},
+		{args: []string{versionCommand}, text: "azctx version ", data: true},
+		{args: []string{versionCommand, outputFlag, jsonFormat}, text: `"goVersion":"go`, data: true},
 		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 0 tenants and 2 subscriptions."},
 		{args: []string{loginCommand}, code: 1, text: "failed to login: denied"},
 		{args: []string{productionName}, code: 1, text: "Error: unknown command \"Production\" for \"azctx\"\nRun 'azctx --help' for usage.\n"},
 		{args: []string{"-"}, code: 1, text: "not implemented"},
+		{input: "\x03", code: 130},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
-			command := exec.Command(binary, tc.args...) //nolint:gosec // Test-owned binary and fixed fixture arguments, without a shell.
-			output, err := command.CombinedOutput()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, binary, tc.args...) //nolint:gosec // Test-owned binary and fixed fixture arguments, without a shell.
+			var stdout, stderr bytes.Buffer
+			command.Stdout, command.Stderr = &stdout, &stderr
+			command.Stdin = strings.NewReader(tc.input)
+			err := command.Run()
 			code := 0
 			if err != nil {
 				var exitErr *exec.ExitError
@@ -55,8 +68,18 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 				}
 				code = exitErr.ExitCode()
 			}
-			if code != tc.code || !strings.Contains(string(output), tc.text) {
-				t.Fatalf("exit=%d output=%s; want exit=%d containing %q", code, output, tc.code, tc.text)
+			output := stderr.String()
+			if tc.data {
+				output = stdout.String()
+			}
+			if code != tc.code || !strings.Contains(output, tc.text) {
+				t.Fatalf("exit=%d stdout=%q stderr=%q; want exit=%d containing %q", code, stdout.String(), stderr.String(), tc.code, tc.text)
+			}
+			if !tc.data && stdout.Len() != 0 {
+				t.Fatalf("diagnostics leaked to stdout: %q", stdout.String())
+			}
+			if bytes.ContainsRune(stderr.Bytes(), '\a') {
+				t.Fatal("terminal bell emitted")
 			}
 		})
 	}

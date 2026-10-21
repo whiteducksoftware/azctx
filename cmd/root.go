@@ -3,10 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"go.szostok.io/version/extension"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
 	"github.com/whiteducksoftware/azctx/internal/profile"
@@ -27,7 +26,7 @@ const (
 // Nil fields use production implementations, resolved lazily where needed.
 type Dependencies struct {
 	Runner       azcli.Runner
-	FS           afero.Fs
+	FS           fs.FS // Read-only filesystem rooted at the Azure configuration directory.
 	ConfigDir    string
 	Select       func([]profile.Subscription) (int, error)
 	CheckUpdates func(string, string) error
@@ -35,9 +34,6 @@ type Dependencies struct {
 
 // NewRootCommand constructs an independent command tree, including flag state.
 func NewRootCommand(deps Dependencies) *cobra.Command {
-	if deps.FS == nil {
-		deps.FS = afero.NewOsFs()
-	}
 	if deps.Select == nil {
 		deps.Select = ui.Select
 	}
@@ -66,15 +62,14 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	Pass - to switch to the previous subscription.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRun: func(command *cobra.Command, _ []string) {
+			log.InitLogger(command.ErrOrStderr())
+		},
 		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
 			return rootRunE(cmd, args, newCLI, deps)
 		}),
 	}
-	rootCmd.AddCommand(
-		extension.NewVersionCobraCmd(
-			extension.WithUpgradeNotice(owner, repo),
-		),
-	)
+	rootCmd.AddCommand(newVersionCommand())
 
 	rootCmd.Flags().BoolP("current", "c", false, "Display the current active subscription")
 	rootCmd.Flags().BoolP("short", "s", false, `Use a short prompt.
@@ -108,7 +103,7 @@ func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error
 	// check the flags
 	switch {
 	case cmd.Flags().Changed("current"):
-		return getActiveSubscription(cli)
+		return getActiveSubscription(cmd, cli)
 	case len(args) == 1:
 		// check if the user passed -
 		if args[0] == "-" {
@@ -136,6 +131,9 @@ func interactivelySelectSubscription(cli azcli.CLI, selectItem func([]profile.Su
 	// Run the prompt
 	idx, err := selectItem(subscriptions)
 	if err != nil {
+		if errors.Is(err, ui.ErrInterrupted) {
+			return err
+		}
 		return nil
 	}
 
@@ -163,6 +161,9 @@ func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]prof
 		// Run the prompt
 		idx, err := selectItem(subscriptions)
 		if err != nil {
+			if errors.Is(err, ui.ErrInterrupted) {
+				return err
+			}
 			return nil
 		}
 
@@ -183,7 +184,7 @@ func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]prof
 	return nil
 }
 
-func getActiveSubscription(cli azcli.CLI) error {
+func getActiveSubscription(command *cobra.Command, cli azcli.CLI) error {
 	// Try to get the active subscription
 	subscription, err := cli.ActiveSubscription()
 	if err != nil {
@@ -191,7 +192,6 @@ func getActiveSubscription(cli azcli.CLI) error {
 	}
 
 	// Print the active subscription
-	log.Info("Active subscription: %s/%s (%s/%s)", subscription.TenantName, subscription.Name, subscription.Tenant, subscription.Id)
-
-	return nil
+	_, err = fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)\n", subscription.TenantName, subscription.Name, subscription.Tenant, subscription.Id)
+	return err
 }

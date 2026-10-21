@@ -32,15 +32,16 @@ class VulnerabilityPolicyTests(unittest.TestCase):
     def test_clean_scan(self):
         status, output = self.run_check(CONFIG, {"progress": {"message": "Scanning"}})
         self.assertEqual(status, 0)
-        self.assertIn("0 blocking, 0 temporary exceptions", output)
+        self.assertIn("0 blocking", output)
 
-    def test_exact_baseline_warns(self):
+    def test_former_x_text_baseline_blocks_without_exceptions(self):
         status, output = self.run_check(
             CONFIG, finding(), finding("GO-2026-6629"), finding()
         )
-        self.assertEqual(status, 0)
-        self.assertEqual(output.count("::warning"), 2)
-        self.assertIn("2 temporary exceptions", output)
+        self.assertEqual(status, 1)
+        self.assertEqual(output.count("::error"), 2)
+        self.assertNotIn("::warning", output)
+        self.assertIn("2 blocking", output)
 
     def test_other_advisory_blocks(self):
         status, output = self.run_check(CONFIG, finding("GO-2099-9999"))
@@ -71,7 +72,7 @@ class VulnerabilityPolicyTests(unittest.TestCase):
     def test_mixed_findings_still_block(self):
         status, output = self.run_check(CONFIG, finding(), finding(module="stdlib"))
         self.assertEqual(status, 1)
-        self.assertIn("::warning", output)
+        self.assertNotIn("::warning", output)
         self.assertIn("::error", output)
 
     def test_non_reachable_findings_match_default_govulncheck_policy(self):

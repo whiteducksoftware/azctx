@@ -4,22 +4,29 @@ package azcli
 
 import (
 	"errors"
-	"fmt"
-	"time"
-
-	"github.com/briandowns/spinner"
-	"github.com/fatih/color"
-	"github.com/spf13/afero"
+	"io/fs"
+	"os"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/log"
 )
 
 // New loads the profile and legacy tenant cache using an already resolved runner.
-// An empty configDir selects AZURE_CONFIG_DIR or the user's .azure directory.
-func New(fs afero.Fs, runner Runner, configDir string) (CLI, error) {
+// Files is read-only and rooted at configDir. With nil files, an empty configDir
+// selects AZURE_CONFIG_DIR or the user's .azure directory.
+func New(files fs.FS, runner Runner, configDir string) (CLI, error) {
+	diskConfig := files == nil
+	if diskConfig {
+		var err error
+		configDir, err = resolveConfigDir(configDir)
+		if err != nil {
+			return CLI{}, err
+		}
+		files = os.DirFS(configDir)
+	}
 	cli := CLI{
-		fs:                       fs,
+		fs:                       files,
+		diskConfig:               diskConfig,
 		runner:                   runner,
 		configDir:                configDir,
 		profile:                  profile.Profile{},
@@ -58,12 +65,7 @@ func (cli *CLI) Reload() error {
 
 // InteractiveLogin executes the az login command
 func (cli CLI) InteractiveLogin(extraArgs []string) error {
-	// Create a spinner
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithHiddenCursor(false))
-	s.Color("green", "italic", "bold")
-	s.Suffix = " Logging in... Please check your browser for the login prompt."
-	s.Start()
-	defer s.Stop()
+	log.Info("Logging in... Please check your browser for the login prompt.")
 
 	// Execute the az login command
 	err := cli.execLogin(extraArgs)
@@ -76,25 +78,17 @@ func (cli CLI) InteractiveLogin(extraArgs []string) error {
 
 // IterativeTenantLogin explicitly executes the az login command for each tenant
 func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
-	// Create a spinner
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithHiddenCursor(false))
-	s.Color("green", "italic", "bold")
-	s.Start()
-	defer s.Stop()
-
 	// Loop through the tenants and execute the az login command
 	tenants := cli.Tenants()
 	for _, tenant := range tenants {
-		// Update the spinner suffix
-		s.Suffix = " Logging into tenant " + color.HiGreenString(tenant.Name) + "... Please check your browser for the login prompt."
+		log.Info("Logging into tenant %s... Please check your browser for the login prompt.", tenant.Name)
 
 		// Execute the az login command
 		args := []string{"--tenant", tenant.Id}
 		args = append(args, extraArgs...)
 		err := cli.execLogin(args)
 		if err != nil {
-			fmt.Println() // Force a new line after the spinner
-			log.Error("Failed to login to tenant %s. Azure CLI returned the following error: %s", tenant.Name, color.RedString(err.Error()))
+			log.Error("Failed to login to tenant %s. Azure CLI returned the following error: %s", tenant.Name, err.Error())
 			continue
 		}
 	}
