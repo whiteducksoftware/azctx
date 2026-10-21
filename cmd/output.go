@@ -10,7 +10,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/config"
 	"github.com/whiteducksoftware/azctx/internal/profile"
+	"github.com/whiteducksoftware/azctx/internal/selection"
 )
 
 const (
@@ -89,12 +91,16 @@ func newListCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 			return listSubscriptions(command, cli)
 		}),
 	}
-	command.Flags().Bool("all", false, "Include disabled, tenant-level and other-cloud accounts")
 	return command
 }
 
 func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
-	visible := cli.Subscriptions()
+	cfg, err := config.Load(cli.ConfigDir())
+	if err != nil {
+		return err
+	}
+	all, _ := command.Flags().GetBool("all")
+	visible := (selection.Catalog{Subscriptions: cli.Subscriptions(), Config: cfg}).Visible(all)
 	subscriptions := SubscriptionOutputs(visible)
 	if outputFormat(command) == formatJSON {
 		return json.NewEncoder(command.OutOrStdout()).Encode(struct {
@@ -129,7 +135,7 @@ func legacyProfileHint(command *cobra.Command, subscriptions []profile.Subscript
 	}
 }
 
-func writeCurrent(command *cobra.Command, subscription profile.Subscription) error {
+func writeCurrent(command *cobra.Command, subscription profile.Subscription, protected bool) error {
 	switch outputFormat(command) {
 	case formatJSON:
 		return json.NewEncoder(command.OutOrStdout()).Encode(struct {
@@ -146,7 +152,11 @@ func writeCurrent(command *cobra.Command, subscription profile.Subscription) err
 		_, err := fmt.Fprintln(command.OutOrStdout(), subscription.Tenant)
 		return err
 	default:
-		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)\n", subscription.TenantLabel(), subscription.DisplayName(), subscription.Tenant, subscription.Id)
+		marker := ""
+		if protected {
+			marker = " [protected]"
+		}
+		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)%s\n", subscription.TenantLabel(), subscription.DisplayName(), subscription.Tenant, subscription.Id, marker)
 		return err
 	}
 }

@@ -10,6 +10,24 @@ import (
 	"strings"
 )
 
+// ConfigPath resolves azctx-owned configuration and state, never Azure files.
+// AZCTX_CONFIG_DIR names the directory itself, not a parent of "azctx".
+func ConfigPath(azureDir, name string) (string, error) {
+	dir := os.Getenv("AZCTX_CONFIG_DIR")
+	if dir == "" {
+		base, err := os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(base, "azctx")
+	}
+	path := filepath.Join(dir, name)
+	if err := validate(path, azureDir); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // Path validates a state/cache destination, including existing symlink parents.
 // It never creates the directory.
 func Path(base, azureDir, name string) (string, error) {
