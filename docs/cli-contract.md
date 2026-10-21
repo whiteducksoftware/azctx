@@ -13,10 +13,12 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | --- | --- |
 | `azctx` | Open the subscription picker when input is interactive; otherwise print the same table as `azctx list`. |
 | `azctx <query> [--all] [--yes]` | Switch by subscription name, alias, subscription ID or `tenant/subscription`. Successful switches are quiet. Protected targets require confirmation or `--yes`. |
-| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
+| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `tenant`, `history`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
 | `azctx -` | Switch to the previous subscription, preserving the layer-06 private-state/rollback behavior. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
 | `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
+| `azctx tenant [query] [--all] [--yes]` | Select a GUID-distinct tenant, then a subscription within it. A unique tenant with one selectable subscription switches directly. Queries support text/JSON output; no-input/JSON ambiguities exit 2 with subscription candidates. Bare no-input or explicit table/JSON output lists subscriptions, with `--all` enabling inspection only of Azure-filtered entries. |
+| `azctx history [-o text\|json]` | Read the last 100 completed switches, newest first, without loading a profile or running Azure CLI. Separate schema-1 JSON; see [configuration](configuration.md#completed-switch-history). |
 | `azctx version [-o text\|json]` | Print version information, without loading the Azure profile or checking for updates. Its existing version JSON is unchanged. |
 | `azctx login [--use-device-code] [--tenant <name\|id> \| --all-tenants] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, attach login streams including live stderr capture, then offer one confirmation for failed MFA tenants. `--all-tenants` explicitly discovers tenant GUIDs and signs in individually. Disable Azure CLI's subscription picker only in login children. Supports default/text output, not subscription JSON. |
 | `azctx auth broker status` | Read effective platform broker settings and check Azure CLI availability, without a profile or mutations. Default/text output only. |
@@ -30,8 +32,8 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 or after a subcommand. Formats are case-sensitive. Unsupported formats and
 invalid arguments/flags fail with exit 1 before an Azure subprocess is started.
 `-c` does not accept a query. Root `--yes` explicitly confirms a protected switch.
-Root `--all` exposes configured hidden records without bypassing Azure cloud/state
-switching policy; `list --all` also exposes Azure-filtered records for inspection.
+Root/tenant `--all` expose configured hidden records without bypassing Azure cloud/state
+switching policy; `list --all` and bare no-input `tenant --all` expose Azure-filtered records for inspection.
 `--short`, `-s` and `--filter-tenant-level` are removed, not deprecated.
 
 Unqualified queries first match case-insensitive exact subscription IDs, then
@@ -49,6 +51,10 @@ stable profile order for query candidates and tenant/name/ID order in the built-
 picker. Ranking never auto-resolves ambiguity. Configured hidden entries are
 excluded from lists, selection and completion unless `--all` is supplied.
 See [configuration](configuration.md) for the exact schema and path rules.
+Tenant-first matching uses the same exact-ID/exact-label/fuzzy tiers, with exact
+tenant domains also treated as exact labels. Grouping and picker selection use
+token tenant GUIDs, never display names. Both picker stages honor configured fzf;
+missing fzf emits one fallback line, while cancellation and other failures propagate.
 
 The active cloud comes from `[cloud] name` in Azure CLI's `config`, overridden
 by `AZURE_CLOUD_NAME`, with `AzureCloud` as the absent/blank-setting default.
@@ -129,6 +135,9 @@ schema and safety boundaries are in [authentication](authentication.md).
 - `--verbose` enables stderr debug diagnostics. JSON mode suppresses ordinary
   diagnostics, including verbose messages, so failures have exactly one JSON
   error object on stderr and no error text on stdout.
+- History recovery/write warnings are explicit one-line stderr notices, including
+  on otherwise quiet successful JSON switches; they never contaminate stdout or
+  turn a completed switch into a failed command.
 - Optional update checks run only after successful switches, with stdout a TTY,
   `CI` absent, `AZCTX_NO_UPDATE_CHECK` not `1` and config `updateCheck: true`.
   JSON mode also suppresses them.
@@ -230,7 +239,7 @@ Tokens after `--` are never output flags, including forwarded login arguments.
 | `CI` | Presence, even empty, disables picker input and optional update checks. |
 | `NO_COLOR` | Presence, even empty, disables azctx colors on all streams. |
 | `AZCTX_NO_UPDATE_CHECK=1` | Disable optional update checks. |
-| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml` and `state.json`; must remain outside Azure configuration, including symlink targets. |
+| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml`, `state.json`, `history.json` and its private lock; must remain outside Azure configuration, including symlink targets. |
 | `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `APPDATA` | Platform-standard user configuration resolution for private config and previous/recent subscription state. |
 | `XDG_CACHE_HOME`, `LOCALAPPDATA` | Platform-standard user cache resolution for update-check data (with the platform's home-directory fallback). |
 
