@@ -3,19 +3,17 @@ package cmd_test
 import (
 	"bytes"
 	"errors"
-	"os"
-	"path/filepath"
+	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/spf13/afero"
+	"testing/fstest"
 
 	"github.com/whiteducksoftware/azctx/cmd"
 	"github.com/whiteducksoftware/azctx/internal/azcli"
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
-	"github.com/whiteducksoftware/azctx/log"
+	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
 const fixtureProfile = `{"subscriptions":[{"id":"prod-id","name":"Production","tenantId":"tenant","isDefault":true},{"id":"dev-id","name":"Development","tenantId":"tenant"},{"id":"tenant","name":"N/A(tenant level account)"}]}`
@@ -31,12 +29,8 @@ const loginCommand = "login"
 func commandDependencies(t *testing.T, fake *testutil.FakeRunner) cmd.Dependencies {
 	t.Helper()
 	t.Setenv("PATH", "")
-	files := afero.NewMemMapFs()
-	if err := files.MkdirAll("config", 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := afero.WriteFile(files, filepath.Join("config", "azureProfile.json"), []byte(fixtureProfile), 0o600); err != nil {
-		t.Fatal(err)
+	files := fstest.MapFS{
+		"azureProfile.json": &fstest.MapFile{Data: []byte(fixtureProfile)},
 	}
 	return cmd.Dependencies{
 		Runner: fake, FS: files, ConfigDir: "config",
@@ -70,7 +64,7 @@ func TestCommandSelection(t *testing.T) {
 			if len(fake.Calls) != 1 || !reflect.DeepEqual(fake.Calls[0].Args, []string{"account", "set", "--subscription", tc.want}) {
 				t.Fatalf("az calls = %+v", fake.Calls)
 			}
-			contents, err := afero.ReadFile(deps.FS, filepath.Join("config", "azureProfile.json"))
+			contents, err := fs.ReadFile(deps.FS, "azureProfile.json")
 			if err != nil || string(contents) != fixtureProfile {
 				t.Fatalf("profile changed: %q, %v", contents, err)
 			}
@@ -81,16 +75,35 @@ func TestCommandSelection(t *testing.T) {
 func TestCurrentSubscription(t *testing.T) {
 	fake := &testutil.FakeRunner{}
 	deps := commandDependencies(t, fake)
-	var output bytes.Buffer
-	log.InitLogger(&output)
-	t.Cleanup(func() { log.InitLogger(os.Stderr) })
+	var output, messages bytes.Buffer
 	root := cmd.NewRootCommand(deps)
+	root.SetOut(&output)
+	root.SetErr(&messages)
 	root.SetArgs([]string{"-c"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.Calls) != 0 || !strings.Contains(output.String(), "Active subscription: /Production (tenant/prod-id)") {
+	if len(fake.Calls) != 0 || output.String() != "Active subscription: /Production (tenant/prod-id)\n" {
 		t.Fatalf("current output = %q, az calls = %+v", output.String(), fake.Calls)
+	}
+	if strings.Contains(messages.String(), "Active subscription:") || strings.Contains(messages.String(), "level=") {
+		t.Fatalf("messages = %q", messages.String())
+	}
+}
+
+func TestSwitchMessagesUseStderr(t *testing.T) {
+	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
+	root := cmd.NewRootCommand(commandDependencies(t, fake))
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"-s", argumentDelimiter, productionName})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	want := "Warning: Deprecated flag --short/-s used. Size is now automatically determined.\nSetting active subscription to /Production (tenant/prod-id)\n"
+	if stdout.Len() != 0 || !strings.HasSuffix(stderr.String(), want) || strings.Contains(stderr.String(), "level=") || strings.Contains(stderr.String(), "\x1b") {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 
@@ -127,7 +140,7 @@ func TestLoginPassesThroughArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][]string{
-		{"rest", "--method", "get", "--url", "/tenants?api-version=2020-01-01", "--output", "json"},
+		{"rest", "--method", "get", "--url", "/tenants?api-version=2020-01-01", "--output", jsonFormat},
 		{loginCommand, deviceCodeFlag, "--tenant", "tenant"},
 	}
 	var got [][]string
@@ -143,7 +156,6 @@ func TestCommandReturnsUpdateError(t *testing.T) {
 	failure := errors.New("offline")
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 	deps := commandDependencies(t, fake)
-	deps.FS = afero.NewReadOnlyFs(deps.FS)
 	deps.CheckUpdates = func(string, string) error { return failure }
 	root := cmd.NewRootCommand(deps)
 	root.SetArgs([]string{argumentDelimiter, productionName})
@@ -151,6 +163,29 @@ func TestCommandReturnsUpdateError(t *testing.T) {
 	var handlerErr *cmd.HandlerError
 	if !errors.Is(err, failure) || !errors.As(err, &handlerErr) || len(fake.Calls) != 1 {
 		t.Fatalf("post-switch update error = %v, calls = %+v", err, fake.Calls)
+	}
+}
+
+func TestPickerInterruptReachesExitBoundary(t *testing.T) {
+	for _, args := range [][]string{nil, {argumentDelimiter, "PRD"}} {
+		fake := &testutil.FakeRunner{}
+		deps := commandDependencies(t, fake)
+		deps.Select = func([]profile.Subscription) (int, error) { return -1, ui.ErrInterrupted }
+		// Duplicate names must also propagate interruption from the narrowed picker.
+		if args != nil {
+			deps.FS = fstest.MapFS{
+				"azureProfile.json": &fstest.MapFile{Data: []byte(`{"subscriptions":[{"name":"Production"},{"name":"Production"}]}`)},
+			}
+		}
+		deps.CheckUpdates = func(string, string) error {
+			t.Fatal("interruption must not trigger the update check")
+			return nil
+		}
+		root := cmd.NewRootCommand(deps)
+		root.SetArgs(args)
+		if err := root.Execute(); !errors.Is(err, ui.ErrInterrupted) || len(fake.Calls) != 0 {
+			t.Fatalf("interrupt = %v, az calls=%+v", err, fake.Calls)
+		}
 	}
 }
 

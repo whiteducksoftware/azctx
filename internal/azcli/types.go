@@ -1,17 +1,18 @@
 package azcli
 
 import (
-	"github.com/spf13/afero"
+	"io/fs"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 )
 
 type CLI struct {
-	fs        afero.Fs
-	runner    Runner
-	configDir string
-	profile   profile.Profile
-	tenants   []Tenant
+	fs         fs.FS
+	diskConfig bool
+	runner     Runner
+	configDir  string
+	profile    profile.Profile
+	tenants    []Tenant
 
 	FilterTenantLevelAccount bool
 }

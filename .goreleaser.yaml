@@ -16,8 +16,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X go.szostok.io/version.version={{.Version}}
-      - -X go.szostok.io/version.buildDate={{.Date}}
+      - -X github.com/whiteducksoftware/azctx/internal/version.Version={{.Version}}
+      - -X github.com/whiteducksoftware/azctx/internal/version.BuildDate={{.Date}}
+      - -X github.com/whiteducksoftware/azctx/internal/version.Commit={{.FullCommit}}
 
 changelog:
   sort: asc
