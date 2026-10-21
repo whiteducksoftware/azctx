@@ -19,3 +19,11 @@ their changes to the table below.
   (`amd64`, `arm64`, `arm`), macOS (`amd64`, `arm64`), or Windows (`amd64`, `arm64`).
 - Follow the [installation instructions](../README.md#installation) for your
   package manager or binary installation.
+
+## Contributor and maintenance changes
+
+| Area | Change | Who is affected | What to do |
+| --- | --- | --- | --- |
+| CI checks | Every pull request (including stacked branches) and push to `main` runs race-enabled tests on Linux, macOS and Windows, Go/workflow linting, module verification and vulnerability scanning; Linux and Windows snapshot builds never publish. | Contributors. | Run `make check` before opening a PR and resolve failing checks. Only `GO-2026-5970` and `GO-2026-6629` in `golang.org/x/text` v0.21.0 temporarily warn until the layer 05 dependency upgrade (#86); other reachable findings and scanner errors fail. |
+| Dependency updates | Go module and GitHub Actions minor/patch updates are grouped per ecosystem, with a three-day cooldown and at most one open version-update PR per ecosystem. | Maintainers. | Review the weekly grouped updates; major updates remain separate and share the same version-update PR limit. Security updates are not delayed by the cooldown or this limit. |
+| Security posture | OpenSSF Scorecard runs on pushes to `main` and weekly, uploading SARIF to GitHub code scanning without publishing externally. Existing CodeQL remains enabled. | Maintainers. | Review the security results. Release-workflow credential-persistence and broad-permission findings are explicitly deferred to layer 17 (#98); all other workflow audits remain active. |
