@@ -17,6 +17,7 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/storage"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 	"github.com/whiteducksoftware/azctx/internal/update"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
 const (
@@ -237,6 +238,61 @@ func TestCorruptCacheRefreshesAndPrivatePermissions(t *testing.T) {
 		t.Fatalf("staging file leaked: %v, %v", entries, err)
 	}
 	assertPrivateCachePermissions(t, dir, name)
+}
+
+func TestUpdateCacheDiagnosticsVerboseOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		corrupt, verbose bool
+	}{
+		{name: "corrupt quiet", corrupt: true},
+		{name: "corrupt verbose", corrupt: true, verbose: true},
+		{name: "missing quiet"},
+		{name: "missing verbose", verbose: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/latest") {
+					requests.Add(1)
+					http.Redirect(w, r, "/owner/repo/releases/tag/"+latestTag, http.StatusFound)
+				}
+			}))
+			defer server.Close()
+			var output, diagnostics bytes.Buffer
+			checker := testChecker(t, server, &output)
+			checker.Current = stableVersion
+			log.InitLogger(&diagnostics)
+			log.SetVerbose(tc.verbose)
+			t.Cleanup(func() {
+				log.InitLogger(os.Stderr)
+				log.SetVerbose(false)
+			})
+			if tc.corrupt {
+				name := filepath.Join(checker.CacheDir, "azctx", "update.json")
+				if err := storage.Write(name, checker.AzureDir, []byte(`{"corrupt":`)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := checker.Check("owner", "repo"); err != nil {
+				t.Fatalf("cache recovery: %v", err)
+			}
+			if tc.corrupt && tc.verbose {
+				if !strings.Contains(diagnostics.String(), "decode update cache: unexpected end of JSON input") {
+					t.Fatalf("missing malformed-cache cause: %q", diagnostics.String())
+				}
+			} else if diagnostics.Len() != 0 {
+				t.Fatalf("unexpected cache diagnostic: %q", diagnostics.String())
+			}
+			diagnostics.Reset()
+			if err := checker.Check("owner", "repo"); err != nil {
+				t.Fatalf("recovered-cache check: %v", err)
+			}
+			if requests.Load() != 1 || output.Len() != 0 || diagnostics.Len() != 0 {
+				t.Fatalf("requests=%d output=%q diagnostics=%q", requests.Load(), output.String(), diagnostics.String())
+			}
+		})
+	}
 }
 
 func assertPrivateCachePermissions(t *testing.T, dir, name string) {
