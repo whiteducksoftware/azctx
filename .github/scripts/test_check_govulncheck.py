@@ -51,6 +51,19 @@ class VulnerabilityPolicyTests(unittest.TestCase):
         status, _ = self.run_check(CONFIG, finding(module="stdlib"))
         self.assertEqual(status, 1)
 
+    def test_reachable_go_2026_6809_is_never_waived(self):
+        for version in ("v1.26.9", "v1.27.2"):
+            with self.subTest(version=version):
+                message = finding("GO-2026-6809", "stdlib", version)
+                message["finding"]["trace"][0].update(
+                    package="crypto/x509", receiver="Certificate", function="Verify"
+                )
+                status, output = self.run_check(CONFIG, message)
+                self.assertEqual(status, 1)
+                self.assertIn(f"GO-2026-6809 in stdlib@{version}", output)
+                self.assertIn("::error", output)
+                self.assertNotIn("::warning", output)
+
     def test_other_version_blocks(self):
         status, _ = self.run_check(CONFIG, finding(version="v0.22.0"))
         self.assertEqual(status, 1)
