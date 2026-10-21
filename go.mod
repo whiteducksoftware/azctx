@@ -1,6 +1,8 @@
 module github.com/whiteducksoftware/azctx
 
-go 1.23.6
+go 1.26
+
+toolchain go1.27.2
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0

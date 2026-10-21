@@ -63,6 +63,9 @@ Flags:
 
 ## Installation
 
+See the [2026.11 upgrade guide](docs/upgrade.md) for breaking changes and minimum
+operating system requirements.
+
 ### Homebrew (macOS)
 
 * Install `azctx` with `brew install whiteducksoftware/tap/azctx`
@@ -88,6 +91,20 @@ Check the [Microsoft Documentation](https://docs.microsoft.com/en-us/cli/azure/a
 
 ```bash
 export AZURE_CONFIG_DIR=$HOME/.azure
+```
+
+-----
+
+## Development
+
+Use the Go version and toolchain declared in `go.mod`, and install
+`golangci-lint` v2.15.0 on your PATH.
+
+```bash
+make build # Build the azctx binary
+make lint  # Run golangci-lint
+make test  # Run tests with the race detector and coverage
+make check # Run lint and tests
 ```
 
 -----
