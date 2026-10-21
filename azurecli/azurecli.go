@@ -7,10 +7,10 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
+	"github.com/spf13/afero"
+
 	"github.com/whiteducksoftware/azctx/log"
 	"github.com/whiteducksoftware/azctx/utils"
-
-	"github.com/spf13/afero"
 )
 
 // New creates a new CLI instance
