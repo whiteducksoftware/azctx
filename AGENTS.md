@@ -9,6 +9,22 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 - `make check` runs lint and tests; pass it before a PR leaves draft.
 - `make test` runs race-enabled tests with coverage; `make build` builds azctx.
 - `make golden` updates the picker screens at 60, 100 and 160 columns; review the diff.
+- `make agent-check` runs offline Python 3.10+ hook tests; `make test` and
+  `make check` include them and Go command/documentation/manifest acceptance.
+- [AI agent guidance](docs/ai-agents.md) is a draft. Keep `skills/azctx/SKILL.md`
+  byte-identical to the plugin copy in `plugins/azctx/skills/azctx/`.
+
+## Running Azure tools as an agent
+
+- Read `azctx -c -o json` and `azctx list -o json` before Azure actions.
+- Run `azctx guard -o json` before changes against reviewed project expectations;
+  stop on exit 4 and every other nonzero status. Do not auto-switch to fix it.
+- Pass explicit `--subscription` to Azure CLI resource commands; use
+  `azctx exec <query> -- <cmd>` for Terraform, azd and SDK tools. Exec's isolated
+  child variables do not override Azure CLI's subscription default.
+- Leave login, broker changes and protected-switch `--yes` to the user.
+- Guard, skills and protected subscriptions reduce mistakes, not authorization
+  risk: Azure RBAC, PIM and Conditional Access remain the security boundary.
 
 ## Package map
 
