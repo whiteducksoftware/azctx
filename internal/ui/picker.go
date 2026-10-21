@@ -68,6 +68,9 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.WindowSizeMsg:
 		picker.resize(message.Width, message.Height)
+	case list.FilterMatchesMsg:
+		// Bubbles' asynchronous results carry no query identity and can arrive stale.
+		return picker, nil
 	case tea.KeyMsg:
 		switch message.String() {
 		case "ctrl+c":
@@ -87,7 +90,13 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	var command tea.Cmd
+	filter := picker.list.FilterValue()
 	picker.list, command = picker.list.Update(message)
+	if picker.list.FilterValue() != filter && picker.list.FilterState() != list.Unfiltered {
+		state := picker.list.FilterState()
+		picker.list.SetFilterText(picker.list.FilterValue())
+		picker.list.SetFilterState(state)
+	}
 	return picker, command
 }
 
@@ -106,7 +115,12 @@ func Select(subscriptions []profile.Subscription) (int, error) {
 	if err != nil {
 		width, height = 100, 20
 	}
-	result, err := tea.NewProgram(NewPicker(subscriptions, width, height), tea.WithInput(os.Stdin), tea.WithOutput(os.Stderr)).Run()
+	var input io.Reader = os.Stdin
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		// Hide the fd so Windows readers consume redirected stdin, not CONIN$.
+		input = struct{ io.Reader }{os.Stdin}
+	}
+	result, err := tea.NewProgram(NewPicker(subscriptions, width, height), tea.WithInput(input), tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return -1, ErrInterrupted
 	}
