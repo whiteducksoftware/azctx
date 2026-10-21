@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -17,6 +18,65 @@ import (
 )
 
 const productionID = "11111111-1111-1111-1111-111111111111"
+
+type replayFilterMsg list.FilterMatchesMsg
+
+type filterReplayModel struct {
+	ui.Picker
+	delayed chan list.FilterMatchesMsg
+	applied chan struct{}
+}
+
+func (model filterReplayModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	notify := false
+	switch message := message.(type) {
+	case list.FilterMatchesMsg:
+		if len(message) > 1 {
+			model.delayed <- message
+			return model, nil
+		}
+		notify = true
+	}
+	if replay, ok := message.(replayFilterMsg); ok {
+		message = list.FilterMatchesMsg(replay)
+	}
+	updated, command := model.Picker.Update(message)
+	model.Picker = updated.(ui.Picker)
+	if notify {
+		model.applied <- struct{}{}
+	}
+	return model, command
+}
+
+func TestPickerIgnoresOutOfOrderFilterResults(t *testing.T) {
+	delayed := make(chan list.FilterMatchesMsg, 1)
+	applied := make(chan struct{}, 1)
+	model := teatest.NewTestModel(t, filterReplayModel{
+		Picker: ui.NewPicker(pickerSubscriptions(), 100, 15), delayed: delayed, applied: applied,
+	}, teatest.WithInitialTermSize(100, 15))
+	model.Type("/P")
+	var stale list.FilterMatchesMsg
+	select {
+	case stale = <-delayed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the first filter did not finish")
+	}
+	model.Type("RD")
+	select {
+	case <-applied:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the specific filter did not finish")
+	}
+	// Complete the old "P" request after the specific "PRD" request.
+	model.Send(replayFilterMsg(stale))
+	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(filterReplayModel).Picker
+	index, err := final.Selection()
+	if err != nil || index != 1 || strings.Contains(final.View(), "Development Engineering Platform") {
+		t.Fatalf("stale filter replaced the current query: selection=%d, %v; view=%s", index, err, final.View())
+	}
+}
 
 func TestPickerNarrowLongName(t *testing.T) {
 	subscriptions := []profile.Subscription{{Id: productionID, Name: strings.Repeat("界", 40), TenantName: "Acme"}}

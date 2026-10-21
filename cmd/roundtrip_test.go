@@ -36,6 +36,11 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 	t.Setenv("FAKEAZ_FIXTURES", fixtures)
 	t.Setenv("FAKEAZ_RECORD", record)
 	t.Setenv("FAKEAZ_ENV_KEYS", "AZURE_CONFIG_DIR")
+	// An interruption regression must fail locally, never contact GitHub.
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:0")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:0")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 	for _, tc := range []struct {
 		args  []string
 		code  int
