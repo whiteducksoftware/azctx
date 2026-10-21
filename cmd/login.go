@@ -30,6 +30,7 @@ func loginRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, erro
 	if err != nil {
 		return err
 	}
+	cli.Terminal = &azcli.Terminal{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()}
 
 	// Refresh the subscriptions and tenants
 	err = refreshData(cmd, cli, args)

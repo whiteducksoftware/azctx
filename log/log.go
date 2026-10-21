@@ -13,14 +13,24 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var logger = newLogger(os.Stderr)
+var (
+	logger = newLogger(os.Stderr)
+	level  slog.LevelVar
+)
 
 func newLogger(output io.Writer) *slog.Logger {
 	return slog.New(&handler{output: output, renderer: lipgloss.NewRenderer(output), mutex: &sync.Mutex{}})
 }
 
 func InitLogger(output io.Writer) { logger = newLogger(output) }
+func SetVerbose(verbose bool) {
+	level.Set(slog.LevelInfo)
+	if verbose {
+		level.Set(slog.LevelDebug)
+	}
+}
 
+func Debug(format string, values ...any) { logger.Debug(fmt.Sprintf(format, values...)) }
 func Info(format string, values ...any)  { logger.Info(fmt.Sprintf(format, values...)) }
 func Warn(format string, values ...any)  { logger.Warn(fmt.Sprintf(format, values...)) }
 func Error(format string, values ...any) { logger.Error(fmt.Sprintf(format, values...)) }
@@ -33,7 +43,9 @@ type handler struct {
 	group    string
 }
 
-func (*handler) Enabled(context.Context, slog.Level) bool { return true }
+func (*handler) Enabled(_ context.Context, recordLevel slog.Level) bool {
+	return recordLevel >= level.Level()
+}
 
 func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	var line strings.Builder

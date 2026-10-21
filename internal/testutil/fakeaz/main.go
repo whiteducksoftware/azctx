@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,6 +17,8 @@ type fixture struct {
 	Stdout   string   `json:"stdout"`
 	Stderr   string   `json:"stderr"`
 	ExitCode int      `json:"exitCode"`
+	// WaitForInput makes prompt visibility observable before the process exits.
+	WaitForInput bool `json:"waitForInput"`
 }
 
 type call struct {
@@ -75,5 +78,10 @@ func replay() (int, error) {
 	next := fixtures[index]
 	fmt.Fprint(os.Stdout, next.Stdout)
 	fmt.Fprint(os.Stderr, next.Stderr)
+	if next.WaitForInput {
+		if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+			return 0, err
+		}
+	}
 	return next.ExitCode, nil
 }
