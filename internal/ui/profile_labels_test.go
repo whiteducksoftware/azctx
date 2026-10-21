@@ -29,6 +29,22 @@ func TestPickerMarksProfileStateAndIdentity(t *testing.T) {
 	}
 }
 
+func TestTenantPickerAlwaysShowsGUIDForDuplicateNames(t *testing.T) {
+	rows := []profile.Subscription{
+		{Id: productionID, Name: pickerCustomer, TenantName: "same.invalid"},
+		{Id: attentionID, Name: pickerCustomer, TenantName: "same.invalid"},
+	}
+	picker := ui.NewTenantPicker(rows, 60, 15)
+	for _, row := range rows {
+		if !strings.Contains(picker.View(), row.Id) {
+			t.Fatalf("duplicate tenant label hides GUID:\n%s", picker.View())
+		}
+	}
+	if !strings.Contains(picker.View(), "Tenant ID") || strings.Contains(picker.View(), "Subscription ID") {
+		t.Fatalf("tenant header=%s", picker.View())
+	}
+}
+
 func TestPickerTenantDomainFallbackAndFiltering(t *testing.T) {
 	const tenantName = "Example"
 	const tenantID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
