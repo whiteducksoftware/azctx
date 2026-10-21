@@ -2,17 +2,17 @@ package cmd
 
 import (
 	"errors"
-	"os"
-
-	"github.com/whiteducksoftware/azctx/azurecli"
-	"github.com/whiteducksoftware/azctx/log"
-	"github.com/whiteducksoftware/azctx/prompt"
-	"github.com/whiteducksoftware/azctx/updates"
-	"github.com/whiteducksoftware/azctx/utils"
+	"fmt"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"go.szostok.io/version/extension"
+
+	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/profile"
+	"github.com/whiteducksoftware/azctx/internal/ui"
+	"github.com/whiteducksoftware/azctx/internal/update"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
 const (
@@ -23,18 +23,53 @@ const (
 	repo = "azctx"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "azctx [- / -- NAME]",
-	Short: "azctx is a CLI tool for managing azure cli subscriptions",
-	Long: `azctx is a CLI tool for managing azure cli subscriptions.
+// Dependencies supplies the external boundaries used by the command tree.
+// Nil fields use production implementations, resolved lazily where needed.
+type Dependencies struct {
+	Runner       azcli.Runner
+	FS           afero.Fs
+	ConfigDir    string
+	Select       func([]profile.Subscription) (int, error)
+	CheckUpdates func(string, string) error
+}
+
+// NewRootCommand constructs an independent command tree, including flag state.
+func NewRootCommand(deps Dependencies) *cobra.Command {
+	if deps.FS == nil {
+		deps.FS = afero.NewOsFs()
+	}
+	if deps.Select == nil {
+		deps.Select = ui.Select
+	}
+	if deps.CheckUpdates == nil {
+		deps.CheckUpdates = update.Check
+	}
+	filterTenantLevel := true
+	newCLI := func() (azcli.CLI, error) {
+		if deps.Runner == nil {
+			runner, err := azcli.NewRunner()
+			if err != nil {
+				return azcli.CLI{}, errors.New("azure cli is not installed. please install it and try again. See here: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli")
+			}
+			deps.Runner = runner
+		}
+		cli, err := azcli.New(deps.FS, deps.Runner, deps.ConfigDir)
+		cli.FilterTenantLevelAccount = filterTenantLevel
+		return cli, err
+	}
+	rootCmd := &cobra.Command{
+		Use:   "azctx [- / -- NAME]",
+		Short: "azctx is a CLI tool for managing azure cli subscriptions",
+		Long: `azctx is a CLI tool for managing azure cli subscriptions.
 	It is a helper for the azure cli and provides a simple interface for managing subscriptions.
 	Pass a subscription name to select a specific subscription.
 	Pass - to switch to the previous subscription.`,
-	SilenceUsage: true,
-	Run:          utils.WrapCobraCommandHandler(rootRunE),
-}
-
-func init() {
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
+			return rootRunE(cmd, args, newCLI, deps)
+		}),
+	}
 	rootCmd.AddCommand(
 		extension.NewVersionCobraCmd(
 			extension.WithUpgradeNotice(owner, repo),
@@ -44,18 +79,23 @@ func init() {
 	rootCmd.Flags().BoolP("current", "c", false, "Display the current active subscription")
 	rootCmd.Flags().BoolP("short", "s", false, `Use a short prompt.
 	Deprecated. Size is now automatically determined.`)
-	rootCmd.Flags().BoolVar(&azurecli.FilterTenantLevelAccount, "filter-tenant-level", true, "Filter tenant level accounts with no available subscriptions")
+	rootCmd.Flags().BoolVar(&filterTenantLevel, "filter-tenant-level", true, "Filter tenant level accounts with no available subscriptions")
+	rootCmd.AddCommand(newLoginCommand(newCLI))
+	return rootCmd
 }
 
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+func Execute() error {
+	command, err := NewRootCommand(Dependencies{}).ExecuteC()
+	// Cobra adds this hint only when command discovery fails, before invocation.
+	if err != nil && command != nil && command.CalledAs() == "" {
+		return fmt.Errorf("%w\nRun '%s --help' for usage.", err, command.CommandPath())
 	}
+	return err
 }
 
-func rootRunE(cmd *cobra.Command, args []string) error {
+func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error), deps Dependencies) error {
 	// Initialize the CLI
-	cli, err := azurecli.New(afero.NewOsFs())
+	cli, err := newCLI()
 	if err != nil {
 		return err
 	}
@@ -75,27 +115,26 @@ func rootRunE(cmd *cobra.Command, args []string) error {
 			return errors.New("not implemented")
 		}
 
-		err = selectSubscriptionByName(cli, args[0])
+		err = selectSubscriptionByName(cli, args[0], deps.Select)
 		if err != nil {
 			return err
 		}
 	default:
-		err = interactivelySelectSubscription(cli)
+		err = interactivelySelectSubscription(cli, deps.Select)
 		if err != nil {
 			return err
 		}
 	}
 
-	return updates.Check(owner, repo)
+	return deps.CheckUpdates(owner, repo)
 }
 
-func interactivelySelectSubscription(cli azurecli.CLI) error {
+func interactivelySelectSubscription(cli azcli.CLI, selectItem func([]profile.Subscription) (int, error)) error {
 	// Ask the user to select a subscription
 	subscriptions := cli.Subscriptions()
-	prompt := prompt.BuildPrompt(subscriptions)
 
 	// Run the prompt
-	idx, _, err := prompt.Run()
+	idx, err := selectItem(subscriptions)
 	if err != nil {
 		return nil
 	}
@@ -111,19 +150,18 @@ func interactivelySelectSubscription(cli azurecli.CLI) error {
 	return nil
 }
 
-func selectSubscriptionByName(cli azurecli.CLI, name string) error {
+func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]profile.Subscription) (int, error)) error {
 	subscriptions, err := cli.TryFindSubscription(name)
 	if err != nil {
 		return err
 	}
 
 	// Check if we found more than one subscription
-	var subscription azurecli.Subscription
+	var subscription profile.Subscription
 	switch length := len(subscriptions); {
 	case length > 1:
 		// Run the prompt
-		prompt := prompt.BuildPrompt(subscriptions)
-		idx, _, err := prompt.Run()
+		idx, err := selectItem(subscriptions)
 		if err != nil {
 			return nil
 		}
@@ -145,7 +183,7 @@ func selectSubscriptionByName(cli azurecli.CLI, name string) error {
 	return nil
 }
 
-func getActiveSubscription(cli azurecli.CLI) error {
+func getActiveSubscription(cli azcli.CLI) error {
 	// Try to get the active subscription
 	subscription, err := cli.ActiveSubscription()
 	if err != nil {
