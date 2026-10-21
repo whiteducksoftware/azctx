@@ -70,8 +70,9 @@ See the [2026.11 upgrade guide](docs/upgrade.md) for breaking changes and minimu
 operating system requirements. Azure CLI **2.61.0 or newer** is required.
 
 Tenant names and domains come directly from Azure CLI's subscription profile,
-even after plain `az login`; run it once to refresh an older profile if azctx
-shows tenant IDs instead. azctx reads Azure's profile/settings but never writes
+even after plain `az login`. Labels prefer display names, then default domains,
+then tenant IDs. A displayed record missing both modern fields gets a one-line
+hint to refresh with `az login`. azctx reads Azure's profile/settings but never writes
 anything in `AZURE_CONFIG_DIR`. Wrapped login disables Azure CLI's subscription
 selector only for that child process, without changing your environment.
 
@@ -101,8 +102,10 @@ account types, delegation and attention states. See the
 
 ### Missing Azure configuration or `azureProfile.json`
 
-Run `az login` to create the subscription profile. An unset `AZURE_CONFIG_DIR`
-silently uses the default `~/.azure` directory.
+Run `az login` or `azctx login` to let Azure CLI create the subscription profile,
+even when the Azure directory does not exist yet. azctx itself never creates
+Azure configuration files. An unset `AZURE_CONFIG_DIR` silently uses the default
+`~/.azure` directory.
 
 Check the [Microsoft Documentation](https://docs.microsoft.com/en-us/cli/azure/azure-cli-configuration?view=azure-cli-latest#cli-configuration-file) for the correct path to the azure cli config directory and export it as AZURE_CONFIG_DIR environment variable.  
 
@@ -144,7 +147,7 @@ environment entries. The production runner resolves `az` once with `LookPath`.
 Login uses this attached mode: device codes on stdout or stderr are visible
 immediately, and stderr remains captured for authentication diagnostics.
 
-Search matches subscription names, tenant names and subscription IDs without
+Search matches subscription names, profile tenant names/domains/IDs and subscription IDs without
 collapsing duplicate names. `azctx -` swaps the current and previous subscription
 across processes. The previous ID is stored privately in
 `os.UserConfigDir()/azctx/state.json`, never in the Azure configuration directory.

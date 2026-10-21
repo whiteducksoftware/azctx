@@ -4,6 +4,7 @@ package azcli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,9 +18,19 @@ import (
 // Files is read-only and rooted at configDir. With nil files, an empty configDir
 // selects AZURE_CONFIG_DIR or the user's .azure directory.
 func New(files fs.FS, runner Runner, configDir string) (CLI, error) {
+	return newCLI(files, runner, configDir, false)
+}
+
+// NewForLogin allows a missing Azure directory/profile so Azure CLI can create
+// them. Existing files are still read-only, and malformed settings remain errors.
+func NewForLogin(files fs.FS, runner Runner, configDir string) (CLI, error) {
+	return newCLI(files, runner, configDir, true)
+}
+
+func newCLI(files fs.FS, runner Runner, configDir string, allowMissing bool) (CLI, error) {
 	if files == nil {
 		var err error
-		configDir, err = resolveConfigDir(configDir)
+		configDir, err = resolveConfigDir(configDir, allowMissing)
 		if err != nil {
 			return CLI{}, err
 		}
@@ -30,7 +41,7 @@ func New(files fs.FS, runner Runner, configDir string) (CLI, error) {
 	}
 
 	// Refresh the CLI instance
-	err := cli.Reload()
+	err := cli.reload(allowMissing)
 	if err != nil {
 		return CLI{}, err
 	}
@@ -40,6 +51,10 @@ func New(files fs.FS, runner Runner, configDir string) (CLI, error) {
 
 // Reload refreshes the CLI instance by fetching the latest data from the azure cli config files
 func (cli *CLI) Reload() error {
+	return cli.reload(false)
+}
+
+func (cli *CLI) reload(allowMissing bool) error {
 	settings, err := ReadSettings(cli.fs, nil)
 	if err != nil {
 		return err
@@ -49,7 +64,10 @@ func (cli *CLI) Reload() error {
 		return err
 	}
 	if err := cli.readProfile(); err != nil {
-		return err
+		if !allowMissing || !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		cli.profile = profile.Profile{}
 	}
 	cli.activeCloud = settings.ActiveCloud()
 	remembered, _ := iniValue(clouds, cli.activeCloud, "subscription")
@@ -144,10 +162,5 @@ func (cli CLI) TenantCount() int { return len(cli.tenantSubscriptions()) }
 
 // LegacyProfile reports missing tenant metadata in the visible profile.
 func (cli CLI) LegacyProfile() bool {
-	for _, sub := range cli.Subscriptions() {
-		if sub.Tenant != "" && (sub.TenantName == "" || sub.TenantDomain == "") {
-			return true
-		}
-	}
-	return false
+	return profile.HasLegacyTenantMetadata(cli.Subscriptions())
 }

@@ -25,16 +25,18 @@ invalid arguments/flags fail with exit 1 before an Azure subprocess is started.
 `--short`, `-s` and `--filter-tenant-level` are removed, not deprecated.
 
 Unqualified queries retain case-insensitive fuzzy matching of subscription names,
-profile tenant names and subscription IDs; an exact subscription ID wins.
+profile tenant display names, default domains, tenant IDs and subscription IDs;
+an exact subscription ID wins.
 A qualified query splits at the first `/`: the tenant selector must exactly
-match a tenant ID or available profile tenant name, ignoring case. Within that
+match a tenant ID, profile display name or default domain, ignoring case. Within that
 tenant, the subscription selector matches only subscription names/IDs, using
-the same fuzzy/exact-ID rules. Both selectors must be nonempty. Tenant domains
-are not selectors in this layer. Use an ID for names containing literal `/`.
+the same fuzzy/exact-ID rules. Both selectors must be nonempty.
+Use an ID for names containing literal `/`.
 Duplicate names retain their subscription and tenant identities.
 
 The active cloud comes from `[cloud] name` in Azure CLI's `config`, overridden
-by `AZURE_CLOUD_NAME`, with `AzureCloud` as the absent-setting default. No list of
+by `AZURE_CLOUD_NAME`, with `AzureCloud` as the absent/blank-setting default.
+Whitespace-only values are blank. No list of
 built-in clouds is assumed. Only exact `environmentName` matches are selectable;
 missing environment fields are not inferred. `list --all` is inspection only:
 foreign-cloud entries are included but never marked current.
@@ -50,9 +52,19 @@ Tables and picker labels distinguish user, service principal, system-assigned
 identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
 with their state marked. Nonempty different home/token tenant IDs mark delegated
 Azure Lighthouse access; `managedByTenants` alone does not imply delegation.
-Older profiles use tenant IDs for missing display names. Human lists, current
-text and pickers emit one line suggesting `az login` to refresh missing tenant
-metadata; JSON, plain-field current formats and quiet direct switches do not.
+Tenant labels prefer the display name, then default domain, then tenant ID.
+Human lists, current text and pickers emit one line suggesting `az login` only
+when a displayed record lacks both usable modern tenant fields. Current output
+checks only the current record; narrowed pickers check only their candidates.
+`list --all` checks every displayed entry, including hidden/foreign records.
+JSON, plain-field current formats and quiet direct switches do not emit the hint.
+
+Login initialization permits a missing Azure directory/profile; only Azure CLI
+creates them. Existing malformed settings remain errors. After a supported,
+attached login succeeds, azctx strictly reloads Azure's profile. Ordinary
+list/current/switch initialization still requires a readable profile and reports
+missing files with an `az login` hint. `azcli.CheckVersion` itself requires no
+profile or Azure configuration directory.
 
 ## Input, color and streams
 
@@ -125,7 +137,7 @@ uses **exactly the same subscription object**:
 | `id` | string | Subscription ID |
 | `name` | string | Subscription name |
 | `tenantId` | string | Tenant ID |
-| `tenantName` | string | Profile `tenantDisplayName`, falling back to `tenantId` |
+| `tenantName` | string | Profile `tenantDisplayName`, falling back to `tenantDefaultDomain`, then `tenantId` |
 | `tenantDomain` | string | Profile `tenantDefaultDomain`, empty when absent |
 | `state` | string | Profile subscription state |
 | `isDefault` | boolean | Resolved current selection in the active cloud only |

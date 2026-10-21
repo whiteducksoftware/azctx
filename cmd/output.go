@@ -94,7 +94,8 @@ func newListCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 }
 
 func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
-	subscriptions := SubscriptionOutputs(cli.Subscriptions())
+	visible := cli.Subscriptions()
+	subscriptions := SubscriptionOutputs(visible)
 	if outputFormat(command) == formatJSON {
 		return json.NewEncoder(command.OutOrStdout()).Encode(struct {
 			SchemaVersion int                  `json:"schemaVersion"`
@@ -118,12 +119,12 @@ func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
 	if err := output.Flush(); err != nil {
 		return err
 	}
-	legacyProfileHint(command, cli)
+	legacyProfileHint(command, visible)
 	return nil
 }
 
-func legacyProfileHint(command *cobra.Command, cli azcli.CLI) {
-	if format := outputFormat(command); (format == "" || format == formatText || format == formatTable) && cli.LegacyProfile() {
+func legacyProfileHint(command *cobra.Command, subscriptions []profile.Subscription) {
+	if format := outputFormat(command); (format == "" || format == formatText || format == formatTable) && profile.HasLegacyTenantMetadata(subscriptions) {
 		_, _ = fmt.Fprintln(command.ErrOrStderr(), "Tenant metadata is missing; run `az login` once with Azure CLI 2.61.0 or newer.")
 	}
 }

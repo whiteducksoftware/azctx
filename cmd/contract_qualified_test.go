@@ -19,6 +19,11 @@ func TestContractQualifiedQueryNarrowsTenantAndSubscription(t *testing.T) {
 		{"Acme/Production", 0, productionID},
 		{otherTenant + "/Production", 0, developmentID},
 		{"acme/PRD", 0, productionID},
+		{"ACME.INVALID", 0, productionID},
+		{"acme.invalid/PRD", 0, productionID},
+		{"other.invalid/Production", 0, developmentID},
+		{tenantID, 0, productionID},
+		{"acme.invalid/" + developmentID, 2, ""},
 		{"Acme/Acme", 2, ""},
 		{"Acme/" + developmentID, 2, ""},
 		{"missing/Production", 2, ""},
@@ -30,8 +35,8 @@ func TestContractQualifiedQueryNarrowsTenantAndSubscription(t *testing.T) {
 			deps := commandDependencies(t, fake)
 			deps.FS = fstest.MapFS{
 				profileFile: &fstest.MapFile{Data: []byte(`{"subscriptions":[
-					{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","tenantDisplayName":"Acme","environmentName":"AzureCloud","isDefault":true},
-					{"id":"` + developmentID + `","name":"Production","tenantId":"` + otherTenant + `","tenantDisplayName":"Other","environmentName":"AzureCloud"}]}`)},
+					{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","tenantDisplayName":"Acme","tenantDefaultDomain":"acme.invalid","environmentName":"AzureCloud","isDefault":true},
+					{"id":"` + developmentID + `","name":"Production","tenantId":"` + otherTenant + `","tenantDisplayName":"Other","tenantDefaultDomain":"other.invalid","environmentName":"AzureCloud"}]}`)},
 			}
 			var stdout, stderr bytes.Buffer
 			code := cmd.Run([]string{tc.query}, deps, bytes.NewReader(nil), &stdout, &stderr)

@@ -30,7 +30,8 @@ type subscriptionItem struct {
 }
 
 func (item subscriptionItem) FilterValue() string {
-	return strings.Join([]string{item.subscription.Name, tenantLabel(item.subscription), item.subscription.Id}, "\x00")
+	sub := item.subscription
+	return strings.Join([]string{sub.Name, sub.TenantName, sub.TenantDomain, sub.Tenant, sub.Id}, "\x00")
 }
 
 // Picker is the subscription list's Bubble Tea model.

@@ -13,11 +13,22 @@ import (
 )
 
 func TestAzureCLICloudDefaultRecordsCorrectPrevious(t *testing.T) {
-	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
+	for _, cloud := range []string{azureCloudName, "", " \t "} {
+		t.Run(cloud, func(t *testing.T) {
+			testCloudDefaultRecordsPrevious(t, cloud)
+		})
+	}
+}
+
+func testCloudDefaultRecordsPrevious(t *testing.T, cloud string) {
+	t.Helper()
+	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}, {}}}
 	deps := commandDependencies(t, fake)
+	t.Setenv("AZURE_CLOUD_NAME", cloud)
 	data := strings.Replace(modernProfile, `"isDefault":true`, `"isDefault":false`, 1)
 	deps.FS = fstest.MapFS{
 		profileFile:      &fstest.MapFile{Data: []byte(data)},
+		azureConfigFile:  &fstest.MapFile{Data: []byte("[cloud]\nname= \t")},
 		cloudsConfigFile: &fstest.MapFile{Data: []byte("[AzureCloud]\nsubscription=" + productionID)},
 	}
 	for _, args := range [][]string{{currentFlag, outputFlag, idFormat}, {listCommand, outputFlag, jsonFormat}, {developmentID}} {
@@ -47,5 +58,15 @@ func TestAzureCLICloudDefaultRecordsCorrectPrevious(t *testing.T) {
 	}
 	if len(fake.Calls) != 1 || fake.Calls[0].Args[3] != developmentID {
 		t.Fatalf("cloud switch=%+v", fake.Calls)
+	}
+	assertCloudPreviousSwitch(t, deps, fake)
+}
+
+func assertCloudPreviousSwitch(t *testing.T, deps cmd.Dependencies, fake *testutil.FakeRunner) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	if code := cmd.Run([]string{"-"}, deps, bytes.NewReader(nil), &stdout, &stderr); code != 0 ||
+		stdout.Len() != 0 || stderr.Len() != 0 || len(fake.Calls) != 2 || fake.Calls[1].Args[3] != productionID {
+		t.Fatalf("previous switch: code=%d stdout=%q stderr=%q calls=%+v", code, stdout.String(), stderr.String(), fake.Calls)
 	}
 }

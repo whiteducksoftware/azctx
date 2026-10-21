@@ -15,7 +15,10 @@ const MinimumVersion = "2.61.0"
 func CheckVersion(ctx context.Context, runner Runner) (string, error) {
 	result, err := runner.Run(ctx, []string{"version", "-o", "json"}, Options{})
 	if err != nil {
-		return "", fmt.Errorf("check Azure CLI version: %s: %w", strings.TrimSpace(result.Stderr), err)
+		if stderr := strings.TrimSpace(result.Stderr); stderr != "" {
+			return "", fmt.Errorf("check Azure CLI version: %s: %w", stderr, err)
+		}
+		return "", fmt.Errorf("check Azure CLI version: %w", err)
 	}
 	var data struct {
 		Version string `json:"azure-cli"` //nolint:tagliatelle // Azure CLI's version output uses this hyphenated key.

@@ -37,12 +37,25 @@ type Subscription struct {
 	ManagedBy    []ManagedTenant `json:"managedByTenants"`
 }
 
-// TenantLabel uses the token tenant's ID when older profiles omit its name.
+// TenantLabel prefers the display name, then default domain, then token tenant ID.
 func (s Subscription) TenantLabel() string {
-	if s.TenantName != "" {
+	if strings.TrimSpace(s.TenantName) != "" {
 		return s.TenantName
 	}
+	if strings.TrimSpace(s.TenantDomain) != "" {
+		return s.TenantDomain
+	}
 	return s.Tenant
+}
+
+// HasLegacyTenantMetadata checks only the records being presented to the user.
+func HasLegacyTenantMetadata(subscriptions []Subscription) bool {
+	for _, sub := range subscriptions {
+		if sub.Tenant != "" && strings.TrimSpace(sub.TenantName) == "" && strings.TrimSpace(sub.TenantDomain) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // Delegated identifies a subscription accessed through a different token tenant.
