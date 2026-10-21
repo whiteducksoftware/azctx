@@ -23,7 +23,7 @@ func newLoginCommand(newCLI func() (azcli.CLI, error), deps Dependencies) *cobra
 			return loginRunE(cmd, args, newCLI, deps)
 		}),
 	}
-	loginCmd.Flags().Bool("force-mfa", false, "force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)")
+	loginCmd.Flags().Bool("all-tenants", false, "Discover Azure tenants and sign in to each separately")
 	loginCmd.Flags().Bool("use-device-code", false, "Sign in using a device code")
 	loginCmd.Flags().String("tenant", "", "Tenant GUID or fuzzy profile tenant name/domain")
 	return loginCmd
@@ -40,43 +40,29 @@ func loginRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, erro
 	}
 	cli.Terminal = &azcli.Terminal{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()}
 	cli.Context, cli.Platform = cmd.Context(), deps.Platform
+	allTenants, _ := cmd.Flags().GetBool("all-tenants")
+	if allTenants && !azcli.UsesWorkloadIdentity(args) && (cmd.Flags().Changed("tenant") || hasPassthroughTenant(args)) {
+		return errors.New("--all-tenants cannot be combined with a tenant selector")
+	}
 	if cmd.Flags().Changed("tenant") {
-		for _, arg := range args {
-			if arg == "--tenant" || strings.HasPrefix(arg, "--tenant=") || strings.HasPrefix(arg, "-t") {
-				return errors.New("--tenant cannot be combined with a passthrough tenant flag")
-			}
+		if hasPassthroughTenant(args) {
+			return errors.New("--tenant cannot be combined with a passthrough tenant flag")
 		}
 		tenant, _ := cmd.Flags().GetString("tenant")
 		id, err := cli.ResolveTenant(tenant)
 		if err != nil {
 			return err
 		}
-		if cmd.Flags().Changed("force-mfa") {
-			return errors.New("--tenant cannot be combined with --force-mfa")
-		}
 		args = append([]string{"--tenant", id}, args...)
 	}
 	if deviceCode, _ := cmd.Flags().GetBool("use-device-code"); deviceCode {
 		args = append([]string{"--use-device-code"}, args...)
 	}
-	if headless(deps.Platform) && !azcli.UsesDeviceCode(args) {
+	if headless(deps.Platform) && !azcli.UsesDeviceCode(args) && !azcli.UsesWorkloadIdentity(args) {
 		log.Info("Headless session detected; consider 'azctx login --use-device-code' if browser or account-picker sign-in is unavailable.")
 	}
 
-	// Refresh the subscriptions and tenants
-	err = refreshData(cmd, cli, args)
-	if err != nil {
-		return err
-	}
-
-	// az login will update the subscriptions file, so we need to reload the data
-	err = cli.Reload()
-	if err != nil {
-		return err
-	}
-
-	log.Info("Successfully fetched %d tenants and %d subscriptions.", cli.TenantCount(), len(cli.Subscriptions()))
-	return nil
+	return loginWithMFA(cmd, cli, args, deps)
 }
 
 func headless(platform string) bool {
@@ -88,18 +74,11 @@ func headless(platform string) bool {
 	return platform == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
 }
 
-func refreshData(cmd *cobra.Command, cli azcli.CLI, extraArgs []string) error {
-	var err error
-	switch {
-	case cmd.Flags().Changed("force-mfa") && cli.TenantCount() > 0:
-		err = cli.IterativeTenantLogin(extraArgs)
-	default:
-		err = cli.InteractiveLogin(extraArgs)
+func hasPassthroughTenant(args []string) bool {
+	for _, arg := range args {
+		if arg == "--tenant" || strings.HasPrefix(arg, "--tenant=") || strings.HasPrefix(arg, "-t") {
+			return true
+		}
 	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return false
 }

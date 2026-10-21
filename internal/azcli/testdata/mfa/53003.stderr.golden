@@ -1,0 +1,1 @@
+WARNING: Authentication failed against tenant dddddddd-dddd-dddd-dddd-dddddddddddd 'Blocked Directory': AADSTS53003: Access has been blocked by Conditional Access policies. The access policy does not allow token issuance. Trace ID: 00000000-0000-0000-0000-000000000000 Correlation ID: 00000000-0000-0000-0000-000000000000 Timestamp: 2026-10-01 00:00:00Z
