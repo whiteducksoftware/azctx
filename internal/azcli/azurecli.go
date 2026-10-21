@@ -77,56 +77,29 @@ func (cli *CLI) reload(allowMissing bool) error {
 
 // InteractiveLogin executes the az login command
 func (cli CLI) InteractiveLogin(extraArgs []string) error {
+	_, err := cli.Login(extraArgs)
+	return err
+}
+
+// Login checks Azure CLI capabilities, then runs one attached sign-in and
+// returns its per-tenant warnings independently of the process exit status.
+func (cli CLI) Login(extraArgs []string) (LoginResult, error) {
 	if err := validateLoginIDs(extraArgs); err != nil {
-		return err
+		return LoginResult{}, err
 	}
 	prompt, err := cli.loginPrompt(extraArgs)
 	if err != nil {
-		return err
+		return LoginResult{}, err
 	}
 	log.Info("Logging in... %s", prompt)
 
 	// Execute the az login command
-	err = cli.execLogin(extraArgs)
+	result, err := cli.execLogin(extraArgs)
 	if err != nil {
-		return fmt.Errorf("failed to login: %w", err)
+		return result, fmt.Errorf("failed to login: %w", err)
 	}
 
-	return nil
-}
-
-// IterativeTenantLogin explicitly executes the az login command for each tenant
-func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
-	if err := validateLoginIDs(extraArgs); err != nil {
-		return err
-	}
-	for _, tenant := range cli.tenantSubscriptions() {
-		if err := profile.ValidateGUID(tenant.Tenant); err != nil {
-			return fmt.Errorf("invalid tenant: %w", err)
-		}
-	}
-	prompt, err := cli.loginPrompt(extraArgs)
-	if err != nil {
-		return err
-	}
-	// Loop through the tenants and execute the az login command
-	for _, tenant := range cli.tenantSubscriptions() {
-		log.Info("Logging into tenant %s... %s", tenant.TenantLabel(), prompt)
-
-		// Execute the az login command
-		args := []string{"--tenant", tenant.Tenant}
-		args = append(args, extraArgs...)
-		err := cli.execLogin(args)
-		if err != nil {
-			if cli.context().Err() != nil {
-				return cli.context().Err()
-			}
-			log.Error("Failed to login to tenant %s. Azure CLI returned the following error: %s", tenant.TenantLabel(), err.Error())
-			continue
-		}
-	}
-
-	return nil
+	return result, nil
 }
 
 func (cli CLI) loginPrompt(args []string) (string, error) {

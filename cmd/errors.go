@@ -12,7 +12,7 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
-// Exit statuses are the public process boundary, including reserved later-layer statuses.
+// Exit statuses are the public process boundary, including the reserved guard status.
 const (
 	ExitSuccess        = 0
 	ExitFailure        = 1
@@ -33,7 +33,7 @@ const (
 )
 
 // ExitError carries a classified failure without exiting inside a command.
-// Status 3 and 4 are reserved for the sign-in and guard layers.
+// Status 3 classifies sign-in failures; status 4 is reserved for the guard layer.
 type ExitError struct {
 	Code       string
 	Message    string
