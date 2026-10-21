@@ -30,11 +30,8 @@ func TestContractQualifiedQueryNarrowsTenantAndSubscription(t *testing.T) {
 			deps := commandDependencies(t, fake)
 			deps.FS = fstest.MapFS{
 				profileFile: &fstest.MapFile{Data: []byte(`{"subscriptions":[
-					{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","isDefault":true},
-					{"id":"` + developmentID + `","name":"Production","tenantId":"` + otherTenant + `"}]}`)},
-				tenantCacheFile: &fstest.MapFile{Data: []byte(`[
-					{"tenantId":"` + tenantID + `","displayName":"Acme"},
-					{"tenantId":"` + otherTenant + `","displayName":"Other"}]`)},
+					{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","tenantDisplayName":"Acme","environmentName":"AzureCloud","isDefault":true},
+					{"id":"` + developmentID + `","name":"Production","tenantId":"` + otherTenant + `","tenantDisplayName":"Other","environmentName":"AzureCloud"}]}`)},
 			}
 			var stdout, stderr bytes.Buffer
 			code := cmd.Run([]string{tc.query}, deps, bytes.NewReader(nil), &stdout, &stderr)

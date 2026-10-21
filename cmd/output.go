@@ -22,7 +22,6 @@ const (
 )
 
 // SubscriptionOutput is shared by list, current and ambiguity candidates.
-// Tenant metadata is deliberately empty until the profile-data layer supplies it.
 type SubscriptionOutput struct {
 	ID           string       `json:"id"`
 	Name         string       `json:"name"`
@@ -44,6 +43,8 @@ func SubscriptionOutputs(subscriptions []profile.Subscription) []SubscriptionOut
 			ID: subscription.Id, Name: subscription.Name, TenantID: subscription.Tenant,
 			State: subscription.State, IsDefault: subscription.IsDefault,
 			User: subscription.User, Environment: subscription.Environment,
+			TenantName: subscription.TenantLabel(), TenantDomain: subscription.TenantDomain,
+			Delegated: subscription.Delegated(),
 		})
 	}
 	return result
@@ -84,11 +85,11 @@ func newListCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 				return err
 			}
 			all, _ := command.Flags().GetBool("all")
-			cli.FilterTenantLevelAccount = !all
+			cli.IncludeAll = all
 			return listSubscriptions(command, cli)
 		}),
 	}
-	command.Flags().Bool("all", false, "Include tenant-level accounts")
+	command.Flags().Bool("all", false, "Include disabled, tenant-level and other-cloud accounts")
 	return command
 }
 
@@ -101,15 +102,30 @@ func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
 		}{SchemaVersion, subscriptions})
 	}
 	output := tabwriter.NewWriter(command.OutOrStdout(), 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(output, "NAME\tID\tTENANT\tSTATE\tDEFAULT"); err != nil {
+	if _, err := fmt.Fprintln(output, "NAME\tID\tTENANT\tSTATE\tDEFAULT\tACCOUNT\tCLOUD\tACCESS"); err != nil {
 		return err
 	}
 	for _, subscription := range subscriptions {
-		if _, err := fmt.Fprintf(output, "%s\t%s\t%s\t%s\t%t\n", subscription.Name, subscription.ID, subscription.TenantID, subscription.State, subscription.IsDefault); err != nil {
+		model := profile.Subscription{User: subscription.User}
+		access := ""
+		if subscription.Delegated {
+			access = "delegated"
+		}
+		if _, err := fmt.Fprintf(output, "%s\t%s\t%s\t%s\t%t\t%s\t%s\t%s\n", subscription.Name, subscription.ID, subscription.TenantName, subscription.State, subscription.IsDefault, model.AccountType(), subscription.Environment, access); err != nil {
 			return err
 		}
 	}
-	return output.Flush()
+	if err := output.Flush(); err != nil {
+		return err
+	}
+	legacyProfileHint(command, cli)
+	return nil
+}
+
+func legacyProfileHint(command *cobra.Command, cli azcli.CLI) {
+	if format := outputFormat(command); (format == "" || format == formatText || format == formatTable) && cli.LegacyProfile() {
+		_, _ = fmt.Fprintln(command.ErrOrStderr(), "Tenant metadata is missing; run `az login` once with Azure CLI 2.61.0 or newer.")
+	}
 }
 
 func writeCurrent(command *cobra.Command, subscription profile.Subscription) error {
@@ -129,7 +145,7 @@ func writeCurrent(command *cobra.Command, subscription profile.Subscription) err
 		_, err := fmt.Fprintln(command.OutOrStdout(), subscription.Tenant)
 		return err
 	default:
-		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)\n", subscription.TenantName, subscription.Name, subscription.Tenant, subscription.Id)
+		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)\n", subscription.TenantLabel(), subscription.DisplayName(), subscription.Tenant, subscription.Id)
 		return err
 	}
 }

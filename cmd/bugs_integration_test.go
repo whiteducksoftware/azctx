@@ -32,6 +32,7 @@ func fakeBinary(t *testing.T, fixtures string) (string, string, string) {
 	writeFixture(t, fixturePath, fixtures)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("AZURE_CONFIG_DIR", config)
+	t.Setenv("AZURE_CLOUD_NAME", azureCloudName)
 	t.Setenv("FAKEAZ_FIXTURES", fixturePath)
 	t.Setenv("FAKEAZ_RECORD", record)
 	t.Setenv("FAKEAZ_ENV_KEYS", "")
@@ -104,7 +105,7 @@ func cleanProcess(t *testing.T, command *exec.Cmd, cancel context.CancelFunc) {
 
 func TestBinaryDeviceCodeVisibleBeforeAZExits(t *testing.T) {
 	binary, _, _ := fakeBinary(t, `[
-		{"args":["rest","--method","get","--url","/tenants?api-version=2020-01-01","--output","json"],"stdout":"{\"value\":[]}"},
+		{"args":["version","-o","json"],"stdout":"{\"azure-cli\":\"2.61.0\"}"},
 		{"args":["login","--use-device-code"],"stdout":"stdout device code ABCD\n","stderr":"stderr device code EFGH\n","waitForInput":true}
 	]`)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
