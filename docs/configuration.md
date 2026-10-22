@@ -142,8 +142,12 @@ equal priority. Non-interactive ambiguities still exit 2 with full candidates.
 Azure switches roll both back. `azctx -` continues to swap previous/current.
 Each switch holds the retained private `state.lock` from reading `state.json`
 through `az account set`, any rollback and the history append, so concurrent
-switches run one after another instead of losing previous/recent IDs. A waiting
-switch can be canceled with Ctrl+C (exit 130) without changes. A rollback
+switches run one after another instead of losing previous/recent IDs. Once it
+holds the lock, a switch re-reads the local `azureProfile.json` (no Azure call),
+so the previous ID in `state.json` and `history.json` is the subscription a
+preceding switch actually left active; if that re-read fails, the switch stops
+with no changes. A waiting switch can be canceled with Ctrl+C (exit 130) without
+changes. A rollback
 restores the exact previous bytes only while the file still holds its own
 update; if another writer changed it meanwhile, the newer state is kept and the
 original switch error is reported together with that restore error. Read-only

@@ -332,6 +332,8 @@ func stdinIsTerminal(command *cobra.Command, deps Dependencies) bool {
 // az account set, any rollback and best-effort history, so concurrent switches
 // neither lose previous/MRU updates nor roll back over a newer commit. Waiting
 // for the lock honors cancellation; history.lock is only ever taken inside it.
+// The local Azure profile is re-read under the lock (no az call), so previous in
+// state and history is the context a preceding switch actually left active.
 func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies, subscription profile.Subscription) error {
 	if err := profile.ValidateGUID(subscription.Id); err != nil {
 		return err
@@ -341,6 +343,9 @@ func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies
 		return err
 	}
 	defer tx.Release()
+	if err := cli.Reload(); err != nil {
+		return fmt.Errorf("reload Azure profile before switching (no changes made): %w", err)
+	}
 	current, err := cli.ActiveSubscription()
 	previous := ""
 	if err == nil && !strings.EqualFold(current.Id, subscription.Id) {

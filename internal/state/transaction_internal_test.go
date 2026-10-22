@@ -54,16 +54,19 @@ func lockedState(t *testing.T) (azure, path string, before []byte) {
 
 func TestTransactionsSerializeAroundAzureSwitch(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		failed     bool
-		wantRecent []string
+		name         string
+		failed       bool
+		wantPrevious string
+		wantRecent   []string
 	}{
-		{"first switch fails", true, []string{lockedSecond, lockedOther}},
-		{"first switch commits", false, []string{lockedSecond, lockedFirst, lockedOther}},
+		{"first switch fails", true, lockedPrevious, []string{lockedSecond, lockedOther}},
+		{"first switch commits", false, lockedFirst, []string{lockedSecond, lockedFirst, lockedOther}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			azure, path, before := lockedState(t)
 			busy, proceed := waitingLock(t)
+			// active models the Azure default; only a committed switch changes it.
+			active := lockedPrevious
 			first, err := Begin(t.Context(), azure)
 			if err != nil {
 				t.Fatal(err)
@@ -80,7 +83,8 @@ func TestTransactionsSerializeAroundAzureSwitch(t *testing.T) {
 					return
 				}
 				defer second.Release()
-				_, err = second.RecordSelection(lockedFirst, lockedSecond)
+				// Like cmd, derive previous from the active context under the lock.
+				_, err = second.RecordSelection(active, lockedSecond)
 				done <- err
 			}()
 			// The second switch is now provably waiting while the first runs az.
@@ -97,6 +101,8 @@ func TestTransactionsSerializeAroundAzureSwitch(t *testing.T) {
 				if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
 					t.Fatalf("failed switch did not restore exact bytes: %q, %v", after, err)
 				}
+			} else {
+				active = lockedFirst
 			}
 			first.Release()
 			close(proceed)
@@ -104,7 +110,7 @@ func TestTransactionsSerializeAroundAzureSwitch(t *testing.T) {
 				t.Fatal(err)
 			}
 			value, err := read(azure)
-			if err != nil || value.PreviousSubscriptionID != lockedFirst || !slices.Equal(value.RecentSubscriptionIDs, tc.wantRecent) {
+			if err != nil || value.PreviousSubscriptionID != tc.wantPrevious || !slices.Equal(value.RecentSubscriptionIDs, tc.wantRecent) {
 				t.Fatalf("serialized state = %+v, %v", value, err)
 			}
 		})
