@@ -363,12 +363,13 @@ class Runner:
         except BaseException as error:  # Restore after every failure, including bugs.
             failure = error
         reason = self.restore(leg)
+        if failure is None and self.pending is not None:
+            failure = Interrupted(self.pending)
         if reason is not None:
             raise RestoreFailed(self.restore_report(leg, reason, failure))
         if failure is not None:
             failure.restored = True
             raise failure
-        self.checkpoint()
 
     def restore(self, leg):
         self.restoring = True
@@ -396,16 +397,14 @@ class Runner:
         return "\n".join(lines)
 
     def run(self):
-        for leg in self.legs[1:]:
-            self.preflight(leg)
-        for leg in self.legs:
-            self.verify_signed_in_tenant(leg)
-        for leg in self.legs:
-            try:
-                self.exercise(leg)
-            except (CheckFailed, Interrupted) as error:
-                error.leg = leg.name
-                raise
+        for step, legs in ((self.preflight, self.legs[1:]), (self.verify_signed_in_tenant, self.legs),
+                           (self.exercise, self.legs)):
+            for leg in legs:
+                try:
+                    step(leg)
+                except (CheckFailed, Interrupted) as error:
+                    error.leg = leg.name
+                    raise
         lines = []
         for leg in self.legs:
             label = leg.name if leg.config is None else f"{leg.name} ({leg.cli_version}, {leg.image})"

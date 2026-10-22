@@ -118,6 +118,10 @@ FAKE_DOCKER = textwrap.dedent("""\
     with Path(os.environ["FAKE_DOCKER_RECORD"]).open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({"argv": argv, "azure": os.environ.get("AZURE_CONFIG_DIR", "")}) + "\\n")
     images = json.loads(os.environ.get("FAKE_IMAGES", "{}"))
+    if argv[-1:] == [os.environ.get("FAKE_DOCKER_SIGNAL_REF")]:
+        import signal, time
+        os.kill(os.getppid(), signal.SIGINT)
+        time.sleep(0.3)
     if argv[:4] == ["image", "inspect", "--format", "{{json .RepoDigests}}"] and len(argv) == 5:
         if argv[4] not in images:
             sys.stderr.write("Error: No such image\\n")
@@ -544,6 +548,48 @@ class LiveScriptTest(unittest.TestCase):
         self.assertEqual(result.returncode, 3, result.stderr)
         self.assertIn("RESTORE FAILED", result.stderr)
         self.assertIn("INTERRUPTED", result.stderr)
+
+    def test_signal_during_restore_after_passing_checks_reports_restored_interrupt(self):
+        result = self.run_script(self.arguments(), {RESTORE: {"signal": int(signal.SIGINT)}})
+        self.assertEqual(result.returncode, 130, result.stderr)
+        self.assertIn("INTERRUPTED by SIGINT", result.stderr)
+        self.assertIn("initial context restored", result.stderr)
+        self.assertNotIn("unchanged", result.stderr)
+        self.assertEqual(self.argv(), host_sequence())
+        self.assertEqual(self.current(), FIRST)
+        self.assertNotIn("PASS", result.stdout)
+
+    def test_signal_during_failed_restore_names_the_interrupt_as_original_failure(self):
+        result = self.run_script(self.arguments(), {RESTORE: {"signal": int(signal.SIGINT), "code": 1}})
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("RESTORE FAILED", result.stderr)
+        self.assertIn("original failure: INTERRUPTED by SIGINT", result.stderr)
+        self.assertNotIn("none; all checks had passed", result.stderr)
+        self.assertNotIn("context restored", result.stderr)
+
+    def test_tenant_check_failure_names_the_failing_container_leg(self):
+        not_signed_in = {"code": 3, "stderr": '{"code":"not_logged_in","exit_code":3}\n'}
+        result = self.run_script(self.arguments(containers=True), {2: not_signed_in})
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("FAILED: container Azure CLI latest: `azctx -c -o json`", result.stderr)
+        self.assertIn("not_logged_in", result.stderr)
+        self.assertIn("unchanged", result.stderr)
+        self.assertEqual(self.argv(), [CURRENT] * 3)
+        self.assertFalse(self.host_az.exists())
+
+    def test_interrupt_during_tenant_check_names_the_container_leg(self):
+        result = self.run_script(self.arguments(containers=True), {1: {"signal": int(signal.SIGINT)}})
+        self.assertEqual(result.returncode, 130, result.stderr)
+        self.assertIn("INTERRUPTED by SIGINT: container Azure CLI 2.61.0: Azure CLI context unchanged", result.stderr)
+        self.assertEqual(self.argv(), [CURRENT] * 2)
+        self.assertFalse(self.host_az.exists())
+
+    def test_interrupt_during_container_preflight_names_the_leg(self):
+        result = self.run_script(self.arguments(containers=True), FAKE_DOCKER_SIGNAL_REF=LATEST_TAG)
+        self.assertEqual(result.returncode, 130, result.stderr)
+        self.assertIn("INTERRUPTED by SIGINT: container Azure CLI latest: Azure CLI context unchanged", result.stderr)
+        self.assertEqual(self.argv(), [], "preflight precedes every azctx call")
+        self.assertEqual(list(self.temp.iterdir()), [])
 
     def test_make_target_builds_then_forwards_only_maintainer_arguments(self):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")

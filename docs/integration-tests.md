@@ -98,7 +98,8 @@ tenant during implementation.
    production tenant, with two enabled subscriptions you may switch between.
 2. An existing Azure CLI sign-in on your machine (`az login`) to that tenant,
    with the current subscription set to one of the two test subscriptions.
-   The script never signs in, signs out or reads, copies or mounts credentials.
+   The script never signs in or out, never reads or copies credentials and
+   never mounts the host `~/.azure` or host `AZURE_CONFIG_DIR`.
 
 ### Run it
 
@@ -162,7 +163,10 @@ latest must resolve locally to exactly one MCR digest reporting at least
 before the first switch. azctx runs on the host; `scripts/az-container.sh` is
 put first on its PATH as `az` and runs the CLI with `--pull=never`, all
 capabilities dropped, `no-new-privileges`, your UID:GID, only that config
-directory mounted and `HOME` set to it. The shim refuses the host `~/.azure`.
+directory mounted and `HOME` set to it. That dedicated directory holds the
+container CLI's own sign-in, so treat it like a credential cache. The shim
+refuses the host `~/.azure`, anything inside it and any directory containing
+it, such as your home directory or `/`.
 The 2.61.0 image is Alpine-based and retired upstream; it only runs the CLI.
 Sign out of or delete these dedicated directories when you are done.
 

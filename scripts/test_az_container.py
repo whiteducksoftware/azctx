@@ -173,5 +173,27 @@ class ContainerShimTests(unittest.TestCase):
                 self.assertFalse(self.record.exists())
 
 
+    def test_directories_containing_host_azure_config_are_never_mounted(self):
+        for config in (self.home, self.scratch, Path("/")):
+            with self.subTest(config=config):
+                self.env["AZURE_CONFIG_DIR"] = str(config)
+                result = self.run_shim("version")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("dedicated", result.stderr)
+                self.assertFalse(self.record.exists())
+
+    def test_home_is_refused_even_before_host_azure_config_exists(self):
+        shutil.rmtree(self.home / ".azure")
+        for config in (self.home, self.scratch):
+            with self.subTest(config=config):
+                self.env["AZURE_CONFIG_DIR"] = str(config)
+                result = self.run_shim("version")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("dedicated", result.stderr)
+                self.assertFalse(self.record.exists())
+        self.env["AZURE_CONFIG_DIR"] = str(self.scratch / "azure with spaces")
+        self.assertEqual(self.run_shim("version").returncode, 0, "a sibling dedicated directory stays usable")
+
+
 if __name__ == "__main__":
     unittest.main()
