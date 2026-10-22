@@ -18,6 +18,36 @@ const (
 	lineThree = "line 3"
 )
 
+func TestReservedPreviousAliasRejectedWithoutWrites(t *testing.T) {
+	dir := testutil.IsolateUserDirs(t)
+	t.Setenv("AZCTX_CONFIG_DIR", dir)
+	azure := filepath.Join(dir, "azure")
+	path := filepath.Join(dir, "config.yaml")
+	valid := []byte("version: 1\naliases:\n  prod: " + subID + "\n")
+	if err := os.WriteFile(path, valid, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(azure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Aliases["-"] = subID
+	err = config.Save(azure, cfg)
+	if err == nil || !strings.Contains(err.Error(), "line ") || !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("Save alias '-' diagnostic = %v; want line and reserved-name explanation", err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != string(valid) {
+		t.Fatalf("invalid Save changed existing configuration: %q, %v", data, err)
+	}
+	if err := os.WriteFile(path, []byte("version: 1\naliases:\n  '-': "+subID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Load(azure); err == nil || !strings.Contains(err.Error(), "line 3") ||
+		!strings.Contains(err.Error(), "config.yaml") || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("Load alias '-' diagnostic = %v; want path, line 3 and reserved-name explanation", err)
+	}
+}
+
 func TestLoadStrictVersionOne(t *testing.T) {
 	dir := testutil.IsolateUserDirs(t)
 	t.Setenv("AZCTX_CONFIG_DIR", dir)

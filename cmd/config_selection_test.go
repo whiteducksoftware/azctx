@@ -71,6 +71,37 @@ func configCommandOutput(t *testing.T, deps cmd.Dependencies, args ...string) st
 	return out.String()
 }
 
+func TestAliasSetRejectsPreviousShortcutWithoutWrites(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprint(existing), func(t *testing.T) {
+			deps := commandDependencies(t, &testutil.FakeRunner{})
+			deps.Runner, deps.FS = nil, nil
+			path := writeSelectionConfig(t, "aliases:\n  dev: "+developmentID+"\npicker: fzf\n")
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !existing {
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var out, messages bytes.Buffer
+			status := cmd.Run([]string{binaryAliasCommand, setCommand, "-", productionID}, deps, strings.NewReader(""), &out, &messages)
+			if status != 1 || out.Len() != 0 || !strings.Contains(messages.String(), "reserved") {
+				t.Fatalf("alias '-' status=%d stdout=%q stderr=%q", status, &out, &messages)
+			}
+			after, err := os.ReadFile(path)
+			if existing && (err != nil || !bytes.Equal(before, after)) {
+				t.Fatalf("rejected alias changed existing config: %q, %v", after, err)
+			}
+			if !existing && !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("rejected alias created configuration: %q, %v", after, err)
+			}
+		})
+	}
+}
+
 func TestProtectedSwitchConfirmation(t *testing.T) {
 	for _, tc := range []struct {
 		name, input string

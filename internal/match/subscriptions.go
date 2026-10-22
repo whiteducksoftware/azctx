@@ -70,7 +70,12 @@ func FindWithOptions(subscriptions []profile.Subscription, query string, options
 		}
 		return find(candidates, sub, query, options, false)
 	}
-	return find(candidates, query, query, options, true)
+	return FindUnqualified(candidates, query, options)
+}
+
+// FindUnqualified applies ID/exact/fuzzy tiers without parsing tenant/subscription.
+func FindUnqualified(subscriptions []profile.Subscription, query string, options Options) ([]profile.Subscription, error) {
+	return find(subscriptions, query, query, options, true)
 }
 
 func find(subscriptions []profile.Subscription, query, original string, options Options, includeTenants bool) ([]profile.Subscription, error) {

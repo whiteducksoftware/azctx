@@ -51,7 +51,7 @@ func (catalog Catalog) Tenants(query string, all bool) ([]Tenant, error) {
 		}
 		projections[i] = profile.Subscription{Id: tenant.ID, Name: name, Tenant: tenant.ID, TenantName: tenant.Name, TenantDomain: tenant.Domain}
 	}
-	found, err := match.Find(projections, query)
+	found, err := match.FindUnqualified(projections, query, match.Options{})
 	if err != nil {
 		return nil, err
 	}
