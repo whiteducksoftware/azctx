@@ -119,9 +119,28 @@ This is conservative heuristic filtering, not a guarantee that arbitrary
 unlabelled secrets can be recognized. Azure CLI stdout remains a data stream;
 explicit `exec` children keep all their own streams unchanged.
 
-Ctrl+C restores the built-in picker's cursor and exits 130. Login and `exec`
-forward interruption to the direct child, with a two-second kill fallback on
-context cancellation. Windows uses a child console process group and Ctrl+Break.
+Ctrl+C restores the built-in picker's cursor and exits 130. Switching, login,
+MFA retries and confirmation reads use a signal-aware command context; an
+interrupted Azure CLI returning 1 still produces azctx status 130, stops tenant
+retries and restores azctx's exact previous/MRU state on a failed switch.
+Declining a confirmation retains its existing status.
+
+On Unix, a private supervisor and the attached command share a separate process
+group. When stdin is a controlling terminal, that group temporarily owns the
+foreground terminal; stdin/stdout/stderr remain attached, not proxied through a
+replacement terminal. The supervisor observes terminal group signals without
+forwarding them again. Signals addressed to azctx's PID are forwarded to the
+child group once. The original foreground group is restored after the command.
+An interrupt gets a two-second grace period; a second interrupt kills promptly.
+Cancellation also cleans up the interrupted child group. Windows uses a child
+console process group and Ctrl+Break, with the same bounded direct-child kill.
+Protected, broker and tenant prompts can be canceled without closing stdin,
+including native Windows console reads.
+
+A successful child whose descendant holds an inherited stderr pipe is not a
+failed login: the two-second pipe-drain timeout is ignored only when the process
+succeeded. Real process failures, stderr flush failures and cancellation remain
+errors. Ordinary `exec` child exits and Unix signal statuses remain unchanged.
 This does not supervise an arbitrary descendant process tree.
 
 Tables and picker labels distinguish user, service principal, system-assigned
