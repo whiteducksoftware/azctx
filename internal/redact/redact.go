@@ -206,7 +206,7 @@ func (w *Writer) appendWord(output *strings.Builder, value byte) {
 		return
 	}
 	if bytes.IndexByte(w.word, '/') >= 0 && !encodedSecret(w.word) {
-		w.emitSegments(output)
+		w.emitFirstSegment(output)
 		return
 	}
 	output.WriteString(marker)
@@ -244,6 +244,22 @@ func (w *Writer) emitSegments(output *strings.Builder) {
 		buffered = buffered[index+1:]
 	}
 	w.word = append(w.word, buffered...)
+}
+
+// emitFirstSegment slides a non-secret 80-byte window past its oldest
+// '/'-segment only. Later complete segments may begin a key whose remainder
+// is shorter than maxWord, so they stay buffered until a window judges them.
+func (w *Writer) emitFirstSegment(output *strings.Builder) {
+	index := bytes.IndexByte(w.word, '/')
+	if index < 0 {
+		return
+	}
+	var rest [maxWord]byte
+	kept := copy(rest[:], w.word[index+1:])
+	w.word = w.word[:index]
+	w.finishSegment(output)
+	w.consumeDelimiter(output, '/')
+	w.word = append(w.word[:0], rest[:kept]...)
 }
 
 func (w *Writer) consumeDelimiter(output *strings.Builder, value byte) {
