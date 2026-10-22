@@ -120,7 +120,7 @@ assert(go_mod.match?(/^go 1\.26(?:\.0)?$/), 'the minimum Go version must remain 
 assert(go_mod.match?(/^toolchain go1\.27\.3$/),
        'the preferred toolchain must include the GO-2026-6809 fix in Go 1.27.3')
 lint_steps = ci.fetch('jobs').fetch('lint').fetch('steps')
-assert(lint_steps.any? { |step| step['run'] == 'ruby .github/scripts/test_ci_config.rb' },
+assert(lint_steps.any? { |step| step['run'] == 'make ci-check' },
        'CI must run these configuration regressions')
 audit = lint_steps.find { |step| step.fetch('uses', '').start_with?('zizmorcore/zizmor-action@') }
 assert(audit.fetch('with').fetch('inputs') == '.github/workflows' &&

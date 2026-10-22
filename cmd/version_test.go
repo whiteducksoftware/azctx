@@ -18,7 +18,7 @@ const (
 	outputFlag     = "-o"
 )
 
-func TestVersionLDFlags(t *testing.T) {
+func TestBinaryVersionLDFlags(t *testing.T) {
 	binary := filepath.Join(testutil.WorkDir(t), testutil.ExecutableName("azctx"))
 	flags := "-X github.com/whiteducksoftware/azctx/internal/version.Version=2026.11.0" +
 		" -X github.com/whiteducksoftware/azctx/internal/version.BuildDate=2026-10-21T16:00:00Z" +
