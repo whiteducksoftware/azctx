@@ -18,7 +18,9 @@ func (cli CLI) DiscoverTenants() ([]string, error) {
 	if err := cli.context().Err(); err != nil {
 		return nil, err
 	}
-	result, err := cli.runner.Run(cli.context(), []string{accountCommand, "tenant", "list", "-o", "json"}, Options{})
+	result, err := cli.runner.Run(cli.context(), []string{accountCommand, "tenant", "list", "-o", "json"}, Options{
+		Env: []string{"AZURE_EXTENSION_USE_DYNAMIC_INSTALL=no"},
+	})
 	if cli.context().Err() != nil {
 		return nil, cli.context().Err()
 	}

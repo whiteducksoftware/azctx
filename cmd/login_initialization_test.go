@@ -80,11 +80,11 @@ func testFirstLogin(t *testing.T, existingDir bool, version string) {
 	} else if code != 1 || !strings.Contains(stderr.String(), "2.61.0 or newer is required") {
 		t.Fatalf("version gate: code=%d stderr=%q", code, stderr.String())
 	}
-	assertFirstLoginCalls(t, fake, supported)
+	assertFirstLoginCalls(t, fake, supported, deps.ConfigDir)
 	assertFirstLoginFiles(t, deps.ConfigDir, existingDir, supported)
 }
 
-func assertFirstLoginCalls(t *testing.T, fake *testutil.FakeRunner, supported bool) {
+func assertFirstLoginCalls(t *testing.T, fake *testutil.FakeRunner, supported bool, configDir string) {
 	t.Helper()
 	wantCalls := [][]string{{versionCommand, outputFlag, jsonFormat}}
 	if supported {
@@ -97,10 +97,10 @@ func assertFirstLoginCalls(t *testing.T, fake *testutil.FakeRunner, supported bo
 	if !reflect.DeepEqual(gotCalls, wantCalls) {
 		t.Fatalf("az calls=%q want=%q", gotCalls, wantCalls)
 	}
-	if fake.Calls[0].Attached || len(fake.Calls[0].Env) != 0 {
+	if fake.Calls[0].Attached || !reflect.DeepEqual(fake.Calls[0].Env, []string{childConfigDirPrefix + configDir}) {
 		t.Fatalf("version inherited login options: %+v", fake.Calls[0])
 	}
-	if supported && (!fake.Calls[1].Attached || !reflect.DeepEqual(fake.Calls[1].Env, []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"})) {
+	if supported && (!fake.Calls[1].Attached || !reflect.DeepEqual(fake.Calls[1].Env, []string{childPickerOff, childConfigDirPrefix + configDir})) {
 		t.Fatalf("login lost terminal/environment: %+v", fake.Calls[1])
 	}
 }

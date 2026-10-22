@@ -95,7 +95,7 @@ func doctorReport(command *cobra.Command, resolve runnerFactory, deps Dependenci
 		AccountTypes: []DoctorAccountCount{}, Warnings: []string{},
 	}
 	var err error
-	report.AzureCLI, err = diagnoseAzure(command, resolve)
+	report.AzureCLI, err = diagnoseAzure(command, resolve, deps.ConfigDir)
 	if err != nil {
 		return report, err
 	}
@@ -140,7 +140,7 @@ func doctorReport(command *cobra.Command, resolve runnerFactory, deps Dependenci
 	return report, nil
 }
 
-func diagnoseAzure(command *cobra.Command, resolve runnerFactory) (DoctorAzureCLI, error) {
+func diagnoseAzure(command *cobra.Command, resolve runnerFactory, configDir string) (DoctorAzureCLI, error) {
 	info := DoctorAzureCLI{Status: diagnosticUnavailable}
 	runner, err := resolve()
 	if err != nil {
@@ -149,7 +149,7 @@ func diagnoseAzure(command *cobra.Command, resolve runnerFactory) (DoctorAzureCL
 	if resolved, ok := runner.(interface{ Path() string }); ok {
 		info.Path = redact.Text(resolved.Path())
 	}
-	azureVersion, err := azcli.CheckVersion(command.Context(), runner)
+	azureVersion, err := azcli.CheckVersion(command.Context(), azcli.WithConfigDir(runner, configDir))
 	if ExitCode(err) == ExitInterrupted {
 		return info, &ExitError{Code: CodeInterrupted, Message: "interrupted", Status: ExitInterrupted, Cause: err}
 	}

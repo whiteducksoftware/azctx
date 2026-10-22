@@ -69,6 +69,7 @@ func brokerRunE(command *cobra.Command, action string, resolve runnerFactory, de
 	if err != nil {
 		return err
 	}
+	runner = azcli.WithConfigDir(runner, deps.ConfigDir)
 	azureVersion, versionErr := azcli.CheckVersion(command.Context(), runner)
 	if ExitCode(versionErr) == ExitInterrupted {
 		return versionErr
