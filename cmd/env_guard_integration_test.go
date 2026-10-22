@@ -30,13 +30,12 @@ func TestBinaryEnvironmentExecGuardNeverMutateContext(t *testing.T) {
 	writeFixture(t, github, "EXISTING=value\n")
 	t.Setenv("GITHUB_ENV", github)
 	t.Setenv(childModeEnv, "echo")
-	// Read-only commands never wait for, create or take a switch's state lock.
-	release, acquired, err := storage.Lock(filepath.Join(private, "state.lock"), azure)
-	if err != nil || !acquired {
-		t.Fatalf("hold state lock: %t, %v", acquired, err)
-	}
-	defer release()
+	writeFixture(t, filepath.Join(private, "state.lock"), "retained-state-lock\n")
+	// Windows mandatory locks forbid reading state.lock until it is released.
 	azureBefore, privateBefore := snapshotContextFiles(t, azure), snapshotContextFiles(t, private)
+	// Read-only commands never wait for, create or take a switch's state lock.
+	release := holdContextStateLock(t, private, azure)
+	assertContextStateLockHeld(t, private)
 	guardGolden, err := os.ReadFile(filepath.Join("testdata", "contract", "guard-mismatch.golden"))
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +63,7 @@ func TestBinaryEnvironmentExecGuardNeverMutateContext(t *testing.T) {
 			t.Fatalf("%v: code=%d stdout=%q stderr=%q", tc.args, code, out, messages)
 		}
 		assertContextProcessResult(t, tc.args[0], tc.code, out, messages, string(guardGolden))
+		assertContextStateLockHeld(t, private)
 	}
 	// A malformed cloned file is an explicit guard error, never a login or switch.
 	writeFixture(t, filepath.Join(projectDir, projectFile), "version: 1\nlogin: true\n")
@@ -71,17 +71,56 @@ func TestBinaryEnvironmentExecGuardNeverMutateContext(t *testing.T) {
 	if code != 1 || !strings.Contains(messages, "unknown key") {
 		t.Fatalf("malformed guard: %d %q", code, messages)
 	}
+	assertContextStateLockHeld(t, private)
 	// Even an explicitly requested pipeline output cannot write Azure config.
 	t.Setenv("GITHUB_ENV", filepath.Join(azure, "config"))
 	code, out, messages := runContractBinary(t, binary, []string{envCommand, formatFlag, envGitHubFormat}, "")
 	if code != 1 || out != "" || !strings.Contains(messages, "Azure configuration") {
 		t.Fatalf("unsafe pipeline output: %d %q %q", code, out, messages)
 	}
+	assertContextStateLockHeld(t, private)
+	release()
 	if !reflect.DeepEqual(azureBefore, snapshotContextFiles(t, azure)) || !reflect.DeepEqual(privateBefore, snapshotContextFiles(t, private)) {
 		t.Fatal("read-only commands mutated Azure configuration or azctx config/state/history/cache")
 	}
 	if data, err := os.ReadFile(calls); !os.IsNotExist(err) {
 		t.Fatalf("read-only commands invoked Azure CLI: %q, %v", data, err)
+	}
+}
+
+func holdContextStateLock(t *testing.T, private, azure string) func() {
+	t.Helper()
+	path := filepath.Join(private, "state.lock")
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock, acquired, err := storage.Lock(path, azure)
+	if err != nil || !acquired {
+		t.Fatalf("hold state lock: %t, %v", acquired, err)
+	}
+	release := func() {
+		if unlock == nil {
+			return
+		}
+		unlock()
+		unlock = nil
+		after, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !os.SameFile(before, after) {
+			t.Fatal("read-only commands replaced state.lock")
+		}
+	}
+	t.Cleanup(release)
+	return release
+}
+
+func assertContextStateLockHeld(t *testing.T, private string) {
+	t.Helper()
+	if stateLockAvailable(t, private) {
+		t.Fatal("read-only commands released or replaced the held state lock")
 	}
 }
 
