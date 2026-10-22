@@ -112,17 +112,20 @@ func TestAzureCLILegacyHintAndStructuredErrors(t *testing.T) {
 			deps.FS = fstest.MapFS{profileFile: &fstest.MapFile{Data: []byte(data)}}
 			var stdout, stderr bytes.Buffer
 			code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr)
-			if len(args) == 1 {
+			switch {
+			case len(args) == 1:
 				if code != 0 || !strings.Contains(stdout.String(), tenantID) || strings.Count(stderr.String(), "\n") != 1 ||
 					!strings.Contains(stderr.String(), "az login") {
 					t.Fatalf("legacy fallback: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 				}
-			} else if args[0] == missingQuery {
+			case args[0] == missingQuery:
 				if code != 2 || stdout.Len() != 0 || !json.Valid(stderr.Bytes()) || strings.Contains(stderr.String(), "az login") {
 					t.Fatalf("structured error polluted: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 				}
-			} else if code != 0 || stderr.Len() != 0 || !json.Valid(stdout.Bytes()) {
-				t.Fatalf("structured data polluted: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			default:
+				if code != 0 || stderr.Len() != 0 || !json.Valid(stdout.Bytes()) {
+					t.Fatalf("structured data polluted: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+				}
 			}
 		})
 	}

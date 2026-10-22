@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/whiteducksoftware/azctx/internal/redact"
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
@@ -95,7 +96,7 @@ func WriteError(output io.Writer, format string, err error) int {
 		Message    string               `json:"message"`
 		ExitCode   int                  `json:"exit_code"` //nolint:tagliatelle // The public contract names this field exit_code.
 		Candidates []SubscriptionOutput `json:"candidates,omitempty"`
-	}{Code: CodeError, Message: err.Error(), ExitCode: status}
+	}{Code: CodeError, Message: redact.Text(err.Error()), ExitCode: status}
 	var classified *ExitError
 	if errors.As(err, &classified) {
 		payload.Code, payload.Candidates = classified.Code, classified.Candidates

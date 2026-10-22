@@ -84,8 +84,10 @@ func (cli CLI) InteractiveLogin(extraArgs []string) error {
 // Login checks Azure CLI capabilities, then runs one attached sign-in and
 // returns its per-tenant warnings independently of the process exit status.
 func (cli CLI) Login(extraArgs []string) (LoginResult, error) {
-	if err := validateLoginIDs(extraArgs); err != nil {
-		return LoginResult{}, err
+	if !cli.LoginPassthrough {
+		if err := validateLoginIDs(extraArgs); err != nil {
+			return LoginResult{}, err
+		}
 	}
 	prompt, err := cli.loginPrompt(extraArgs)
 	if err != nil {

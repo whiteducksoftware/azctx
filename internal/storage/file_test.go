@@ -82,3 +82,20 @@ func TestEnvironmentCannotRedirectStorageIntoAzure(t *testing.T) {
 		t.Fatalf("path resolution wrote data: %v, %v", entries, err)
 	}
 }
+
+func TestDirectWritesCannotCreateAnythingInAzureRoots(t *testing.T) {
+	base := testutil.WorkDir(t)
+	explicit := filepath.Join(base, "explicit-azure")
+	environment := filepath.Join(base, "environment-azure")
+	t.Setenv("AZURE_CONFIG_DIR", environment)
+	for _, root := range []string{explicit, environment} {
+		path := filepath.Join(root, "nested", "state.json")
+		if err := storage.Write(path, explicit, []byte("synthetic")); err == nil {
+			t.Fatalf("direct write accepted protected destination: %s", path)
+		}
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("rejected writes created Azure files or directories: %v, %v", entries, err)
+	}
+}

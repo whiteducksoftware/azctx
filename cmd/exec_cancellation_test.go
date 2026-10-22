@@ -34,7 +34,7 @@ func TestExecCancellationTerminatesUncooperativeChild(t *testing.T) {
 	command.SetErr(&messages)
 	done := make(chan error, 1)
 	go func() { done <- command.Execute() }()
-	waitExecChild(t, ctx, ready)
+	waitExecChild(ctx, t, ready)
 	cancel()
 	select {
 	case err := <-done:
@@ -46,7 +46,7 @@ func TestExecCancellationTerminatesUncooperativeChild(t *testing.T) {
 	}
 }
 
-func waitExecChild(t *testing.T, ctx context.Context, path string) int {
+func waitExecChild(ctx context.Context, t *testing.T, path string) int {
 	t.Helper()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()

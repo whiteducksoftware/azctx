@@ -92,6 +92,36 @@ for strict parsing and [CI/CD](ci-cd.md) for exact exports and pipeline timing.
 Azure CLI ignores the context variables: use `--subscription` even in `exec`.
 Explicitly requested child commands own their output and side effects.
 
+### Executable and diagnostic boundaries
+
+All azctx-derived subscription/tenant IDs are validated as GUIDs before
+becoming Azure CLI arguments, including on Windows where `az` may be `az.cmd`.
+Only the user's literal login arguments after an explicit `--` are exempt:
+Azure CLI, not azctx, interprets them (including tenant domains and other
+authentication inputs). Friendly flags, profile metadata, aliases and project
+expectations never acquire this exception. Avoid putting secrets in command
+lines; shell history and the requested process are outside this protection.
+
+Azure CLI and `exec` executables are resolved once with `exec.LookPath` and
+used by absolute path; Go's current-directory executable refusal remains in
+place. Doctor reports the same resolved Azure CLI path, without another lookup.
+
+Verbose messages, doctor string diagnostics, command-error messages and Azure
+CLI stderr replace recognized token-shaped values with `[REDACTED]`. This covers
+JWT-like strings, common provider-token prefixes, long opaque words and values
+after token/secret/password labels or `Bearer`. Stderr filtering is streaming,
+retains at most one short word and handles split tokens and quoted values.
+Whitespace/punctuation-terminated device-code prompts remain visible before
+input; a final short word is emitted at the next delimiter or process EOF.
+This is conservative heuristic filtering, not a guarantee that arbitrary
+unlabelled secrets can be recognized. Azure CLI stdout remains a data stream;
+explicit `exec` children keep all their own streams unchanged.
+
+Ctrl+C restores the built-in picker's cursor and exits 130. Login and `exec`
+forward interruption to the direct child, with a two-second kill fallback on
+context cancellation. Windows uses a child console process group and Ctrl+Break.
+This does not supervise an arbitrary descendant process tree.
+
 Tables and picker labels distinguish user, service principal, system-assigned
 identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
 with their state marked. Nonempty different home/token tenant IDs mark delegated

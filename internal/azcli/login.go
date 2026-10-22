@@ -68,8 +68,10 @@ func (cli CLI) execLogin(extraArgs []string) (LoginResult, error) {
 		return LoginResult{}, err
 	}
 	args := append([]string{"login"}, extraArgs...)
-	if err := validateLoginIDs(extraArgs); err != nil {
-		return LoginResult{}, err
+	if !cli.LoginPassthrough {
+		if err := validateLoginIDs(extraArgs); err != nil {
+			return LoginResult{}, err
+		}
 	}
 	terminal := cli.Terminal
 	if terminal == nil {

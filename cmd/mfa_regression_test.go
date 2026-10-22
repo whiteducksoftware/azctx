@@ -147,7 +147,11 @@ func TestMFASummaryStrictlyReloadsAfterLastLogin(t *testing.T) {
 		{},
 	}}
 	deps := commandDependencies(t, fake)
-	deps.Runner = refreshedLoginRunner{fake: fake, files: deps.FS.(fstest.MapFS)}
+	files, ok := deps.FS.(fstest.MapFS)
+	if !ok {
+		t.Fatal("fixture is not a MapFS")
+	}
+	deps.Runner = refreshedLoginRunner{fake: fake, files: files}
 	var stdout, stderr bytes.Buffer
 	if code := cmd.Run([]string{loginCommand}, deps, strings.NewReader("yes\n"), &stdout, &stderr); code != 0 ||
 		!strings.Contains(stderr.String(), "Successfully fetched 2 tenants and 2 subscriptions.") {
