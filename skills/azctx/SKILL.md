@@ -43,13 +43,35 @@ Keep the user's shared Azure CLI default unchanged. This skill targets CLI
   `az group list --subscription 11111111-1111-1111-1111-111111111111`.
   Never run `az account set`, a bare subscription query, `azctx -` or tenant
   switching on your own. These change the global default for other terminals.
-- Use `azctx exec` for Terraform, azd and SDK-based tools, with the reviewed ID:
+- Use `azctx exec` for Terraform, azd and SDK-based tools.
+  **`azctx exec` is not hook-guarded**: the optional Bash hook inspects only
+  directly named `az`, `azd`, `terraform` and `bicep`, not the exec wrapper.
+  Resolve the chosen query to one schema-1 list entry and pin its subscription
+  `id` and `tenantId` GUIDs. Replace the sample GUIDs below with that reviewed
+  pair; reuse the subscription GUID for exec, not an unresolved name or alias.
+  From the same working directory as the reviewed nearest `.azctx.yaml`, run:
 
   ```sh
-  azctx exec 11111111-1111-1111-1111-111111111111 -- terraform plan -input=false
-  azctx exec 11111111-1111-1111-1111-111111111111 -- azd env get-values
+  azctx guard --no-input -o json &&
+  azctx guard --no-input --subscription 11111111-1111-1111-1111-111111111111 --tenant aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa -o json &&
+  azctx exec --no-input 11111111-1111-1111-1111-111111111111 -- terraform plan -input=false
   ```
 
+  Execute only if both guards succeed. The first guard has no explicit
+  overrides and checks the current default against the reviewed project.
+  The explicit guard flags replace project expectations: the second guard
+  checks the current default against the resolved target, not `.azctx.yaml`.
+  With unchanged context, their conjunction establishes that the target meets
+  the project expectations; the explicit guard alone cannot establish this.
+  Stop on every nonzero status, without auto-switching or rewriting the file.
+  Repeat both checks for each exec call (for azd, replace only the child command
+  after `--` with `azd env get-values`).
+
+  If no project file is intended, independently compare the resolved pair with
+  user-reviewed GUID expectations before the explicit target guard and exec;
+  this is not a project check or a fallback after a failed project guard.
+  Guard is not a lock: re-inspect and repeat the checks if the profile, project,
+  default or intended target changes between steps.
   Exec sets only four child context variables, not credentials. Azure CLI
   ignores those variables even inside exec: it still needs `--subscription`.
   Tool-specific configuration may override variables; verify its effective target.
