@@ -238,11 +238,20 @@ is unchanged. Stdin/stdout/stderr stay attached. Child status is passed through,
 with no extra azctx error or JSON object after the child's diagnostics.
 `-o json` only formats azctx preflight failures, not child output.
 
-Unix INT/TERM/HUP/QUIT are forwarded to the direct child; Unix signal exits are
+Unix INT/TERM/HUP/QUIT addressed to azctx are forwarded once to the attached
+child group. A private supervisor observes terminal group signals without
+forwarding them again. Unix signal exits are
 `128 + signal` (Ctrl+C: 130). Windows Ctrl+C is forwarded to the child's console
 process group using Ctrl+Break; no-console cancellation falls back to termination.
 Context cancellation requests interruption, with a two-second kill fallback,
-and returns 130. No process-tree supervisor or shell job control is promised.
+and returns 130. In an interactive Unix shell with job control, Ctrl+Z stops
+the attached command and azctx's shell job so the shell regains its prompt;
+`fg` restores the child's terminal ownership before continuing it. Cancellation
+continues a stopped child to handle its pending signal and retains the kill
+deadline. A catchable cancellation signal sent to stopped azctx itself is pending
+until that shell job is continued. Background resumes do not claim the shell's
+terminal. This does not add shell expansion, pipelines, command parsing or
+supervision of commands that deliberately detach into other process groups.
 azctx does not run `account set`, mutate its own state/history or check updates.
 The explicitly launched command can of course have its own side effects.
 Do not run untrusted commands simply because guard passed.

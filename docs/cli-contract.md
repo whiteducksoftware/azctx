@@ -134,12 +134,21 @@ stdin/stdout/stderr remain attached, not proxied through a
 replacement terminal. The supervisor observes terminal group signals without
 forwarding them again. Signals addressed to azctx's PID are forwarded to the
 child group once. The original foreground group is restored after the command.
+In an interactive Unix shell with job control, Ctrl+Z suspends the attached
+command and azctx's shell job, returning control to the shell. `fg` gives the
+terminal back to the child group before continuing it; subsequent terminal
+input and Ctrl+C remain attached. A background resume does not take the terminal
+from the shell; background reads remain subject to normal terminal restrictions.
+The supervisor stays runnable to observe child stops and cancellation. A stopped
+child is continued when cancellation is delivered so it can handle its pending
+signal; the existing kill deadline still bounds uncooperative children. Like
+other stopped shell jobs, a catchable cancellation signal sent to stopped azctx
+itself remains pending until the job is continued (for example with `fg`).
 Restoration and parent-side terminal output also work in ordinary shell jobs
-with `TOSTOP` enabled, without changing process signal dispositions or existing
-signal subscriptions. An inherited noncontrolling terminal or background wrapper
-does not claim foreground ownership; the isolated child group and PID-directed
-signal forwarding still work. Background programs remain subject to the shell's
-normal terminal read restrictions.
+with `TOSTOP` enabled, without changing the parent's `SIGTTOU` disposition or
+its existing `SIGTTOU` subscriptions. An inherited noncontrolling terminal or
+background wrapper does not claim foreground ownership; the isolated child
+group and PID-directed signal forwarding still work.
 An interrupt gets a two-second grace period; a second interrupt kills promptly.
 Cancellation also cleans up the interrupted child group. Windows uses a child
 console process group and Ctrl+Break, with the same bounded direct-child kill.
