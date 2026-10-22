@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,5 +42,8 @@ func main() {
 	}
 	index, _ := strconv.Atoi(os.Getenv("FAKEFZF_INDEX"))
 	rows := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if slices.Contains(os.Args[1:], "--expect=esc") {
+		fmt.Println()
+	}
 	fmt.Println(rows[index])
 }
