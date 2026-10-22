@@ -1,4 +1,4 @@
-.PHONY: build lint test check golden agent-check fuzz e2e ci-check
+.PHONY: build lint test check golden agent-check fuzz e2e ci-check completion-perf
 
 build:
 	CGO_ENABLED=0 go build -trimpath .
@@ -9,6 +9,10 @@ lint:
 test: agent-check
 	go test -race -coverpkg=./... -coverprofile=coverage.out ./...
 	python3 -B .github/scripts/check_coverage.py < coverage.out
+	$(MAKE) completion-perf
+
+completion-perf:
+	GOFLAGS= go test -race=false -cover=false -tags=completionperf -run '^TestCompletion500SubscriptionsIsOfflineAndFast$$' -count=1 -v ./cmd
 
 check: lint test
 
