@@ -168,17 +168,22 @@ func readConfirmation(ctx context.Context, input io.Reader) (string, error) {
 		}
 		switch char[0] {
 		case '\n':
-			return answer.String(), nil
+			return answer.String(), echoPromptByte(input, '\n')
 		case '\x03':
 			return "", ui.ErrInterrupted
 		case '\b', '\x7f':
-			if answer.Len() > 0 {
-				text := answer.String()
-				answer.Reset()
-				answer.WriteString(text[:len(text)-1])
+			if answer.Len() == 0 {
+				continue
 			}
+			text := answer.String()
+			answer.Reset()
+			answer.WriteString(text[:len(text)-1])
+			char[0] = '\b'
 		default:
 			answer.WriteByte(char[0])
+		}
+		if err := echoPromptByte(input, char[0]); err != nil {
+			return "", err
 		}
 	}
 	return "", errors.New("confirmation is too long")

@@ -126,16 +126,25 @@ retries and restores azctx's exact previous/MRU state on a failed switch.
 Declining a confirmation retains its existing status.
 
 On Unix, a private supervisor and the attached command share a separate process
-group. When stdin is a controlling terminal, that group temporarily owns the
-foreground terminal; stdin/stdout/stderr remain attached, not proxied through a
+group. When stdin is azctx's controlling terminal and azctx owns its foreground
+group, the child group temporarily owns the foreground terminal;
+stdin/stdout/stderr remain attached, not proxied through a
 replacement terminal. The supervisor observes terminal group signals without
 forwarding them again. Signals addressed to azctx's PID are forwarded to the
 child group once. The original foreground group is restored after the command.
+Restoration and parent-side terminal output also work in ordinary shell jobs
+with `TOSTOP` enabled, without changing process signal dispositions or existing
+signal subscriptions. An inherited noncontrolling terminal or background wrapper
+does not claim foreground ownership; the isolated child group and PID-directed
+signal forwarding still work. Background programs remain subject to the shell's
+normal terminal read restrictions.
 An interrupt gets a two-second grace period; a second interrupt kills promptly.
 Cancellation also cleans up the interrupted child group. Windows uses a child
 console process group and Ctrl+Break, with the same bounded direct-child kill.
 Protected, broker and tenant prompts can be canceled without closing stdin,
 including native Windows console reads.
+Windows confirmation echo follows accepted edits: backspace/delete on an empty
+answer does not erase the prompt, and a raw Ctrl+C cancels without being echoed.
 
 A successful child whose descendant holds an inherited stderr pipe is not a
 failed login: the two-second pipe-drain timeout is ignored only when the process

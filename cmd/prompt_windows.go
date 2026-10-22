@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -22,7 +21,7 @@ func readPromptFile(ctx context.Context, input *os.File, data []byte) error {
 	handle := windows.Handle(input.Fd())
 	var mode uint32
 	if windows.GetConsoleMode(handle, &mode) == nil {
-		return readPromptConsole(ctx, handle, data, mode)
+		return readPromptConsole(ctx, handle, data)
 	}
 	kind, err := windows.GetFileType(handle)
 	if err != nil {
@@ -53,7 +52,19 @@ func readPromptFile(ctx context.Context, input *os.File, data []byte) error {
 	return err
 }
 
-func readPromptConsole(ctx context.Context, handle windows.Handle, data []byte, mode uint32) error {
+// INPUT_RECORD's event union has DWORD alignment, including on Windows ARM64.
+type promptInputRecord struct {
+	eventType    uint16
+	padding      uint16
+	keyDown      int32
+	repeat       uint16
+	virtualKey   uint16
+	scanCode     uint16
+	char         uint16
+	controlState uint32
+}
+
+func readPromptConsole(ctx context.Context, handle windows.Handle, data []byte) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -68,23 +79,18 @@ func readPromptConsole(ctx context.Context, handle windows.Handle, data []byte, 
 		// INPUT_RECORD is a WORD, padding, then a 16-byte event union. Read
 		// one event, not a cooked line, so neither cancellation nor following
 		// input for az login can be trapped inside ReadConsole.
-		var record [20]byte
+		var record promptInputRecord
 		var count uint32
-		ok, _, readErr := readConsoleInputPrompt.Call(uintptr(handle), uintptr(unsafe.Pointer(&record[0])), 1, uintptr(unsafe.Pointer(&count)))
+		ok, _, readErr := readConsoleInputPrompt.Call(uintptr(handle), uintptr(unsafe.Pointer(&record)), 1, uintptr(unsafe.Pointer(&count)))
 		if ok == 0 {
 			return readErr
 		}
-		if count == 0 || binary.LittleEndian.Uint16(record[:2]) != 1 || binary.LittleEndian.Uint32(record[4:8]) == 0 {
+		if count == 0 || record.eventType != 1 || record.keyDown == 0 {
 			continue
 		}
-		char := binary.LittleEndian.Uint16(record[14:16])
+		char := record.char
 		if char == 0 {
 			continue
-		}
-		if mode&windows.ENABLE_ECHO_INPUT != 0 {
-			if err := echoPromptCharacter(char); err != nil {
-				return err
-			}
 		}
 		if char == '\r' {
 			char = '\n'
@@ -95,6 +101,21 @@ func readPromptConsole(ctx context.Context, handle windows.Handle, data []byte, 
 		data[0] = byte(char)
 		return nil
 	}
+}
+
+func echoPromptByte(input io.Reader, char byte) error {
+	file, ok := input.(*os.File)
+	if !ok {
+		return nil
+	}
+	var mode uint32
+	if windows.GetConsoleMode(windows.Handle(file.Fd()), &mode) == nil && mode&windows.ENABLE_ECHO_INPUT != 0 {
+		if char == '\n' {
+			char = '\r'
+		}
+		return echoPromptCharacter(uint16(char))
+	}
+	return nil
 }
 
 func echoPromptCharacter(char uint16) error {
