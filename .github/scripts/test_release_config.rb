@@ -453,6 +453,90 @@ class ReleaseConfigurationTest < Minitest::Test
     refute_match(/secrets\.|publisher-token|publish_cask\.py|publish_winget\.rb/, workflow.to_s)
   end
 
+  def snapshot_workflow
+    YAML.safe_load(File.read(File.join(ROOT, '.github/workflows/release-check.yaml')))
+  end
+
+  def validate_snapshot_tool_setup(workflow)
+    steps = workflow.fetch('jobs').fetch('snapshot').fetch('steps')
+    on_path = false
+    steps.each do |step|
+      if step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@')
+        raise 'snapshot GoReleaser pin' unless
+          step.fetch('uses') == 'goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de' &&
+          step.fetch('with').values_at('distribution', 'version') == %w[goreleaser v2.18.3]
+        # The pinned action exports PATH only in install-only mode, not when running args.
+        if [true, 'true'].include?(step.fetch('with')['install-only'])
+          raise 'snapshot GoReleaser setup must be unconditional and required' if
+            step.key?('if') || step.key?('continue-on-error')
+          raise 'install-only ignores args' if step.fetch('with').key?('args')
+          on_path = true
+        end
+      end
+      run = step.fetch('run', '')
+      next unless run.match?(/\bgoreleaser\s|ruby\s+\.github\/scripts\/release_snapshot\.rb\b/)
+
+      raise "GoReleaser is not on PATH before: #{run.strip}" unless on_path
+    end
+    %w[.goreleaser.yaml .goreleaser-windows.yaml].each do |config|
+      raise "missing snapshot configuration check: #{config}" unless steps.any? do |step|
+        step.fetch('run', '') == "goreleaser check --config #{config}" && !step.key?('if')
+      end
+    end
+    raise 'missing publisher-disabled snapshot generation' unless steps.any? do |step|
+      step.fetch('run', '').include?('ruby .github/scripts/release_snapshot.rb "$SNAPSHOT_MODE" "$SNAPSHOT_CHANNEL"')
+    end
+  end
+
+  def test_snapshot_goreleaser_is_on_path_before_every_shell_use
+    validate_snapshot_tool_setup(snapshot_workflow)
+    renamed = snapshot_workflow
+    renamed.fetch('jobs').fetch('snapshot').fetch('steps').each { |step| step['name'] = 'not a setup contract' }
+    validate_snapshot_tool_setup(renamed)
+  end
+
+  def test_snapshot_tool_setup_rejects_actual_input_and_order_regressions
+    mutations = {
+      'args invocation does not export PATH' => ->(steps, setup) do
+        setup['with'].delete('install-only')
+        setup['with']['args'] = 'check --config .goreleaser.yaml'
+      end,
+      'explicit false does not export PATH' => ->(steps, setup) { setup['with']['install-only'] = false },
+      'missing setup' => ->(steps, setup) { steps.delete(setup) },
+      'setup after first shell use' => ->(steps, setup) do
+        steps.delete(setup)
+        first_use = steps.index { |step| step.fetch('run', '').match?(/\bgoreleaser\s/) }
+        steps.insert(first_use + 1, setup)
+      end,
+      'setup after generation' => ->(steps, setup) { steps.delete(setup); steps << setup },
+      'generation before setup' => ->(steps, setup) do
+        generation = steps.find { |step| step.fetch('run', '').include?('ruby .github/scripts/release_snapshot.rb') }
+        steps.delete(generation)
+        steps.insert(steps.index(setup), generation)
+      end,
+      'platform-conditional setup' => ->(steps, setup) { setup['if'] = "runner.os == 'Linux'" },
+      'channel-conditional setup' => ->(steps, setup) { setup['if'] = "matrix.channel == 'stable'" },
+      'ignored setup failure' => ->(steps, setup) { setup['continue-on-error'] = true },
+      'check silently ignored in install-only mode' => ->(steps, setup) do
+        setup['with']['args'] = 'check --config .goreleaser.yaml'
+      end,
+      'missing Unix check' => ->(steps, setup) do
+        steps.delete_if { |step| step.fetch('run', '') == 'goreleaser check --config .goreleaser.yaml' }
+      end,
+      'missing Windows check' => ->(steps, setup) do
+        steps.delete_if { |step| step.fetch('run', '') == 'goreleaser check --config .goreleaser-windows.yaml' }
+      end
+    }
+    validate_snapshot_tool_setup(snapshot_workflow)
+    mutations.each do |name, mutate|
+      copy = snapshot_workflow
+      steps = copy.fetch('jobs').fetch('snapshot').fetch('steps')
+      setup = steps.find { |step| step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
+      mutate.call(steps, setup)
+      assert_raises(RuntimeError, name) { validate_snapshot_tool_setup(copy) }
+    end
+  end
+
   def test_workflow_policy_rejects_regressions
     mutations = [
       ->(w) { w['permissions'] = { 'contents' => 'write' } },
