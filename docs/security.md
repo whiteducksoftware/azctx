@@ -37,8 +37,8 @@ failed login. See [authentication](authentication.md#inspect-or-change-the-broke
 This exception must not be described as unrestricted Azure config access.
 
 Private writes include alias edits to `config.yaml`, previous/recent
-`state.json`, best-effort bounded `history.json`, and optional update cache
-and lock files. Shared atomic writes use `0600` files and `0700` directories
+`state.json` with its retained `state.lock`, best-effort bounded `history.json`
+with `history.lock`, and optional update cache and lock files. Shared atomic writes use `0600` files and `0700` directories
 on Unix; existing permissions are tightened where the writer requires it.
 Windows ACLs follow the user's filesystem policy, not a POSIX-mode guarantee.
 Paths inside either resolved or environment Azure configuration are rejected,

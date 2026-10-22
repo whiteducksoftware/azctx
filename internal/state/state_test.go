@@ -36,7 +36,7 @@ func TestPreviousStatePrivateRoundTrip(t *testing.T) {
 	}
 	dir := filepath.Join(config, "azctx")
 	entries, err := os.ReadDir(dir)
-	if err != nil || len(entries) != 1 || entries[0].Name() != "state.json" {
+	if err != nil || len(entries) != 2 || entries[0].Name() != "state.json" || entries[1].Name() != "state.lock" {
 		t.Fatalf("state directory = %v, %v", entries, err)
 	}
 	assertPrivatePermissions(t, dir)
@@ -45,7 +45,7 @@ func TestPreviousStatePrivateRoundTrip(t *testing.T) {
 func assertPrivatePermissions(t *testing.T, dir string) {
 	t.Helper()
 	if runtime.GOOS != "windows" {
-		for path, want := range map[string]os.FileMode{dir: 0o700, filepath.Join(dir, "state.json"): 0o600} {
+		for path, want := range map[string]os.FileMode{dir: 0o700, filepath.Join(dir, "state.json"): 0o600, filepath.Join(dir, "state.lock"): 0o600} {
 			info, err := os.Stat(path)
 			if err != nil || info.Mode().Perm() != want {
 				t.Fatalf("permissions on %s: %v, %v", path, info, err)

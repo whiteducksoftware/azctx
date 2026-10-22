@@ -266,18 +266,16 @@ func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg 
 		return err
 	}
 	if config.Contains(cfg.Protected, target) {
-		confirmed, err := confirmProtected(cmd, deps, target)
-		if err != nil || !confirmed {
+		if err := confirmProtected(cmd, deps, target); err != nil {
 			return err
 		}
 	}
 	if err := cmd.Context().Err(); err != nil {
 		return err
 	}
-	if err := switchSubscription(cli, target); err != nil {
+	if err := switchSubscription(cmd, cli, deps, target); err != nil {
 		return err
 	}
-	recordHistory(cmd, cli, deps, target)
 
 	if cfg.UpdateCheck {
 		checkForUpdates(cmd, deps, cli.ConfigDir())
@@ -330,27 +328,37 @@ func stdinIsTerminal(command *cobra.Command, deps Dependencies) bool {
 	return streamIsTerminal(command.InOrStdin())
 }
 
-func switchSubscription(cli azcli.CLI, subscription profile.Subscription) error {
+// switchSubscription holds the retained state lock from reading state through
+// az account set, any rollback and best-effort history, so concurrent switches
+// neither lose previous/MRU updates nor roll back over a newer commit. Waiting
+// for the lock honors cancellation; history.lock is only ever taken inside it.
+func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies, subscription profile.Subscription) error {
 	if err := profile.ValidateGUID(subscription.Id); err != nil {
 		return err
 	}
+	tx, err := state.Begin(command.Context(), cli.ConfigDir())
+	if err != nil {
+		return err
+	}
+	defer tx.Release()
 	current, err := cli.ActiveSubscription()
 	previous := ""
 	if err == nil && !strings.EqualFold(current.Id, subscription.Id) {
 		previous = current.Id
 	}
-	rollback, err := state.RecordSelection(cli.ConfigDir(), previous, subscription.Id)
+	rollback, err := tx.RecordSelection(previous, subscription.Id)
 	if err != nil {
 		return fmt.Errorf("save previous subscription: %w", err)
 	}
 	log.Debug("Setting active subscription to %s/%s (%s/%s)", subscription.TenantLabel(), subscription.Name, subscription.Tenant, subscription.Id)
-	err = cli.SetSubscription(subscription)
-	if err != nil && rollback != nil {
+	if err := cli.SetSubscription(subscription); err != nil {
 		if restoreErr := rollback(); restoreErr != nil {
 			return errors.Join(err, fmt.Errorf("restore previous subscription state: %w", restoreErr))
 		}
+		return err
 	}
-	return err
+	recordHistory(command, cli, deps, subscription)
+	return nil
 }
 
 func getActiveSubscription(command *cobra.Command, cli azcli.CLI, cfg config.Config) error {
@@ -369,23 +377,24 @@ func getActiveSubscription(command *cobra.Command, cli azcli.CLI, cfg config.Con
 	return nil
 }
 
-func confirmProtected(command *cobra.Command, deps Dependencies, sub profile.Subscription) (bool, error) {
+// confirmProtected returns nil only for an explicit confirmation. A declined or
+// default answer is a classified failure, so `azctx prod && cmd` cannot proceed.
+func confirmProtected(command *cobra.Command, deps Dependencies, sub profile.Subscription) error {
 	if yes, _ := command.Flags().GetBool("yes"); yes {
-		return true, nil
+		return nil
 	}
 	if !inputIsTerminal(command, deps) || outputFormat(command) == formatJSON {
-		return false, errors.New("protected subscription requires confirmation; use --yes to explicitly confirm without an azctx prompt")
+		return errors.New("protected subscription requires confirmation; use --yes to explicitly confirm without an azctx prompt")
 	}
 	if _, err := fmt.Fprintf(command.ErrOrStderr(), "Switch to protected subscription %s/%s (%s)? [y/N] ", sub.TenantLabel(), sub.Name, sub.Id); err != nil {
-		return false, err
+		return err
 	}
 	answer, err := readConfirmation(command.Context(), command.InOrStdin())
 	if err != nil {
-		return false, fmt.Errorf("read protected subscription confirmation (no changes made): %w", err)
+		return fmt.Errorf("read protected subscription confirmation (no changes made): %w", err)
 	}
 	if !strings.EqualFold(strings.TrimSpace(answer), "y") && !strings.EqualFold(strings.TrimSpace(answer), "yes") {
-		_, err := fmt.Fprintln(command.ErrOrStderr(), "Switch canceled; no changes made.")
-		return false, err
+		return &ExitError{Code: CodeError, Message: "switch canceled; no changes made", Status: ExitFailure}
 	}
-	return true, nil
+	return nil
 }

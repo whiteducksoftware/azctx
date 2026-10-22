@@ -3,7 +3,9 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,8 +21,10 @@ import (
 )
 
 const (
-	selectionDecline = "n\n"
-	selectionAlias   = "dev"
+	selectionDecline  = "n\n"
+	protectedDeclined = "Error: switch canceled; no changes made\n"
+	emptyHistoryJSON  = "{\"schemaVersion\":1,\"entries\":[]}\n"
+	selectionAlias    = "dev"
 )
 
 func writeSelectionConfig(t *testing.T, contents string) string {
@@ -81,7 +85,8 @@ func TestProtectedSwitchConfirmation(t *testing.T) {
 		{"yes", "", []string{confirmFlag, productionID}, false, 0, 1},
 		{"JSON yes", "", []string{confirmFlag, outputFlag, jsonFormat, productionID}, false, 0, 1},
 		{"confirm", "y\n", []string{productionID}, true, 0, 1},
-		{"decline", selectionDecline, []string{productionID}, true, 0, 0},
+		{"decline", selectionDecline, []string{productionID}, true, 1, 0},
+		{"default", "\n", []string{productionID}, true, 1, 0},
 		{"interrupt", "\x03", []string{productionID}, true, 130, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,10 +99,30 @@ func TestProtectedSwitchConfirmation(t *testing.T) {
 			if status != tc.wantStatus || len(fake.Calls) != tc.calls || out.Len() != 0 {
 				t.Fatalf("status=%d, out=%q, messages=%q, calls=%+v", status, out.String(), messages.String(), fake.Calls)
 			}
-			if tc.wantStatus == 1 && !strings.Contains(messages.String(), confirmFlag) {
+			if tc.wantStatus == 1 && tc.terminal && tc.input != "" {
+				if !strings.HasPrefix(messages.String(), "Switch to protected subscription ") || !strings.HasSuffix(messages.String(), "? [y/N] "+protectedDeclined) {
+					t.Fatalf("declined confirmation diagnostic: %q", messages.String())
+				}
+			} else if tc.wantStatus == 1 && !strings.Contains(messages.String(), confirmFlag) {
 				t.Fatalf("missing confirmation diagnostic: %q", messages.String())
 			}
+			if tc.wantStatus != 0 {
+				assertNoSwitchRecorded(t, deps)
+			}
 		})
+	}
+}
+
+func assertNoSwitchRecorded(t *testing.T, deps cmd.Dependencies) {
+	t.Helper()
+	if _, err := state.Load(deps.ConfigDir); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("refused switch saved previous state: %v", err)
+	}
+	if recent, err := state.Recent(deps.ConfigDir); err != nil || len(recent) != 0 {
+		t.Fatalf("refused switch saved recent state: %v, %v", recent, err)
+	}
+	if got := configCommandOutput(t, deps, historyCommand, outputFlag, jsonFormat); got != emptyHistoryJSON {
+		t.Fatalf("refused switch recorded history: %q", got)
 	}
 }
 
@@ -189,11 +214,7 @@ func TestProtectionAppliesToPreviousAndPicker(t *testing.T) {
 			}
 			var out, messages bytes.Buffer
 			status := cmd.Run(args, deps, strings.NewReader(selectionDecline), &out, &messages)
-			want := 0
-			if previous {
-				want = 1
-			}
-			if status != want || len(fake.Calls) != 0 || out.Len() != 0 {
+			if status != 1 || len(fake.Calls) != 0 || out.Len() != 0 {
 				t.Fatalf("protected route status=%d, messages=%q, calls=%+v", status, messages.String(), fake.Calls)
 			}
 			recent, err := state.Recent(deps.ConfigDir)

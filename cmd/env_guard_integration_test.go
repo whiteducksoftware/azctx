@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/whiteducksoftware/azctx/internal/storage"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
 
@@ -29,6 +30,12 @@ func TestBinaryEnvironmentExecGuardNeverMutateContext(t *testing.T) {
 	writeFixture(t, github, "EXISTING=value\n")
 	t.Setenv("GITHUB_ENV", github)
 	t.Setenv(childModeEnv, "echo")
+	// Read-only commands never wait for, create or take a switch's state lock.
+	release, acquired, err := storage.Lock(filepath.Join(private, "state.lock"), azure)
+	if err != nil || !acquired {
+		t.Fatalf("hold state lock: %t, %v", acquired, err)
+	}
+	defer release()
 	azureBefore, privateBefore := snapshotContextFiles(t, azure), snapshotContextFiles(t, private)
 	guardGolden, err := os.ReadFile(filepath.Join("testdata", "contract", "guard-mismatch.golden"))
 	if err != nil {

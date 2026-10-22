@@ -123,7 +123,9 @@ Ctrl+C restores the built-in picker's cursor and exits 130. Switching, login,
 MFA retries and confirmation reads use a signal-aware command context; an
 interrupted Azure CLI returning 1 still produces azctx status 130, stops tenant
 retries and restores azctx's exact previous/MRU state on a failed switch.
-Declining a confirmation retains its existing status.
+Declining or accepting the default `N` at the protected-switch prompt exits 1
+with `switch canceled; no changes made`, so `azctx prod && command` never
+continues; other declined confirmations retain their existing status.
 
 On Unix, a private supervisor and the attached command share a separate process
 group. When stdin is azctx's controlling terminal and azctx owns its foreground
@@ -235,7 +237,7 @@ boundary for handler failures, Cobra flag/argument errors and interruptions.
 | Code | Meaning |
 | --- | --- |
 | 0 | Success |
-| 1 | Error, including invalid arguments/formats, profile/state failures, login preflight/discovery errors and non-login Azure subprocess errors |
+| 1 | Error, including invalid arguments/formats, profile/state failures, a declined or unconfirmed protected switch, login preflight/discovery errors and non-login Azure subprocess errors |
 | 2 | No subscription match, unavailable previous subscription, or ambiguous match when input is disabled |
 | 3 | Azure sign-in failed, or one or more tenant sign-ins remain unresolved (including partial success, no-input, declined/unreadable confirmation) |
 | 4 | Guard found a different subscription or tenant context |
@@ -323,7 +325,7 @@ Tokens after `--` are never output flags, including forwarded login arguments.
 | `CI` | Presence, even empty, disables picker input and optional update checks. |
 | `NO_COLOR` | Presence, even empty, disables azctx colors on all streams. |
 | `AZCTX_NO_UPDATE_CHECK=1` | Disable optional update checks. |
-| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml`, `state.json`, `history.json` and its private lock; must remain outside Azure configuration, including symlink targets. |
+| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml`, `state.json`, `history.json` and their private locks; must remain outside Azure configuration, including symlink targets. |
 | `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `APPDATA` | Platform-standard user configuration resolution for private config and previous/recent subscription state. |
 | `XDG_CACHE_HOME`, `LOCALAPPDATA` | Platform-standard user cache resolution for update-check data (with the platform's home-directory fallback). |
 
