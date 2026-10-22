@@ -15,6 +15,8 @@ func TestWriterBufferStaysBounded(t *testing.T) {
 		"password array":  "password: [" + strings.Repeat(`"x/y", `, 1<<12),
 		"basic auth":      "Authorization: Basic " + strings.Repeat("c3ludGhldGlj/", 1<<12),
 		"short fragments": strings.Repeat("a/b/c/d/e/f/g/h/", 1<<12),
+		"path then key":   strings.Repeat("/a/b/c/d/e/f/Sy7n+tH3tIcK/eY0", 1<<12),
+		"mixed segments":  strings.Repeat("Dir1/", 1<<13),
 	}
 	for name, input := range inputs {
 		t.Run(name, func(t *testing.T) {

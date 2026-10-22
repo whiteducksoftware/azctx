@@ -3,6 +3,7 @@ package redact_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -67,6 +68,65 @@ func TestStreamingRedactsSlashBase64LabelsAndArrays(t *testing.T) {
 	}
 }
 
+// A path whose 80-byte window is not key-shaped must release only its oldest
+// segment: a key starting later in the window stays hidden as a whole, at the
+// cost of hiding the path segments that share its first key-shaped window.
+func TestStreamingRedactsWholeSlashBase64KeyAfterPathPrefix(t *testing.T) {
+	exact := map[string]struct{ input, want string }{
+		"short segments": {"/a/b/c/d/e/f/" + syntheticKey + "\nnext", "/a/b/[REDACTED]\nnext"},
+		"long path": {
+			"/Users/Alice/work/azure/rg1/storage/accounts/myacct/keys/" + syntheticKey + "\nnext",
+			"/Users/Alice/work/[REDACTED]\nnext",
+		},
+		"repeated segments": {strings.Repeat("abcdefg/", 8) + syntheticKey + " done", "abcdefg/[REDACTED] done"},
+	}
+	for name, test := range exact {
+		t.Run(name, func(t *testing.T) { assertStreamed(t, test.input, test.want) })
+	}
+	prefixes := []string{
+		"/", "x/", "/a/b/c/d/e/f/", strings.Repeat("a/", 40), strings.Repeat("a/", 41),
+		strings.Repeat("abcdefg/", 8), strings.Repeat("Seg9/", 30), "/Ab1/Cd2/Ef3/Gh4/Ij5/Kl6/Mn7/Op8/Qr9/",
+		"/Users/Alice/work/azure/rg1/storage/accounts/myacct/keys/",
+		"C:/Users/Alice/storage/accounts/myacct/keys/", "path/" + strings.Repeat("q", 75) + "/",
+	}
+	fragments := keyFragments(t, prefixes)
+	for _, prefix := range prefixes {
+		for _, suffix := range []string{"\nnext", " done", ";next=1", "/tail\n"} {
+			input := "key " + prefix + syntheticKey + suffix
+			t.Run(prefix+suffix, func(t *testing.T) {
+				eachStreamed(t, input, func(how, got string) {
+					if !strings.HasPrefix(got, "key ") || !strings.HasSuffix(got, "[REDACTED]"+strings.TrimPrefix(suffix, "/tail")) {
+						t.Fatalf("%s: got %q", how, got)
+					}
+					for _, fragment := range fragments {
+						if strings.Contains(got, fragment) {
+							t.Fatalf("%s: key fragment %q leaked in %q", how, fragment, got)
+						}
+					}
+				})
+			})
+		}
+	}
+}
+
+// keyFragments lists every 4-byte run of syntheticKey's base64 body; none
+// appears in the prefixes, so any of them in output is leaked key material.
+func keyFragments(t *testing.T, prefixes []string) []string {
+	t.Helper()
+	body := strings.TrimRight(syntheticKey, "=")
+	var fragments []string
+	for index := 0; index+4 <= len(body); index++ {
+		fragment := body[index : index+4]
+		for _, prefix := range prefixes {
+			if strings.Contains("key "+prefix, fragment) {
+				t.Fatalf("prefix %q contains key fragment %q", prefix, fragment)
+			}
+		}
+		fragments = append(fragments, fragment)
+	}
+	return fragments
+}
+
 func TestStreamingKeepsOrdinaryDiagnosticsReadable(t *testing.T) {
 	inputs := []string{
 		"The Basic tier does not support this feature; choose sku Basic or Standard.\n",
@@ -76,6 +136,8 @@ func TestStreamingKeepsOrdinaryDiagnosticsReadable(t *testing.T) {
 		"/Users/Alice2/Go/src/Github/Org1/Repo2/Pkg3/Sub4/Dir5/More6/Deeper7/Deepest8/Leaf9/Final0 not found\n",
 		"see https://learn.microsoft.com/cli/azure/storage/account/keys for AccountName details [1/2]\n",
 		strings.Repeat("abcdefghij/", 20) + "end\n",
+		strings.Repeat("Dir1/", 40) + "file.txt\n",
+		"/home/Runner2/work/" + strings.Repeat("Pkg3/Sub4/", 12) + "main.go:12: unused\n",
 		"Use device code SYNTHETIC [array] and accountKeys list\n",
 	}
 	for index, input := range inputs {
@@ -95,24 +157,42 @@ func TestStreamingRedactionLargeAdversarialInputs(t *testing.T) {
 	}
 }
 
-// assertStreamed checks every two-part split (sampled for large inputs) and
-// byte-at-a-time writes for short inputs, so values crossing writes are covered.
+// assertStreamed checks every two-part split (sampled for large inputs),
+// varied multi-part splits and byte-at-a-time writes for short inputs, so
+// values crossing writes are covered.
 func assertStreamed(t *testing.T, input, want string) {
 	t.Helper()
-	step := max(1, len(input)/64)
-	for split := 0; split <= len(input); split += step {
-		if got := streamParts(t, input[:split], input[split:]); got != want {
-			t.Fatalf("split %d: got %q, want %q", split, got, want)
+	eachStreamed(t, input, func(how, got string) {
+		if got != want {
+			t.Fatalf("%s: got %q, want %q", how, got, want)
 		}
+	})
+}
+
+func eachStreamed(t *testing.T, input string, check func(how, got string)) {
+	t.Helper()
+	step := 1
+	if len(input) > 4096 {
+		step = len(input) / 64
 	}
-	if len(input) <= 4096 {
-		parts := make([]string, len(input))
-		for index := range input {
-			parts[index] = input[index : index+1]
+	for split := 0; split <= len(input); split += step {
+		check(fmt.Sprintf("split %d", split), streamParts(t, input[:split], input[split:]))
+	}
+	if len(input) > 4096 {
+		return
+	}
+	parts := make([]string, len(input))
+	for index := range input {
+		parts[index] = input[index : index+1]
+	}
+	check("byte writes", streamParts(t, parts...))
+	for round := range 16 {
+		parts = parts[:0]
+		for rest := input; rest != ""; {
+			size := min(len(rest), 1+(round*7+len(parts)*13)%24)
+			parts, rest = append(parts, rest[:size]), rest[size:]
 		}
-		if got := streamParts(t, parts...); got != want {
-			t.Fatalf("byte writes: got %q, want %q", got, want)
-		}
+		check(fmt.Sprintf("varied writes %d", round), streamParts(t, parts...))
 	}
 }
 

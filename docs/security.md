@@ -96,7 +96,8 @@ recognizes JWT-like values, provider prefixes, long opaque words (including
 values, `AccountKey=`/`SharedAccessKey=` connection-string values,
 `Authorization: Basic` credentials and labelled arrays such as
 `"password": ["…"]`, including split writes. The writer buffers at most 80
-bytes, so shorter unlabelled keys are emitted unchanged.
+bytes, so shorter unlabelled keys are emitted unchanged. Path segments that
+share an 80-byte window with a recognized key may be hidden with it.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
 
