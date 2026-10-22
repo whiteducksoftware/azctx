@@ -5,6 +5,14 @@ protected environment, tap migration, tag or release. Those are #100 acceptance
 work, as are package availability and any later promotion to GitHub's latest
 release. Do not run a publishing release to test this configuration.
 
+**RELEASE READINESS: BLOCKED.** #98's native-runner block-egress requirement is
+not satisfied. The tag workflow deliberately fails its credential-free
+`release-readiness` job before **any** publisher can run. This includes RC
+releases. Offline policy tests passing means this boundary is preserved, not
+that the full release specification passed. Removing the blocker requires a
+reviewed, supported enforcement design and actual native/hosted acceptance;
+an environment variable or maintainer approval alone cannot bypass it.
+
 ## Packaging contracts
 
 - Linux ships only the existing `azctx_Linux_*.tar.gz` archives. macOS keeps
@@ -32,7 +40,8 @@ release. Do not run a publishing release to test this configuration.
 
 ## Protected future workflow
 
-All three release jobs use the `release` environment. Provisioning that
+All publishing jobs use the `release` environment; the native macOS formatter
+and the fail-closed readiness job do not. Provisioning that
 environment, required reviewers and an App installation is deliberately deferred
 to #100. Its expected interface is:
 
@@ -46,20 +55,28 @@ to #100. Its expected interface is:
 Short-lived, automatically revoked App tokens request contents-write on only
 `homebrew-tap` or only `winget-pkgs`, never the source repository or both taps.
 `AUTH_GITHUB` is removed. The normal workflow token uploads source-repository
-release assets; only those two archive-building jobs have contents-write,
-OIDC and attestations-write. There is no packages-write permission. Syft scans
+release assets; only the Linux build/publisher and Ubuntu Windows-assets
+publisher have contents-write, OIDC and attestations-write. Native Windows has
+contents-read only; it cannot upload GitHub assets or mint a winget token.
+There is no packages-write permission. Syft scans
 the archives and `actions/attest` attests every `.tar.gz`/`.zip` archive without
-creating registry storage records. Linux starts with block-mode Harden-Runner
-and explicit service endpoints, which still require observed hosted-runner
-acceptance before go-live.
+creating registry storage records. Every portable publisher runs on Ubuntu
+with block-mode Harden-Runner and explicit service endpoints. Hosted-runner
+allowlist completeness and real artifact-service transfers remain unverified
+until their authorized acceptance runs.
 
 **Unmet egress acceptance:** the pinned
 [Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner/blob/v2.22.2/README.md#environment-compatibility-matrix)
 supports **audit only** on GitHub-hosted Windows and macOS. Those jobs explicitly
-use audit mode, not a fictitious effective block policy. Chocolatey publishing
-therefore has no enforced endpoint allowlist. Full cross-platform blocking from
-#98 needs a supported enforcement design and maintainer acceptance before #100;
-this configuration must not be mistaken for completed egress enforcement.
+use audit mode, not a fictitious effective block policy. Native Homebrew style
+verification remains audit-only but has no publisher credentials. Chocolatey
+push is the only remaining native publisher and has **no enforced endpoint
+allowlist**. This is a **pre-release blocker**, not an accepted spec waiver.
+Full native enforcement from #98 needs reviewed external runner/network
+infrastructure or newly supported vendor enforcement, plus actual acceptance
+before #100. None is provisioned here; the readiness gate must remain failing
+until that requirement is met. No unsupported `block` setting, local firewall
+hack, downloaded runner or alternative publishing platform is substituted.
 
 ### Why there is a separate native Homebrew job
 
@@ -68,11 +85,53 @@ raw cask output is **not** Homebrew-style-clean. The Linux job therefore renders
 a derived configuration changing only cask `skip_upload` to `true`. It transfers
 only the generated cask, not metadata or environment files, to a stable-only
 macOS job. That job runs native `brew style --fix` followed by a strict
-`brew style`, then obtains the tap token and uploads the normalized file through
-GitHub's contents API. The publisher validates the stable tag against the cask
+`brew style`, then transfers **only** `azctx.rb` as a distinct normalized-cask
+artifact. It has no release environment, secret references, App token or write
+permissions. The ordinary contents-read checkout credential is not persisted.
+Both artifact hops use same-run downloads with `digest-mismatch: error`,
+one-day retention and missing-file failure; metadata/workspace directories are
+never transferred.
+
+A dedicated Ubuntu job depends only on successful native formatting. Its
+allowlist covers GitHub checkout/API and Actions artifact transport, not Go,
+Homebrew or package registries. Only after digest-checked download does it mint
+the single-tap contents-write App token and run the Python standard-library
+publisher. Neither Homebrew nor a build tool runs alongside that token.
+The publisher validates the stable tag against the cask
 version, performs a SHA-based compare-and-swap, and never removes the old formula
 or creates an upstream PR. A conflict or style failure aborts rather than
 publishing unverified output.
+
+### Native Windows restriction and portable publishers
+
+The pinned [Chocolatey pipe](https://github.com/goreleaser/goreleaser/blob/v2.18.3/internal/pipe/chocolatey/chocolatey.go)
+executes `choco pack` during generation and `choco push` during publishing.
+These are native Windows tooling requirements, not requirements of winget's
+GitHub fork upload or GitHub release asset upload. The installed Community
+GoReleaser has no independent publish/resume command; running its combined
+publishing pass natively would unnecessarily expose those portable publishers.
+
+The Windows job therefore builds once with **`--skip=publish`** (also
+`--skip=chocolatey` on RC tags). It transfers only ZIP archives, their checksum
+file, SBOMs and real GoReleaser winget YAML, before any Chocolatey secret is
+injected. Only its last, stable-only `choco push` step receives
+`CHOCO_API_KEY`; no App signing key/token is referenced on Windows.
+
+An Ubuntu block/allowlisted job downloads those same-run files with digest
+failure enabled, uploads the existing Windows assets to the Linux-created
+release, and attests the ZIPs. No binary is rebuilt. It verifies the three
+stable winget manifests, including exact identity/version, Azure CLI floor,
+archive URLs and SHA-256 against the downloaded archives, **before** minting
+a fork-only token. `publish_winget.rb` then uses GitHub's existing contents API
+to create/update only `azctx-<version>` in `whiteducksoftware/winget-pkgs`,
+preserving raw GoReleaser manifests and SHA-based updates. It does not open an
+upstream PR. RC tags neither mint the token nor run either package publisher.
+Tests use only synthetic credentials and an injected/mock API transport.
+
+The remaining unavoidable native `choco push` cannot satisfy #98 enforcement
+on the current hosted Windows runner. Both the workflow blocker and policy
+regressions explicitly retain that failure. A passing snapshot, schema check
+or offline publisher test is not evidence of native network enforcement.
 
 Direct `goreleaser release` does not perform this normalization: use the reviewed
 workflow for future publishing. No latest promotion is automated; keep
@@ -111,6 +170,10 @@ a Chocolatey package**. No replacement Chocolatey command or synthetic package
 is used. Native Homebrew normalization/style runs on macOS. CI's existing lint
 job scans all workflows using actionlint and strict zizmor with no release-debt
 exceptions. A configured check is not evidence of a completed hosted-runner run.
+`make ci-check` additionally exercises the actual readiness script (expecting
+exit 1), rejection mutations for both cask artifact hops and credential scopes,
+and the portable winget publisher's mocked create/update/no-op/denial paths.
+It never executes a real publisher.
 
 ## Authoritative format references
 
