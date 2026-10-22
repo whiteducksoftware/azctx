@@ -97,10 +97,17 @@ A dedicated Ubuntu job depends only on successful native formatting. Its
 allowlist covers GitHub checkout/API and Actions artifact transport, not Go,
 Homebrew or package registries. It digest-checks both the original Linux cask
 and the normalized cask from the same run, then runs
-`publish_cask.py --check` without any token. That check compares the normalized
-cask's `version`, every architecture's `url`/`sha256`, `binary` and
-`depends_on` semantics against the original Linux artifact; native style may
-only reorder or reformat them. Only after that comparison does it mint the
+`publish_cask.py --check` without any token. That check parses both casks with
+a restricted grammar covering only the syntax and stanzas that the current
+GoReleaser template and `brew style --fix` emit, so unrecognized Ruby, such as
+other quoting, interpolation, modifiers, inline comments, calls, extra stanzas
+or blocks like `on_linux`, fails closed instead of being ignored. Every stanza
+must occur exactly once, each architecture's `url` must name its own release
+archive with a lowercase SHA-256, and `postflight_steps` must contain only the
+quarantine-removal `run`. All statements, including their architecture block,
+must then equal the original Linux artifact's; native style may only reorder or
+reformat them. A new GoReleaser or Homebrew output shape therefore needs a
+reviewed parser update. Only after that comparison does it mint the
 single-tap contents-write App token and run the Python standard-library
 publisher. Neither Homebrew nor a build tool runs alongside that token.
 The publisher validates the stable tag against the cask
@@ -144,8 +151,11 @@ A final, stable-only native `chocolatey-publish` job needs a successful
 `windows-publish`, so it never runs after a failed asset upload or for RC tags.
 It has contents-read only and downloads only the digest-checked same-run
 package. `verify_chocolatey.py` checks the package id/version against the tag
-and requires the install script to embed only this release's
-`azctx_Windows_x86_64.zip` URL and a SHA-256 checksum. It then downloads that
+and requires the package to contain only the nuspec, NuGet metadata and
+`tools/chocolateyinstall.ps1`; any other script, helper or binary is rejected.
+That script must match GoReleaser 2.18.3's rendered template exactly, apart
+from this release's `azctx_Windows_x86_64.zip` URL and a SHA-256 checksum, so
+other assignments or commands fail closed. It then downloads that
 exact public URL and compares the checksum with the uploaded asset's bytes.
 Only its final `choco push` step receives `CHOCO_API_KEY`, and only after that
 comparison passes. GoReleaser 2.18.3's Chocolatey package embeds only
@@ -202,7 +212,9 @@ exceptions. A configured check is not evidence of a completed hosted-runner run.
 exit 1), rejection mutations for both cask artifact hops, the Chocolatey
 package hop, upload idempotency and credential scopes, and the portable winget
 publisher's mocked create/update/no-op/denial paths. Mocked Python tests cover
-cask semantic drift, Chocolatey checksum/URL mismatch and identical, missing
+cask semantic drift and unrecognized cask syntax, Chocolatey checksum/URL
+mismatch, unrecognized install-script content and extra package entries, using
+exact real GoReleaser and `brew style --fix` fixtures, and identical, missing
 or conflicting release assets.
 It never executes a real publisher.
 
