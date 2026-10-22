@@ -1,0 +1,153 @@
+name: Azure CLI integration
+
+'on':
+  schedule:
+    - cron: '37 3 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  AZCTX_INTEGRATION_ENABLED: ${{ vars.AZCTX_INTEGRATION_ENABLED }}
+  AZCTX_INTEGRATION_DEDICATED_TENANT: ${{ vars.AZCTX_INTEGRATION_DEDICATED_TENANT }}
+  AZCTX_TEST_CLIENT_ID: ${{ vars.AZCTX_TEST_CLIENT_ID }}
+  AZCTX_TEST_TENANT_ID: ${{ vars.AZCTX_TEST_TENANT_ID }}
+  AZCTX_TEST_SUBSCRIPTION_ID: ${{ vars.AZCTX_TEST_SUBSCRIPTION_ID }}
+  AZCTX_TEST_SECOND_SUBSCRIPTION_ID: ${{ vars.AZCTX_TEST_SECOND_SUBSCRIPTION_ID }}
+
+jobs:
+  prerequisites:
+    if: github.repository == 'whiteducksoftware/azctx' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.prerequisites.outputs.ready }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate dedicated tenant prerequisites
+        id: prerequisites
+        run: python3 -B .github/scripts/azure_integration.py prerequisites >> "$GITHUB_OUTPUT"
+      - name: Report acceptance status
+        env:
+          READY: ${{ steps.prerequisites.outputs.ready }}
+        run: |
+          if [ "$READY" = true ]; then
+            echo 'Dedicated tenant prerequisites configured; live results follow in the matrix.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'SKIPPED: explicit opt-in and dedicated test tenant are missing. Live acceptance is UNVERIFIED, not green. See docs/integration-tests.md.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  azure:
+    needs: prerequisites
+    if: needs.prerequisites.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment: azure-integration
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cli: '2.61.0'
+            image: mcr.microsoft.com/azure-cli:2.61.0@sha256:b83a4620937eccf09244e4dfbf310f774b01b3083b7accf49ab74d77247c8043
+          - cli: latest
+            image: mcr.microsoft.com/azure-cli:latest
+    env:
+      AZURE_CORE_OUTPUT: none
+      AZURE_CORE_ONLY_SHOW_ERRORS: 'true'
+      AZURE_CORE_LOGIN_EXPERIENCE_V2: 'off'
+      AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no'
+      AZCTX_NO_INPUT: '1'
+      AZCTX_NO_UPDATE_CHECK: '1'
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build static azctx
+        run: make build
+      - name: Prepare isolated container CLI
+        env:
+          IMAGE: ${{ matrix.image }}
+          EXPECTED_CLI: ${{ matrix.cli }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .integration/azure .integration/state .integration/bin
+          chmod 700 .integration .integration/azure .integration/state .integration/bin
+          cp .github/scripts/az-container.sh .integration/bin/az
+          chmod 700 .integration/bin/az
+          docker pull "$IMAGE"
+          resolved=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")
+          [[ "$resolved" =~ ^mcr\.microsoft\.com/azure-cli@sha256:[a-f0-9]{64}$ ]]
+          {
+            echo "AZCTX_AZURE_CLI_IMAGE=$resolved"
+            echo "AZURE_CONFIG_DIR=$GITHUB_WORKSPACE/.integration/azure"
+            echo "AZCTX_CONFIG_DIR=$GITHUB_WORKSPACE/.integration/state"
+          } >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.integration/bin" >> "$GITHUB_PATH"
+          actual=$(docker run --rm --cap-drop=ALL --security-opt=no-new-privileges "$resolved" az version --query '"azure-cli"' -o tsv)
+          if [ "$EXPECTED_CLI" = '2.61.0' ]; then
+            test "$actual" = '2.61.0'
+          fi
+          printf 'Azure CLI %s; image %s\n' "$actual" "$resolved" >> "$GITHUB_STEP_SUMMARY"
+      # Node24 actions stay on the Ubuntu host: 2.61.0 is an Alpine image.
+      # Both login and azctx use the shim, not the runner's preinstalled CLI.
+      - name: OIDC login to dedicated test tenant
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZCTX_TEST_CLIENT_ID }}
+          tenant-id: ${{ vars.AZCTX_TEST_TENANT_ID }}
+          subscription-id: ${{ vars.AZCTX_TEST_SUBSCRIPTION_ID }}
+      - name: Check real profile, switching, env and guard
+        run: python3 -B .github/scripts/azure_integration.py check --binary ./azctx
+      # azure/login performs its own post-job logout through the same shim.
+      # Never upload this directory (it belongs exclusively to Azure CLI).
+
+  notify:
+    needs: [prerequisites, azure]
+    if: always() && (needs.azure.result == 'failure' || needs.prerequisites.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - name: Notify code owners without exposing Azure output
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='Nightly Azure CLI integration failed'
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          body="Dedicated test-tenant integration failed. Review the 2.61.0/latest matrix and prerequisites: $RUN_URL. @nmeisenzahl @hutstep @swolg"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
