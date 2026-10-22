@@ -355,7 +355,9 @@ func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies
 	if err != nil {
 		return fmt.Errorf("save previous subscription: %w", err)
 	}
-	log.Debug("Setting active subscription to %s/%s (%s/%s)", subscription.TenantLabel(), subscription.Name, subscription.Tenant, subscription.Id)
+	log.Debug("Setting active subscription to %s/%s (%s/%s)",
+		ui.DisplayText(subscription.TenantLabel()), ui.DisplayText(subscription.Name),
+		ui.DisplayText(subscription.Tenant), ui.DisplayText(subscription.Id))
 	if err := cli.SetSubscription(subscription); err != nil {
 		if restoreErr := rollback(); restoreErr != nil {
 			return errors.Join(err, fmt.Errorf("restore previous subscription state: %w", restoreErr))
@@ -391,7 +393,8 @@ func confirmProtected(command *cobra.Command, deps Dependencies, sub profile.Sub
 	if !inputIsTerminal(command, deps) || outputFormat(command) == formatJSON {
 		return errors.New("protected subscription requires confirmation; use --yes to explicitly confirm without an azctx prompt")
 	}
-	if _, err := fmt.Fprintf(command.ErrOrStderr(), "Switch to protected subscription %s/%s (%s)? [y/N] ", sub.TenantLabel(), sub.Name, sub.Id); err != nil {
+	if _, err := fmt.Fprintf(command.ErrOrStderr(), "Switch to protected subscription %s/%s (%s)? [y/N] ",
+		ui.DisplayText(sub.TenantLabel()), ui.DisplayText(sub.Name), ui.DisplayText(sub.Id)); err != nil {
 		return err
 	}
 	answer, err := readConfirmation(command.Context(), command.InOrStdin())

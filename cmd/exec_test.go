@@ -45,7 +45,7 @@ func TestExecAttachedArgvEnvironmentAndExit(t *testing.T) {
 			for _, key := range []string{"ARM_SUBSCRIPTION_ID", "ARM_TENANT_ID", "AZURE_SUBSCRIPTION_ID", "AZURE_TENANT_ID"} {
 				t.Setenv(key, "parent-value")
 			}
-			argv := []string{"space value", `$(touch nope); & | " '`, "a\nb", outputFlag + "=" + jsonFormat, noInputFlag, ""}
+			argv := []string{"space value", `$(touch nope); & | " '`, "a\nb", rawDisplayName, outputFlag + "=" + jsonFormat, noInputFlag, ""}
 			args := append([]string{execSubcommand, selectionAlias, argumentDelimiter, childFixtureName}, argv...)
 			if mode == childJSONExitMode {
 				args = append([]string{outputFlag, jsonFormat}, args...)

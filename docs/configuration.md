@@ -177,6 +177,10 @@ profile/settings files and azctx configuration, never starts `az`, never checks
 updates and never writes state. It suggests subscription names, available
 aliases and profile tenant/name-qualified subscriptions, with case-insensitive
 prefix matching and deterministic, deduplicated output.
+Names containing a literal `/` are offered as subscription GUIDs instead.
+Tenant display names/domains containing `/` are omitted from qualified
+suggestions; tenant-GUID qualification remains available for ordinary names.
+This avoids suggesting forms that the tenant/subscription matcher cannot resolve.
 
 ## Tenant-first selection and fzf
 
