@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"io"
+	"os"
+	"os/signal"
 	"strings"
 )
 
@@ -12,7 +15,9 @@ func Run(args []string, deps Dependencies, stdin io.Reader, stdout, stderr io.Wr
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	command.SetArgs(args)
-	err := command.Execute()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	err := command.ExecuteContext(ctx)
 	return WriteError(command.ErrOrStderr(), requestedOutput(args), err)
 }
 

@@ -379,7 +379,7 @@ func confirmProtected(command *cobra.Command, deps Dependencies, sub profile.Sub
 	if _, err := fmt.Fprintf(command.ErrOrStderr(), "Switch to protected subscription %s/%s (%s)? [y/N] ", sub.TenantLabel(), sub.Name, sub.Id); err != nil {
 		return false, err
 	}
-	answer, err := readConfirmation(command.InOrStdin())
+	answer, err := readConfirmation(command.Context(), command.InOrStdin())
 	if err != nil {
 		return false, fmt.Errorf("read protected subscription confirmation (no changes made): %w", err)
 	}
