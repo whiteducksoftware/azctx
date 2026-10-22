@@ -9,7 +9,8 @@ fi
 : "${AZURE_CONFIG_DIR:?isolated Azure config directory is required}"
 
 exec docker run --rm --interactive --cap-drop=ALL --security-opt=no-new-privileges \
+  --user "$(id -u):$(id -g)" \
   --volume "$AZURE_CONFIG_DIR:$AZURE_CONFIG_DIR" \
-  --env AZURE_CONFIG_DIR --env AZURE_CORE_OUTPUT --env AZURE_CORE_ONLY_SHOW_ERRORS \
+  --env "HOME=$AZURE_CONFIG_DIR" --env AZURE_CONFIG_DIR --env AZURE_CORE_ONLY_SHOW_ERRORS \
   --env AZURE_CORE_LOGIN_EXPERIENCE_V2 --env AZURE_EXTENSION_USE_DYNAMIC_INSTALL \
   "$AZCTX_AZURE_CLI_IMAGE" az "$@"

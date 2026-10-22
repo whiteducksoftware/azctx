@@ -64,7 +64,6 @@ jobs:
           - cli: latest
             image: mcr.microsoft.com/azure-cli:latest
     env:
-      AZURE_CORE_OUTPUT: none
       AZURE_CORE_ONLY_SHOW_ERRORS: 'true'
       AZURE_CORE_LOGIN_EXPERIENCE_V2: 'off'
       AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no'

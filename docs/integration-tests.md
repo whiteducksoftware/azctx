@@ -105,7 +105,18 @@ JavaScript actions run on the Ubuntu host. A PATH shim invokes **only the
 container CLI** for both `azure/login` and azctx, sharing a fresh, dedicated
 `AZURE_CONFIG_DIR` mount. No Node runtime is needed inside either CLI image.
 Only that Azure directory is mounted, never the host home or Docker socket.
-Containers drop all capabilities and disallow privilege escalation.
+The shim uses the host user's exact UID:GID so the container can access the
+host-owned `0700` config directory without creating root-owned files. Container
+`HOME` points to that same writable directory. Containers still drop all
+capabilities and disallow privilege escalation.
+
+The shim leaves Azure CLI's default JSON output enabled: Azure Login v3.1.0
+invokes `az version` without an output flag and parses its JSON stdout. Host
+`AZURE_CORE_OUTPUT` overrides are not forwarded; explicit `-o`/`--output` flags
+are passed through unchanged. Login/account-set output is suppressed by the
+login action itself, not by changing the CLI's default output format. Offline
+Docker-recording tests check these boundaries; they do not execute containers
+or prove Linux filesystem permissions or live OIDC acceptance.
 
 OIDC `id-token: write` exists only on the `azure` matrix job, which otherwise
 has `contents: read`. The prerequisite job has only read access. A separate
