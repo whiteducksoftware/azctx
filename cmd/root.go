@@ -168,7 +168,7 @@ func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error
 		return err
 	}
 	cli.Context = cmd.Context()
-	return switchConfigured(cmd, cli, deps, cfg, target)
+	return switchConfigured(cmd, cli, deps, cfg, target, len(args) == 1 && args[0] == "-")
 }
 
 func rankedSelector(cmd *cobra.Command, deps Dependencies, catalog selection.Catalog) func([]profile.Subscription) (int, error) {
@@ -215,6 +215,15 @@ func switchCandidates(cmd *cobra.Command, args []string, cli azcli.CLI, deps Dep
 	}
 	var candidates []profile.Subscription
 	if args[0] == "-" {
+		tx, err := state.Begin(cmd.Context(), cli.ConfigDir())
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Release()
+		if err := cli.Reload(); err != nil {
+			return nil, fmt.Errorf("reload Azure profile before switching (no changes made): %w", err)
+		}
+		catalog.Subscriptions = cli.Subscriptions()
 		id, err := state.Load(cli.ConfigDir())
 		if err != nil {
 			return nil, err
@@ -261,7 +270,7 @@ func pickSubscription(args []string, candidates []profile.Subscription, selectIt
 	return candidates[index], nil
 }
 
-func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg config.Config, target profile.Subscription) error {
+func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg config.Config, target profile.Subscription, fromPrevious bool) error {
 	if err := cmd.Context().Err(); err != nil {
 		return err
 	}
@@ -273,7 +282,7 @@ func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg 
 	if err := cmd.Context().Err(); err != nil {
 		return err
 	}
-	if err := switchSubscription(cmd, cli, deps, target); err != nil {
+	if err := switchSubscription(cmd, cli, deps, target, fromPrevious); err != nil {
 		return err
 	}
 
@@ -334,7 +343,7 @@ func stdinIsTerminal(command *cobra.Command, deps Dependencies) bool {
 // for the lock honors cancellation; history.lock is only ever taken inside it.
 // The local Azure profile is re-read under the lock (no az call), so previous in
 // state and history is the context a preceding switch actually left active.
-func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies, subscription profile.Subscription) error {
+func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies, subscription profile.Subscription, fromPrevious bool) error {
 	if err := profile.ValidateGUID(subscription.Id); err != nil {
 		return err
 	}
@@ -345,6 +354,12 @@ func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies
 	defer tx.Release()
 	if err := cli.Reload(); err != nil {
 		return fmt.Errorf("reload Azure profile before switching (no changes made): %w", err)
+	}
+	if fromPrevious {
+		subscription, err = revalidatePrevious(cli, subscription)
+		if err != nil {
+			return err
+		}
 	}
 	current, err := cli.ActiveSubscription()
 	previous := ""
@@ -366,6 +381,25 @@ func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies
 	}
 	recordHistory(command, cli, deps, subscription)
 	return nil
+}
+
+// Prompts run without the lock. Only the same subscription/tenant/cloud
+// identity may reuse the selection and its protection confirmation.
+func revalidatePrevious(cli azcli.CLI, selected profile.Subscription) (profile.Subscription, error) {
+	id, err := state.Load(cli.ConfigDir())
+	if err != nil {
+		return profile.Subscription{}, err
+	}
+	if !strings.EqualFold(id, selected.Id) {
+		return profile.Subscription{}, errors.New("previous subscription changed; retry the switch")
+	}
+	for _, fresh := range cli.Subscriptions() {
+		if strings.EqualFold(fresh.Id, selected.Id) && strings.EqualFold(fresh.Tenant, selected.Tenant) &&
+			strings.EqualFold(fresh.Environment, selected.Environment) {
+			return fresh, nil
+		}
+	}
+	return profile.Subscription{}, &ExitError{Code: CodeNoMatch, Message: fmt.Sprintf("previous subscription %s is no longer available; retry the switch", id), Status: ExitNoMatch}
 }
 
 func getActiveSubscription(command *cobra.Command, cli azcli.CLI, cfg config.Config) error {
