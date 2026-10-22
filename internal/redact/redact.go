@@ -22,12 +22,15 @@ const (
 // keys are judged whole while ordinary paths are still emitted per segment.
 // Call Flush at EOF to emit a final, unterminated safe word.
 type Writer struct {
-	output        io.Writer
-	word          []byte
-	pending       bool
-	separator     bool
-	hiding        bool
-	quote         byte
+	output    io.Writer
+	word      []byte
+	pending   bool
+	separator bool
+	hiding    bool
+	quote     byte
+	// Visible quotes keep punctuation in ordinary strings from ending a field.
+	visibleQuote  byte
+	visibleEscape bool
 	escaped       bool
 	authorization bool
 	// depth counts '[' opened after a secret label; every element is a value.
@@ -66,10 +69,14 @@ func (w *Writer) Write(data []byte) (int, error) {
 }
 
 // hiddenLength skips a suppressed value in one tight loop; long secrets
-// otherwise dominate the per-byte cost.
+// otherwise dominate the per-byte cost. Escapes in visible quotes still need
+// consume to update the quote context, even when their bytes are suppressed.
 func (w *Writer) hiddenLength(data []byte) int {
+	if w.visibleEscape {
+		return 0
+	}
 	for index, value := range data {
-		if secretEnds[value] || value == ']' && w.depth > 0 {
+		if secretEnds[value] || value == ']' && w.depth > 0 || value == '\\' && w.visibleQuote != 0 {
 			return index
 		}
 	}
@@ -96,6 +103,10 @@ func delimiter(value byte) bool { return delimiters[value] }
 
 func secretEnd(value byte) bool { return secretEnds[value] }
 
+func fieldBoundary(value byte) bool {
+	return value == ',' || value == ';' || value == '{' || value == '}'
+}
+
 func base64Byte(value byte) bool {
 	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z' ||
 		value >= '0' && value <= '9' || value == '+' || value == '/'
@@ -115,6 +126,8 @@ func (w *Writer) consume(output *strings.Builder, value byte) {
 		w.consumeQuoted(output, value)
 		return
 	}
+	escaped := w.visibleEscape
+	w.visibleEscape = w.visibleQuote != 0 && !escaped && value == '\\'
 	if w.hiding {
 		if !w.valueEnd(value) {
 			return
@@ -130,7 +143,7 @@ func (w *Writer) consume(output *strings.Builder, value byte) {
 	// word that may still be one standard-base64 value.
 	if delimiter(value) || value == '/' && !base64Word(w.word) {
 		w.finishWord(output)
-		w.consumeDelimiter(output, value)
+		w.consumeDelimiter(output, value, escaped)
 		return
 	}
 	if w.pending && w.separator {
@@ -240,7 +253,7 @@ func (w *Writer) emitSegments(output *strings.Builder) {
 		}
 		w.word = append(w.word, buffered[:index]...)
 		w.finishSegment(output)
-		w.consumeDelimiter(output, '/')
+		w.consumeDelimiter(output, '/', false)
 		buffered = buffered[index+1:]
 	}
 	w.word = append(w.word, buffered...)
@@ -258,14 +271,24 @@ func (w *Writer) emitFirstSegment(output *strings.Builder) {
 	kept := copy(rest[:], w.word[index+1:])
 	w.word = w.word[:index]
 	w.finishSegment(output)
-	w.consumeDelimiter(output, '/')
+	w.consumeDelimiter(output, '/', false)
 	w.word = append(w.word[:0], rest[:kept]...)
 }
 
-func (w *Writer) consumeDelimiter(output *strings.Builder, value byte) {
+func (w *Writer) consumeDelimiter(output *strings.Builder, value byte, escaped bool) {
 	output.WriteByte(value)
+	if escaped {
+		return
+	}
+	if w.consumeQuote(output, value) {
+		return
+	}
+	if w.visibleQuote == 0 && w.depth == 0 && fieldBoundary(value) {
+		w.pending, w.separator, w.authorization = false, false, false
+		return
+	}
 	if value == '\n' || value == '\r' {
-		w.authorization = false
+		w.authorization, w.visibleQuote = false, 0
 		if w.depth == 0 {
 			w.pending, w.separator = false, false
 		}
@@ -277,10 +300,22 @@ func (w *Writer) consumeDelimiter(output *strings.Builder, value byte) {
 	if value == ':' || value == '=' || value == ' ' || value == '\t' {
 		w.separator = true
 	}
-	if w.separator && (value == '"' || value == '\'') {
+}
+
+func (w *Writer) consumeQuote(output *strings.Builder, value byte) bool {
+	if value != '"' && value != '\'' {
+		return false
+	}
+	switch {
+	case value == w.visibleQuote:
+		w.visibleQuote = 0
+	case w.pending && w.separator:
 		w.quote, w.pending = value, false
 		output.WriteString(marker)
+	case w.visibleQuote == 0:
+		w.visibleQuote = value
 	}
+	return true
 }
 
 func (w *Writer) finishWord(output *strings.Builder) {

@@ -112,6 +112,9 @@ values, `AccountKey=`/`SharedAccessKey=` connection-string values,
 `"password": ["…"]`, including split writes. The writer buffers at most 80
 bytes, so shorter unlabelled keys are emitted unchanged. Path segments that
 share an 80-byte window with a recognized key may be hidden with it.
+Labels do not carry across JSON fields: a `token_type` of `Bearer` does not
+hide the following `access_token` key instead of its value. Separators inside
+quoted strings do not end a field, including across streamed writes.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
 
