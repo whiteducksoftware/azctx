@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -9,9 +10,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
 
-const currentJSONInvocation = "azctx -c -o json"
+const (
+	currentJSONInvocation = "azctx -c -o json"
+	productionInvocation  = "azctx prod"
+)
 
 func TestREADMEParserRejectsBrokenInvocation(t *testing.T) {
 	markdown := string(readAgentFile(t, "../README.md"))
@@ -33,8 +39,9 @@ func TestREADMEParserRejectsBrokenInvocation(t *testing.T) {
 	}
 }
 
-func TestBinaryREADMEQuickstart(t *testing.T) {
-	markdown := string(readAgentFile(t, "../README.md"))
+func readmeQuickstartInvocations(t *testing.T, markdown string) []string {
+	t.Helper()
+	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
 	_, section, ok := strings.Cut(markdown, "## 5. Quickstart\n")
 	if !ok {
 		t.Fatal("README quickstart missing")
@@ -47,11 +54,55 @@ func TestBinaryREADMEQuickstart(t *testing.T) {
 			invocations = append(invocations, snippet.text)
 		}
 	}
-	const productionInvocation = "azctx prod"
 	want := []string{"azctx login", "azctx", productionInvocation, "azctx -", currentJSONInvocation, "azctx list --all -o json", "azctx help"}
 	if !slices.Equal(invocations, want) {
 		t.Fatalf("review quickstart execution coverage: %q", invocations)
 	}
+	return invocations
+}
+
+func TestREADMEQuickstartLineEndings(t *testing.T) {
+	markdown := strings.ReplaceAll(string(readAgentFile(t, "../README.md")), "\r\n", "\n")
+	for _, ending := range []struct {
+		name string
+		text string
+	}{
+		{"LF", "\n"},
+		{"CRLF", "\r\n"},
+	} {
+		t.Run(ending.name, func(t *testing.T) {
+			invocations := readmeQuickstartInvocations(t, strings.ReplaceAll(markdown, "\n", ending.text))
+			for _, invocation := range invocations {
+				for _, args := range expandAgentSynopsis(invocation) {
+					if err := parseAgentExample(args, true); err != nil {
+						t.Fatalf("%s: %v", invocation, err)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestREADMEQuickstartOnCRLFCheckout(t *testing.T) {
+	directory := testutil.WorkDir(t)
+	args := []string{
+		"-c", "core.autocrlf=true", "-c", "core.eol=crlf",
+		"checkout-index", "--prefix=" + filepath.ToSlash(directory) + "/", "--", "README.md",
+	}
+	command := exec.Command("git", args...)
+	command.Dir = ".."
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("Git CRLF checkout failed: %v\n%s", err, output)
+	}
+	data := readAgentFile(t, filepath.Join(directory, "README.md"))
+	if !bytes.Contains(data, []byte("\r\n")) || bytes.Count(data, []byte("\r\n")) != bytes.Count(data, []byte("\n")) {
+		t.Fatal("ordinary README Markdown must exercise Git's CRLF conversion, not an LF attribute pin")
+	}
+	readmeQuickstartInvocations(t, string(data))
+}
+
+func TestBinaryREADMEQuickstart(t *testing.T) {
+	invocations := readmeQuickstartInvocations(t, string(readAgentFile(t, "../README.md")))
 	binary, azureDirectory, record := fakeBinary(t, `[
 		{"args":["version","-o","json"],"stdout":"{\"azure-cli\":\"2.61.0\"}"},
 		{"args":["login"]},

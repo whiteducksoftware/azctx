@@ -37,6 +37,11 @@ validate the skill/marketplace manifests and parse documented azctx commands
 without invoking handlers. CI's existing `make test` includes this coverage.
 Documentation parsing accepts LF and CRLF, including multiline shell
 continuations; this does not relax the byte-exact output fixture checks below.
+The generated CLI reference in `docs/cli/*.md` is pinned to LF by
+`.gitattributes`; ordinary Markdown, including README quickstart extraction,
+must also work with Git's CRLF checkouts. `make docs-check` compares generated
+pages byte-for-byte and rejects changed, missing or extra files without
+normalizing line endings.
 For plugin changes also run `claude plugin validate .` and
 `claude plugin validate ./plugins/azctx` when Claude Code is available; report
 an unavailable CLI as a manual acceptance limitation rather than a pass.
