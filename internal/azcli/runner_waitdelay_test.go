@@ -5,10 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,8 +29,7 @@ func TestSuccessfulLoginWithInheritedStderrPipe(t *testing.T) {
 	failure := errors.New("terminal flush failed")
 	for _, outcome := range []string{pipeSuccessOutcome, pipeProcessError, pipeFlushError} {
 		t.Run(outcome, func(t *testing.T) {
-			ready := filepath.Join(testutil.WorkDir(t), "ready")
-			t.Setenv("AZCTX_TEST_CHILD_READY", ready)
+			fixture := testutil.NewInheritedStderr(t)
 			t.Setenv("AZCTX_TEST_CHILD_NO_NEWLINE", "1")
 			t.Setenv("AZCTX_TEST_CHILD_EXIT", "")
 			if outcome == pipeProcessError {
@@ -47,12 +44,16 @@ func TestSuccessfulLoginWithInheritedStderrPipe(t *testing.T) {
 			var stderr bytes.Buffer
 			var terminal io.Writer = &stderr
 			if outcome == pipeFlushError {
-				terminal = failedWriter{failure}
+				terminal = tailFailureWriter{output: &stderr, err: failure}
 			}
+			started := time.Now()
 			result, runErr := runner.Run(ctx, []string{loginCommand}, azcli.Options{
 				Terminal: &azcli.Terminal{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: terminal},
 			})
-			killPipeDescendant(t, ready)
+			if time.Since(started) < 2*time.Second {
+				t.Fatal("login did not wait for the inherited stderr pipe")
+			}
+			fixture.AssertHeld(t)
 			if result.Stderr != "login completed" || ctx.Err() != nil {
 				t.Fatalf("login: result=%+v error=%v context=%v", result, runErr, ctx.Err())
 			}
@@ -74,28 +75,20 @@ func assertInheritedPipeResult(t *testing.T, outcome string, result azcli.Result
 			t.Fatalf("real process error lost: result=%+v error=%v", result, err)
 		}
 	case pipeFlushError:
-		if !errors.Is(err, failure) || result.ExitCode != 0 {
-			t.Fatalf("flush error lost: result=%+v error=%v", result, err)
+		if !errors.Is(err, failure) || result.ExitCode != 0 || stderr != "login " {
+			t.Fatalf("buffered-tail flush error lost: result=%+v error=%v terminal=%q", result, err, stderr)
 		}
 	}
 }
 
-func killPipeDescendant(t *testing.T, ready string) {
-	t.Helper()
-	data, err := os.ReadFile(ready)
-	if err != nil {
-		t.Fatal(err)
+type tailFailureWriter struct {
+	output io.Writer
+	err    error
+}
+
+func (w tailFailureWriter) Write(data []byte) (int, error) {
+	if string(data) == "completed" {
+		return 0, w.err
 	}
-	pid, err := strconv.Atoi(string(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = process.Release() }()
-	if err := process.Kill(); err != nil {
-		t.Error(err)
-	}
+	return w.output.Write(data)
 }

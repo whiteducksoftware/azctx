@@ -2,9 +2,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -25,7 +28,7 @@ const (
 func main() {
 	mode := os.Getenv("AZCTX_TEST_CHILD_MODE")
 	if len(os.Args) > 1 && os.Args[1] == "hold-stderr" {
-		time.Sleep(time.Minute)
+		holdStderr()
 		return
 	}
 	if (strings.HasPrefix(mode, "az-") || mode == ignoreMode) && len(os.Args) > 1 && os.Args[1] == "version" {
@@ -66,10 +69,19 @@ func holdPipe() {
 	}
 	descendant := exec.Command(path, "hold-stderr")
 	descendant.Stderr = os.Stderr
-	if err := descendant.Start(); err != nil {
+	ready, err := descendant.StdoutPipe()
+	if err != nil {
 		panic(err)
 	}
-	if err := os.WriteFile(os.Getenv("AZCTX_TEST_CHILD_READY"), []byte(strconv.Itoa(descendant.Process.Pid)), 0o600); err != nil { //nolint:gosec // Test-owned readiness file.
+	if err := descendant.Start(); err != nil {
+		_ = ready.Close()
+		panic(err)
+	}
+	// Do not exit until the test owns an exit notification for the live holder.
+	_, readErr := io.ReadFull(ready, make([]byte, 1))
+	if err := errors.Join(readErr, ready.Close()); err != nil {
+		_ = descendant.Process.Kill()
+		_ = descendant.Wait()
 		panic(err)
 	}
 	message := "login completed"
@@ -82,6 +94,35 @@ func holdPipe() {
 	}
 	if os.Getenv("AZCTX_TEST_CHILD_EXIT") != "" {
 		os.Exit(7)
+	}
+}
+
+func holdStderr() {
+	connection, err := net.Dial("tcp4", os.Getenv("AZCTX_TEST_PIPE_ADDRESS")) //nolint:gosec // Test-owned loopback lifetime gate, never a real network service.
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = connection.Close() }()
+	if _, err := fmt.Fprintln(connection, os.Getpid()); err != nil {
+		panic(err)
+	}
+	reader := bufio.NewReader(connection)
+	var response string
+	if _, err := fmt.Fscanln(reader, &response); err != nil || response != "ack" {
+		panic(fmt.Errorf("stderr owner handshake: response=%q error=%w", response, err))
+	}
+	fmt.Fprint(os.Stdout, "1")
+	for {
+		_, err := fmt.Fscanln(reader, &response)
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err != nil || response != "held" {
+			panic(fmt.Errorf("stderr lifetime gate: response=%q error=%w", response, err))
+		}
+		if _, err := fmt.Fprintln(connection, "held"); err != nil {
+			panic(err)
+		}
 	}
 }
 
