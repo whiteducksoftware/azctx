@@ -43,6 +43,9 @@ func Run(ctx context.Context, name string, args, env []string, streams Streams) 
 	if ctx.Err() != nil {
 		return 130, ctx.Err()
 	}
+	if errors.Is(err, context.Canceled) {
+		return 130, err
+	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		return ExitCode(exit.ProcessState), nil

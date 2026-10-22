@@ -11,6 +11,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func echoPromptByte(io.Reader, byte) error { return nil }
+
 func readPromptFile(ctx context.Context, input *os.File, data []byte) error {
 	poll := []unix.PollFd{{Fd: int32(input.Fd()), Events: unix.POLLIN}} //nolint:gosec // Native Unix file descriptors are signed 32-bit integers.
 	for {

@@ -81,20 +81,27 @@ type startupFailure struct {
 func foreground(command *exec.Cmd) (func() error, error) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	file, ok := command.Stdin.(*os.File)
-	if !ok || !term.IsTerminal(int(file.Fd())) {
+	if !terminalHandoff || !ok || !term.IsTerminal(int(file.Fd())) {
 		return func() error { return nil }, nil
 	}
 	fd := int(file.Fd())
 	group, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP)
+	if errors.Is(err, unix.ENOTTY) {
+		return func() error { return nil }, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read terminal foreground group: %w", err)
 	}
 	if group != unix.Getpgrp() {
-		return nil, errors.New("azctx is not in the terminal foreground process group")
+		return func() error { return nil }, nil
 	}
+	command.Stdout = terminalOutput(command.Stdout)
+	command.Stderr = terminalOutput(command.Stderr)
 	command.SysProcAttr.Foreground, command.SysProcAttr.Ctty = true, fd
 	return func() error {
-		if err := unix.IoctlSetPointerInt(fd, unix.TIOCSPGRP, group); err != nil {
+		if err := terminalAccess(func() error {
+			return unix.IoctlSetPointerInt(fd, unix.TIOCSPGRP, group)
+		}); err != nil {
 			return fmt.Errorf("restore terminal foreground group: %w", err)
 		}
 		return nil
