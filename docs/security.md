@@ -91,8 +91,12 @@ promise of killing arbitrary descendant processes.
 
 Verbose output, doctor string diagnostics, errors and streamed Azure CLI
 stderr replace recognized token-shaped values with `[REDACTED]`. Filtering
-recognizes JWT-like values, provider prefixes, long opaque words and labelled
-token/secret/password/Bearer values, including split writes.
+recognizes JWT-like values, provider prefixes, long opaque words (including
+80+ character base64 containing `/`) and labelled token/secret/password/Bearer
+values, `AccountKey=`/`SharedAccessKey=` connection-string values,
+`Authorization: Basic` credentials and labelled arrays such as
+`"password": ["…"]`, including split writes. The writer buffers at most 80
+bytes, so shorter unlabelled keys are emitted unchanged.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
 
