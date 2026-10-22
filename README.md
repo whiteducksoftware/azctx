@@ -256,7 +256,8 @@ absent. Marketplace activation still needs manual acceptance.
 Read [CONTRIBUTING](CONTRIBUTING.md), [AGENTS](AGENTS.md) and
 [development](docs/development.md). Run `make check`, `make docs` and
 `make docs-check`; CI rejects stale generated help. Tests use fake az and
-synthetic profiles, never real tenants.
+synthetic profiles, never real tenants. Maintainers run the manual live Azure
+test (`make live-test`) locally against a dedicated test tenant.
 
 Report vulnerabilities privately through [SECURITY](SECURITY.md). Read
 [security boundaries and verification](docs/security.md): diagnostic token

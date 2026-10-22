@@ -81,8 +81,8 @@ identity-only data, not a compliance ledger. Treat both as private.
 files and execute/preview bindings cannot add commands.
 See [CI/CD](ci-cd.md) for export timing and [the CLI contract](cli-contract.md)
 for streams, input/color gates and Azure boolean parsing.
-Development-only `AZCTX_TEST_*` and opt-in nightly variables are not runtime
-configuration; see [integration tests](integration-tests.md).
+Development-only `AZCTX_TEST_*` variables and the manual live test's options are
+not runtime configuration; see [integration tests](integration-tests.md).
 
 ## Project context
 
