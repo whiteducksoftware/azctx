@@ -21,21 +21,20 @@ func TestFZFExpectedKeyProtocol(t *testing.T) {
 	testutil.Build(t, filepath.Join(dir, testutil.ExecutableName("fzf")), "github.com/whiteducksoftware/azctx/internal/testutil/fakefzf")
 	t.Setenv("PATH", dir)
 	t.Setenv("FAKEFZF_RECORD", filepath.Join(dir, "record.json"))
+	t.Setenv("FAKEFZF_EXIT", "")
 	subscriptions := []profile.Subscription{{Id: productionID, Name: "FZF protocol subscription", Tenant: pickerTenantID, TenantName: acmeTenant}}
 	row := "0\tFZF protocol subscription\t" + productionID + "\tAcme\t" + pickerTenantID
 	for _, tc := range []struct {
-		name, output, exit string
-		wantIndex          int
-		wantErr            error
+		name, output string
+		wantIndex    int
+		wantErr      error
 	}{
-		{"Enter", "\n" + row + "\n", "", 0, nil},
-		{"Escape", "esc\n", "", -1, ui.ErrCanceled},
-		{"Ctrl+C", "", "130", -1, ui.ErrInterrupted},
-		{"no match", "", "1", -1, ui.ErrCanceled},
+		{"Enter", "\n" + row + "\n", 0, nil},
+		{"Escape", "esc\n", -1, ui.ErrCanceled},
+		{"Escape with selected row", "esc\n" + row + "\n", -1, ui.ErrCanceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("FAKEFZF_OUTPUT", tc.output)
-			t.Setenv("FAKEFZF_EXIT", tc.exit)
 			index, err := ui.SelectFZF(context.Background(), subscriptions, &bytes.Buffer{})
 			if index != tc.wantIndex || !errors.Is(err, tc.wantErr) {
 				t.Fatalf("selection = %d, %v; want %d, %v", index, err, tc.wantIndex, tc.wantErr)

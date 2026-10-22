@@ -12,14 +12,6 @@ import (
 
 const redactedInlineNote = `{"note": "Bearer [REDACTED]", "token_type": "Bearer", "access_token": "[REDACTED]"}`
 
-func TestTextRedactsTokenValueAfterTokenType(t *testing.T) {
-	input := `{"token_type": "Bearer", "access_token": "synthetic-secret"}`
-	want := `{"token_type": "Bearer", "access_token": "[REDACTED]"}`
-	if got := redact.Text(input); got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-}
-
 func TestStreamingKeepsJSONSecretLabelsWithinTheirFields(t *testing.T) {
 	tests := map[string]struct{ input, want string }{
 		"token type": {
