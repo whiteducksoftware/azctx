@@ -54,8 +54,8 @@ Default locations follow Go's `os.UserConfigDir` and `os.UserCacheDir`:
 | macOS | `$HOME/Library/Application Support/azctx` | `$HOME/Library/Caches/azctx` |
 | Windows | `%AppData%\\azctx` | `%LocalAppData%\\azctx` |
 
-The first directory holds `config.yaml`, `state.json`, `history.json` and
-`history.lock`. The cache holds `update.json` and `update.json.lock`.
+The first directory holds `config.yaml`, `state.json`, `state.lock`,
+`history.json` and `history.lock`. The cache holds `update.json` and `update.json.lock`.
 Windows private configuration resolution requires `AppData`; cache resolution
 requires `LocalAppData`. These are not Azure CLI paths.
 Missing user configuration remains absent until a user edit such as alias set.
@@ -140,6 +140,14 @@ tenant/name/ID order; query candidates retain stable profile order within
 equal priority. Non-interactive ambiguities still exit 2 with full candidates.
 `state.json` retains the previous ID and adds `recentSubscriptionIds`; failed
 Azure switches roll both back. `azctx -` continues to swap previous/current.
+Each switch holds the retained private `state.lock` from reading `state.json`
+through `az account set`, any rollback and the history append, so concurrent
+switches run one after another instead of losing previous/recent IDs. A waiting
+switch can be canceled with Ctrl+C (exit 130) without changes. A rollback
+restores the exact previous bytes only while the file still holds its own
+update; if another writer changed it meanwhile, the newer state is kept and the
+original switch error is reported together with that restore error. Read-only
+commands such as `list`, `-c`, `env`, `exec` and `guard` never take this lock.
 Recent IDs are only ranking data; the separate history log is described below.
 
 Configured hidden subscriptions/tenants are excluded from selection, lists and
@@ -154,7 +162,8 @@ A protected subscription or token tenant requires a default-no confirmation
 on stderr before **any** switch route (query, alias, picker or previous).
 Without interactive input, or with JSON output, use `azctx --yes QUERY`
 or `azctx tenant --yes TENANT_QUERY` when that tenant has one subscription.
-Declining leaves Azure and private state unchanged; Ctrl+C remains exit 130.
+Declining (including the default `N`) exits 1 with `switch canceled; no changes
+made` and leaves Azure, private state and history unchanged; Ctrl+C remains exit 130.
 `azctx -c` text marks the current subscription `[protected]`; JSON schema 1
 and the `id`, `name` and `tenant` formats remain unchanged.
 
