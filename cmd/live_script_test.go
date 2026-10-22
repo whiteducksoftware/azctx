@@ -76,7 +76,7 @@ func runLiveScript(t *testing.T, steps []map[string]any, optIn bool) (int, strin
 	}
 	binary, _, record := fakeBinary(t, string(data))
 	t.Setenv("FAKEAZ_ENV_KEYS", "AZCTX_CONFIG_DIR,AZCTX_NO_INPUT,AZCTX_NO_UPDATE_CHECK")
-	work := t.TempDir()
+	work := testutil.WorkDir(t)
 	for _, key := range []string{"TMPDIR", "TEMP", "TMP"} {
 		t.Setenv(key, work)
 	}
