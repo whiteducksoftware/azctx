@@ -12,8 +12,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-readiness:
+    if: github.repository == 'whiteducksoftware/azctx'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Block release until native publishing has supported egress enforcement
+        shell: bash
+        run: |
+          echo '::error::BLOCKED (#98): native Chocolatey publishing has audit-only egress on hosted Windows. Native macOS style also has audit-only egress. A reviewed, supported enforcement design and native acceptance are required before release.' >&2
+          exit 1
+
   goreleaser-linux:
     name: goreleaser-linux
+    needs: release-readiness
     if: github.repository == 'whiteducksoftware/azctx'
     runs-on: ubuntu-latest
     environment: release
@@ -98,7 +111,6 @@ jobs:
     needs: goreleaser-linux
     if: ${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}
     runs-on: macos-latest
-    environment: release
     timeout-minutes: 30
     permissions:
       contents: read
@@ -110,6 +122,7 @@ jobs:
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           # Harden-Runner v2.22.2 supports audit only on hosted macOS.
+          # Native enforcement acceptance remains blocked by release-readiness.
           egress-policy: audit
 
       - name: Checkout
@@ -121,13 +134,51 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: homebrew-cask
-          path: .release-check/cask
+          path: release-cask/Casks
           digest-mismatch: error
 
       - name: Normalize and check native Homebrew style
         run: |
-          brew style --fix .release-check/cask/azctx.rb
-          brew style .release-check/cask/azctx.rb
+          brew style --fix release-cask/Casks/azctx.rb
+          brew style release-cask/Casks/azctx.rb
+
+      - name: Transfer only the normalized style-checked cask
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: homebrew-cask-normalized
+          path: release-cask/Casks/azctx.rb
+          if-no-files-found: error
+          retention-days: 1
+
+  homebrew-publish:
+    name: homebrew-publish
+    needs: homebrew
+    if: ${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443 api.github.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download normalized cask from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: homebrew-cask-normalized
+          path: .release-check/cask
+          digest-mismatch: error
 
       - name: Create tap token
         id: publisher-token
@@ -153,9 +204,7 @@ jobs:
     environment: release
     timeout-minutes: 60
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
     env:
       RELEASE_MAKE_LATEST: ${{ vars.RELEASE_MAKE_LATEST || 'false' }}
       SYFT_CHECK_FOR_APP_UPDATE: 'false'
@@ -164,6 +213,7 @@ jobs:
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           # Harden-Runner v2.22.2 supports audit only on hosted Windows.
+          # Native enforcement acceptance remains blocked by release-readiness.
           egress-policy: audit
 
       - name: Checkout
@@ -192,6 +242,92 @@ jobs:
         with:
           syft-version: v1.55.0
 
+      - name: Build native Windows packages without publishing
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.18.3
+          args: release --clean --skip=publish --config .goreleaser-windows.yaml ${{ contains(github.ref_name, '-') && '--skip=chocolatey' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Transfer only archives, checksums, SBOMs and real winget manifests
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-release-files
+          path: |
+            dist/*.zip
+            dist/*_Windows_checksums.txt
+            dist/*.sbom.json
+            dist/winget/**/*.yaml
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Push the native Chocolatey package
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)) { throw 'Chocolatey publishing requires its explicit API key' }
+          $packages = @(Get-ChildItem dist/azctx.*.nupkg)
+          if ($packages.Count -ne 1) { throw 'Expected exactly one native Chocolatey package' }
+          choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+
+  windows-publish:
+    name: windows-publish
+    needs: goreleaser-windows
+    if: github.repository == 'whiteducksoftware/azctx'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443 api.github.com:443 uploads.github.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
+            fulcio.sigstore.dev:443 rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443 tuf-repo.github.com:443
+            timestamp.github.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download Windows release files from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-release-files
+          path: .release-check/windows
+          digest-mismatch: error
+
+      - name: Upload verified Windows release assets
+        run: gh release upload "$RELEASE_TAG" .release-check/windows/*.zip .release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Attest archives
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: .release-check/windows/*.zip
+          create-storage-record: false
+
+      - name: Verify stable winget manifests against the downloaded archives
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: ruby .github/scripts/publish_winget.rb --check
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
       - name: Create winget fork token
         if: ${{ !contains(github.ref_name, '-') }}
         id: publisher-token
@@ -203,19 +339,9 @@ jobs:
           repositories: winget-pkgs
           permission-contents: write
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        with:
-          distribution: goreleaser
-          version: v2.18.3
-          args: release --clean --config .goreleaser-windows.yaml ${{ contains(github.ref_name, '-') && '--skip=chocolatey' || '' }}
+      - name: Publish only the verified winget version branch
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: ruby .github/scripts/publish_winget.rb
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          WINGET_TOKEN: ${{ steps.publisher-token.outputs.token }}
-          CHOCO_API_KEY: ${{ !contains(github.ref_name, '-') && secrets.CHOCO_API_KEY || '' }}
-
-      - name: Attest archives
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: dist/*.zip
-          create-storage-record: false
+          GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
+          RELEASE_TAG: ${{ github.ref_name }}

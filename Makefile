@@ -24,6 +24,7 @@ ci-check:
 	ruby .github/scripts/test_ci_config.rb
 	ruby .github/scripts/test_integration_config.rb
 	ruby .github/scripts/test_release_config.rb
+	ruby .github/scripts/test_publish_winget.rb
 
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1

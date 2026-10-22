@@ -59,7 +59,10 @@ These settings do not publish anything or change release workflow permissions.
 See [release configuration](docs/releasing.md) for publisher-disabled packaging
 checks, the native Windows Chocolatey requirement and native Homebrew
 normalization. Release configuration is separate from #100 go-live work; do not
-publish or create tags to validate it.
+publish or create tags to validate it. Release readiness is explicitly blocked
+on supported native Windows/macOS egress enforcement; the tag workflow fails closed
+before publication. Native macOS only formats/transfers a credential-free cask;
+portable cask, winget and Windows-asset publishers use Ubuntu block mode.
 
 Tests use injected dependencies and a portable fake `az`; no Azure CLI
 installation, Azure login, real tenant or credentials are needed for checks.
