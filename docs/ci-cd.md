@@ -143,10 +143,18 @@ it prints nothing on stdout. Variables become available to **subsequent steps**,
 not the shell running the export. A missing/relative/unwritable/nonregular file
 or a destination inside Azure configuration is an explicit error; azctx does not
 create the file or fall back to printing exports. Symlink/hard-linked files are
-rejected. Existing contents are retained, adding a separator LF if needed, by
-atomic same-directory replacement with a private file. The parent directory's
-permissions are unchanged; the existing file is limited to 8 MiB. Do not share
-one environment file between concurrent writers.
+rejected. Existing contents are retained: azctx appends in place through one
+`O_APPEND` handle (no-follow on Unix; append-only without delete sharing on
+Windows), adding a separator LF first if needed, in a single write. The file
+keeps its inode, owner and mode, so container jobs whose step user differs from
+the runner user (for example root in the container) leave it readable by the
+runner. azctx needs write permission on the file only, never on its directory,
+and never changes either's permissions. After opening it re-checks that the
+handle is still the same single-link regular file at the validated path; a swap
+or new hard link is refused without writing. The existing file is limited to
+8 MiB. Open, write (including partial-write) and close failures are reported;
+a partial write can leave a truncated last line. Do not share one environment
+file between concurrent writers.
 
 ## Azure DevOps: workload identity service connection
 

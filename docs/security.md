@@ -43,8 +43,13 @@ on Unix; existing permissions are tightened where the writer requires it.
 Windows ACLs follow the user's filesystem policy, not a POSIX-mode guarantee.
 Paths inside either resolved or environment Azure configuration are rejected,
 including existing symlink targets.
-`env --format github` replaces the existing validated `GITHUB_ENV` file
-atomically; its parent permissions are unchanged. No tokens are exported.
+`env --format github` is not a private azctx write: it appends in place to the
+runner-owned `GITHUB_ENV` through one no-follow `O_APPEND` handle (Windows:
+append-only, reparse points opened rather than followed, no delete sharing),
+preserving its inode, owner and mode and leaving its parent untouched. It
+re-checks after opening that the handle is the validated single-link regular
+file outside Azure configuration, and reports open, partial-write and close
+errors. No tokens are exported.
 
 The private history records UTC completion time, previous/new subscription and
 token tenant GUIDs, cloud and terminal/script source, never names, queries or
