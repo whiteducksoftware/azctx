@@ -1,0 +1,109 @@
+name: release configuration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  snapshot:
+    name: packages (${{ matrix.os }}, ${{ matrix.channel }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        channel: [stable, rc]
+        include:
+          - os: ubuntu-latest
+            mode: unix
+          - os: macos-latest
+            mode: unix
+          - os: windows-latest
+            mode: windows
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download Syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.55.0
+
+      - name: Install GoReleaser and check configuration only
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.18.3
+          args: check --config .goreleaser.yaml
+
+      - name: Check Windows configuration
+        run: goreleaser check --config .goreleaser-windows.yaml
+
+      - name: Build publisher-disabled packages
+        shell: bash
+        run: ruby .github/scripts/release_snapshot.rb "$SNAPSHOT_MODE" "$SNAPSHOT_CHANNEL"
+        env:
+          SNAPSHOT_MODE: ${{ matrix.mode }}
+          SNAPSHOT_CHANNEL: ${{ matrix.channel }}
+
+      - name: Native Homebrew normalization and style
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cask=".release-check/unix-$SNAPSHOT_CHANNEL/homebrew/Casks/azctx.rb"
+          brew style --fix "$cask"
+          brew style "$cask"
+        env:
+          SNAPSHOT_CHANNEL: ${{ matrix.channel }}
+
+      - name: Validate winget against Microsoft schemas
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./.github/scripts/check_winget.ps1 -Directory ".release-check/windows-$env:SNAPSHOT_CHANNEL/winget"
+        env:
+          SNAPSHOT_CHANNEL: ${{ matrix.channel }}
+
+      - name: Validate native Chocolatey package contents
+        if: runner.os == 'Windows' && matrix.channel == 'stable'
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $packages = @(Get-ChildItem .release-check/windows-stable/*.nupkg)
+          if ($packages.Count -ne 1) { throw 'expected a native Chocolatey package' }
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($packages[0].FullName)
+          try {
+            $entry = $zip.GetEntry('azctx.nuspec')
+            if ($null -eq $entry) { throw 'missing packaged nuspec' }
+            $reader = [System.IO.StreamReader]::new($entry.Open())
+            try { [xml]$spec = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            if ($spec.package.metadata.authors -ne 'white duck GmbH' -or
+                $spec.package.metadata.owners -ne 'white duck GmbH' -or
+                $spec.package.metadata.dependencies.dependency.id -ne 'azure-cli' -or
+                ($spec.package.metadata.dependencies.dependency.version -replace ' ', '') -notin @('2.61.0', '[2.61.0,)')) {
+              throw 'invalid packaged Chocolatey metadata'
+            }
+          } finally { $zip.Dispose() }

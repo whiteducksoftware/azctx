@@ -70,26 +70,17 @@ end
          "#{name} must remain a publisher-disabled snapshot")
 end
 
-expected_ignores = {
-  'artipacked' => %w[goreleaser.yaml:17 goreleaser.yaml:48],
-  'excessive-permissions' => %w[goreleaser.yaml:9 goreleaser.yaml:10],
-  'cache-poisoning' => %w[goreleaser.yaml:25 goreleaser.yaml:56]
-}
-assert(rules.keys.sort == expected_ignores.keys.sort, 'only release-debt audit exceptions are permitted')
-expected_ignores.each do |rule, locations|
-  assert(rules.fetch(rule) == { 'ignore' => locations },
-         "#{rule} must have only its exact release-workflow exceptions")
+assert(rules == {}, 'release hardening must remove all scanner-debt exceptions')
+assert(release.fetch('permissions') == {}, 'release must deny workflow-level permissions')
+release.fetch('jobs').each do |name, job|
+  job.fetch('steps').each do |step|
+    if step.fetch('uses', '').start_with?('actions/setup-go@')
+      assert(step.fetch('with').fetch('cache') == false, "#{name} must not write release caches")
+    elsif step.fetch('uses', '').start_with?('actions/checkout@')
+      assert(step.fetch('with').fetch('persist-credentials') == false, "#{name} must not persist credentials")
+    end
+  end
 end
-
-release_lines = File.readlines('.github/workflows/goreleaser.yaml')
-expected_ignores.fetch('cache-poisoning').each do |location|
-  line = location.split(':').last.to_i
-  assert(release_lines.fetch(line - 1).include?('- name: Set up Go'),
-         "#{location} must still identify the release setup-go step")
-end
-assert(release.fetch('jobs').values.all? do |job|
-  job.fetch('steps').any? { |step| step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
-end, 'cache exceptions apply only to the existing release jobs')
 
 assert([nil, 'auto'].include?(ci.fetch('env', {})['GOTOOLCHAIN']),
        'CI must permit automatic selection of the go.mod toolchain')
@@ -170,4 +161,4 @@ assert(ci.fetch('jobs').fetch('test').fetch('strategy').fetch('matrix').fetch('o
        ci.fetch('jobs').fetch('test').fetch('steps').any? { |step| step['run'] == 'make test' },
        'all three native platforms must run correctness and completion performance acceptance')
 
-puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; exact release exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness and native completion acceptance'
+puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness and native completion acceptance'

@@ -1,18 +1,22 @@
 version: 2
 
+release:
+  prerelease: auto
+  make_latest: "{{ .Env.RELEASE_MAKE_LATEST }}"
+
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - env:
+  - id: linux
+    env:
       - CGO_ENABLED=0
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
       - arm
@@ -22,15 +26,58 @@ builds:
       - -X github.com/whiteducksoftware/azctx/internal/version.Version={{.Version}}
       - -X github.com/whiteducksoftware/azctx/internal/version.BuildDate={{.CommitDate}}
       - -X github.com/whiteducksoftware/azctx/internal/version.Commit={{.FullCommit}}
+  - id: macos
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/whiteducksoftware/azctx/internal/version.Version={{.Version}}
+      - -X github.com/whiteducksoftware/azctx/internal/version.BuildDate={{.CommitDate}}
+      - -X github.com/whiteducksoftware/azctx/internal/version.Commit={{.FullCommit}}
 
 changelog:
   sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^.github:"
-      - "^.vscode:"
+  groups:
+    - title: Breaking changes
+      regexp: '^[[:alnum:]_]+(\([^)]*\))?!:'
+      order: 0
+    - title: Features
+      regexp: '^feat(\([^)]*\))?:'
+      order: 1
+    - title: Fixes
+      regexp: '^fix(\([^)]*\))?:'
+      order: 2
+    - title: Performance
+      regexp: '^perf(\([^)]*\))?:'
+      order: 3
+    - title: Refactoring
+      regexp: '^refactor(\([^)]*\))?:'
+      order: 4
+    - title: Documentation
+      regexp: '^docs(\([^)]*\))?:'
+      order: 5
+    - title: Tests
+      regexp: '^test(\([^)]*\))?:'
+      order: 6
+    - title: Build
+      regexp: '^build(\([^)]*\))?:'
+      order: 7
+    - title: CI
+      regexp: '^ci(\([^)]*\))?:'
+      order: 8
+    - title: Chores
+      regexp: '^chore(\([^)]*\))?:'
+      order: 9
+    - title: Other
+      order: 10
 
 sboms:
   - id: archive
@@ -41,8 +88,20 @@ sboms:
     cmd: syft
 
 archives:
-  - formats: [ 'tar.gz' ]
+  - id: linux
+    ids: [linux]
+    formats: [ 'tar.gz' ]
     # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+  - id: macos
+    ids: [macos]
+    formats: [ 'tar.gz' ]
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -54,23 +113,28 @@ archives:
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_Darwin_Linux_checksums.txt"
 
-brews:
+homebrew_casks:
   - name: azctx
+    ids: [macos]
+    binaries: [azctx]
+    skip_upload: auto
     repository:
       owner: whiteducksoftware
       name: homebrew-tap
       branch: main
-      token: "{{ .Env.AUTH_GITHUB }}"
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     dependencies:
-      - azure-cli
-    url_template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+      - formula: azure-cli
+    url:
+      template: "https://github.com/whiteducksoftware/azctx/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: "{{ .Env.GITHUB_ACTOR }}"
       email: "{{ .Env.GITHUB_ACTOR_ID }}+{{ .Env.GITHUB_ACTOR }}@users.noreply.github.com"
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-    directory: Formula
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Casks
     homepage: "https://github.com/whiteducksoftware/azctx"
-    description: "Faster switching between Azure Subscriptions in your Azure CLI"
-    license: "MIT"
-    install: |
-      bin.install "azctx"
+    description: "Switch Azure CLI subscriptions"
+    custom_block: |
+      postflight_steps do
+        run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/azctx"]
+      end
