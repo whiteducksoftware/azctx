@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -179,6 +180,7 @@ func agentCommandSnippets(markdown string) []agentSnippet {
 	inline := regexp.MustCompile("`(azctx(?:[ \\t]+[^`\\n]*)?)`")
 	command := regexp.MustCompile(`(?:^|[ \t"($])(azctx(?:[ \t]+.*|$))`)
 	fenced := false
+	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
 	markdown = strings.ReplaceAll(markdown, "\\\n", " ")
 	for line := range strings.SplitSeq(markdown, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
@@ -282,5 +284,67 @@ func TestAgentDocumentParserRejectsBrokenExamples(t *testing.T) {
 	snippets := agentCommandSnippets("`azctx list -o json`\n```sh\nx=\"$(azctx env \\\n --shell bash)\"\n```\n")
 	if len(snippets) != 2 || !snippets[1].invocation {
 		t.Fatalf("lost inline or embedded multiline shell example: %+v", snippets)
+	}
+}
+
+func TestAgentDocumentParserLineEndings(t *testing.T) {
+	for _, ending := range []struct {
+		name string
+		text string
+	}{
+		{"LF", "\n"},
+		{"CRLF", "\r\n"},
+	} {
+		t.Run(ending.name, func(t *testing.T) {
+			for _, example := range []struct {
+				name      string
+				text      string
+				args      []string
+				wantError string
+			}{
+				{
+					name: "continued guard flags",
+					text: "azctx guard \\\n  --subscription 11111111-1111-1111-1111-111111111111 \\\n  --tenant aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+					args: []string{"guard", "--subscription", "11111111-1111-1111-1111-111111111111", "--tenant", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
+				},
+				{
+					name: "embedded continued command",
+					text: "context_env=\"$(azctx env \\\n  --shell bash)\"",
+					args: []string{"env", "--shell", envBashSyntax},
+				},
+				{
+					name:      "invalid continued flag",
+					text:      "azctx guard \\\n  --invented",
+					args:      []string{"guard", "--invented"},
+					wantError: "unknown flag: --invented",
+				},
+				{
+					name:      "invalid continued subcommand",
+					text:      "azctx auth \\\n  nonexistent",
+					args:      []string{"auth", "nonexistent"},
+					wantError: `unknown command "nonexistent" for "azctx auth"`,
+				},
+			} {
+				t.Run(example.name, func(t *testing.T) {
+					markdown := strings.ReplaceAll("```sh\n"+example.text+"\n```\n", "\n", ending.text)
+					snippets := agentCommandSnippets(markdown)
+					if len(snippets) != 1 || !snippets[0].invocation {
+						t.Fatalf("expected one executable snippet, got %+v", snippets)
+					}
+					args := expandAgentSynopsis(snippets[0].text)
+					if len(args) != 1 || !slices.Equal(args[0], example.args) {
+						t.Fatalf("continued arguments: got %q, want %q", args, example.args)
+					}
+					err := parseAgentExample(args[0], snippets[0].invocation)
+					if example.wantError == "" {
+						if err != nil {
+							t.Fatal(err)
+						}
+					} else if err == nil || !strings.Contains(err.Error(), example.wantError) {
+						t.Fatalf("got %v, want error containing %q", err, example.wantError)
+					}
+				})
+			}
+		})
 	}
 }
