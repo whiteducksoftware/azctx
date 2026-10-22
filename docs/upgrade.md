@@ -1,7 +1,93 @@
 # Upgrading to azctx 2026.11
 
-This guide tracks breaking changes from 2024.12.5. Later release layers add
-their changes to the table below.
+This guide covers breaking changes from 2024.12.5 to the unreleased 2026.11
+source contract. It is not notice that 2026.11 is published.
+[Release readiness is blocked](releasing.md) on supported native Windows/macOS
+egress enforcement; the tag workflow fails closed before any publisher.
+Keep a working installation until its replacement is actually available.
+
+## Package manager commands after publication
+
+These are **future stable-release** instructions. Verify package availability
+and provenance first. Do not run them to test a draft release.
+
+### macOS Homebrew
+
+The formula becomes a macOS-only cask. After the cask is published and tap trust
+is established, migrate explicitly:
+
+```sh
+brew uninstall --formula azctx
+brew install --cask whiteducksoftware/tap/azctx
+```
+
+Once already on the cask:
+
+```sh
+brew upgrade --cask whiteducksoftware/tap/azctx
+```
+
+macOS 13+ is required. Binaries are unsigned/not notarized; the cask declares
+staged-binary quarantine removal, not Apple signing.
+No tap migration or cask installation was performed here.
+
+### Windows Chocolatey
+
+After the stable package is published and accepted:
+
+```powershell
+choco upgrade azctx --version=2026.11.0
+```
+
+For a new installation use `choco install azctx --version=2026.11.0`.
+Azure CLI >=2.61.0 is a package dependency. Windows 10+ and amd64/arm64 are
+required; the old 32-bit Windows ARM port is gone.
+Do not install the same binary through multiple package managers.
+
+### Windows winget
+
+The generated fork branch does not publish to the community index.
+A maintainer must manually open the upstream winget PR and await acceptance
+before these commands work for 2026.11:
+
+```powershell
+winget upgrade --exact --id whiteducksoftware.azctx --version 2026.11.0
+```
+
+For a new installation use
+`winget install --exact --id whiteducksoftware.azctx --version 2026.11.0`.
+The manifest requires `Microsoft.AzureCLI` >=2.61.0. Native schema/package
+checks do not establish index availability or an installed upgrade.
+
+### Linux and manual release binaries
+
+Homebrew Linux publication ends. A Linux formula user must deliberately move
+to a verified archive after publication:
+
+```sh
+brew uninstall --formula azctx
+```
+
+Download the archive for Linux amd64 (`azctx_Linux_x86_64.tar.gz`), arm64
+(`azctx_Linux_arm64.tar.gz`) or ARMv6 (`azctx_Linux_armv6.tar.gz`), verify it as
+described in [security](security.md#verify-a-release), then replace the old
+binary in a directory on PATH. macOS uses `azctx_Darwin_x86_64.tar.gz` or
+`azctx_Darwin_arm64.tar.gz`; Windows uses `azctx_Windows_x86_64.zip` or
+`azctx_Windows_arm64.zip`.
+
+For example, after verifying the Linux amd64 archive:
+
+```sh
+tar -xzf azctx_Linux_x86_64.tar.gz azctx
+install -m 0755 azctx "$HOME/.local/bin/azctx"
+azctx version -o json
+```
+
+Create the destination directory and add it to PATH first. Windows archive
+users can use `Expand-Archive .\azctx_Windows_x86_64.zip -DestinationPath .\azctx-2026.11`
+and replace their previous manually managed binary. Never overwrite a
+package-manager-owned file manually. A matching checksum and valid provenance,
+not the filename alone, establish the bytes being installed.
 
 ## Breaking changes
 
@@ -46,7 +132,7 @@ their changes to the table below.
 | First login | `azctx login` can start without an Azure directory or profile, still checking the minimum Azure CLI version before sign-in. | Fresh installations and new `AZURE_CONFIG_DIR` locations. | Let the wrapped Azure CLI create its own files. azctx never creates them; listing and switching still require an existing readable profile. Malformed existing settings remain explicit errors. |
 | Broker-aware login | Progress follows effective Windows WAM/macOS broker/browser settings. macOS broker is a 2.91.0+ opt-in preview requiring an enrolled device and Enterprise SSO plug-in. | Interactive sign-in users. | Follow the matching account picker/browser instructions; settings and `AZURE_CORE_*` overrides are respected. |
 | Friendly login flags and headless hints | `azctx login --use-device-code` and `--tenant <name\|id>` no longer need `--`. SSH/Codespaces/devcontainer sessions and Linux without displays get a device-code suggestion before sign-in. | First-login and remote users. | Use a tenant GUID without a profile; fuzzy profile names/domains must identify one active-cloud tenant. Do not combine friendly `--tenant` with `--all-tenants` or another passthrough tenant flag. Other flags still go after `--`. |
-| MFA-aware multi-tenant login | `--force-mfa` is removed. Ordinary login lists documented failed tenants and offers one default-yes confirmation to retry only MFA-required/registration tenants (50076/50079); Conditional Access blocks (53003) are explained, other errors remain verbatim. | Multi-tenant users, scripts and workload identities. | Use plain `azctx login` for targeted recovery or `--all-tenants` for explicit discovery through `az account tenant list`. Known non-retryable failures are never repeated. No-input/CI/piped runs list initial failures without retry/discovery and exit **3**; unresolved/declined/partial sign-ins also exit 3. Completed attempts summarize reloaded profile totals. `--identity`/`-i` and `--service-principal` passthrough skip retry/discovery, even with `--all-tenants`. See [authentication](authentication.md); live-tenant acceptance is unverified. |
+| MFA-aware multi-tenant login | `--force-mfa` is removed. Ordinary login lists documented failed tenants and offers one default-yes confirmation to retry only MFA-required/registration tenants (50076/50079); Conditional Access blocks (53003) are explained, other diagnostics are retained subject to heuristic redaction. | Multi-tenant users, scripts and workload identities. | Use plain `azctx login` for targeted recovery or `--all-tenants` for explicit discovery through `az account tenant list`. Known non-retryable failures are never repeated. No-input/CI/piped runs list initial failures without retry/discovery and exit **3**; unresolved/declined/partial sign-ins also exit 3. Completed attempts summarize reloaded profile totals. `--identity`/`-i` and `--service-principal` passthrough skip retry/discovery, even with `--all-tenants`. See [authentication](authentication.md); live-tenant acceptance is unverified. |
 | Confirmed broker controls | New `auth broker status\|enable\|disable`; enable/disable explicitly confirm `az account clear`, persisted platform `az config set`, then attached `az login`. This is the sole Azure-configuration-write exception; azctx still never directly writes Azure files or accesses credentials/token caches. | Windows >=2.61.0 and macOS >=2.91.0 users changing broker mode. | Confirm on a TTY or use `--yes` explicitly. No-input/CI/piped runs without confirmation, conflicting environment overrides and unsupported platforms/versions cannot mutate. Failures stop at the first step; retry login if settings persisted. |
 | Offline doctor | New profile-independent `azctx doctor [-o text\|json]` reports version/path, cached update status, profile/settings/cloud/account types and manual leftover tenant-file cleanup. No live update/Azure request, credentials or identities are printed. | Troubleshooting users and support automation. | Consume the separate doctor schema-1 JSON report on stdout; warnings are findings, not failed commands. The legacy file is only statted, never read/deleted. See [authentication](authentication.md). |
 | New command names and cancellation | `auth` and `doctor` are command names; explicitly canceled command contexts preserve interruption status 130. | Users with equally named subscriptions and embedded command callers. | Use `azctx -- auth` or `azctx -- doctor` for literal subscription queries. Existing stdout/error envelopes and subscription DTOs remain unchanged. |
@@ -72,14 +158,14 @@ their changes to the table below.
 
 | Area | Change | Who is affected | What to do |
 | --- | --- | --- | --- |
-| Agent Skill and Claude plugin | Versioned `skills/azctx/` guidance and an optional Claude Bash `PreToolUse` guard are available through this repository's plugin marketplace. | Claude Code, Copilot, Codex and Cursor users. | See the draft [AI agent guide](ai-agents.md). Inspect JSON context, use explicit Azure CLI subscription IDs and isolated exec for environment-aware tools; leave authentication/protected switching to the user. The hook needs Python 3.10+ and azctx on PATH; absent azctx/project emits a notice and allows, any guard failure blocks. These mistake-reduction tools are no security boundary: Azure RBAC, PIM and Conditional Access still control access. |
+| Agent Skill and Claude plugin | Versioned `skills/azctx/` guidance and an optional Claude Bash `PreToolUse` guard are included in the source. | Claude Code, Copilot, Codex and Cursor users. | See [AI agents](ai-agents.md). Inspect JSON context, use explicit Azure CLI subscription IDs and isolated exec for environment-aware tools; leave authentication/protected switching to the user. The hook needs Python 3.10+ and azctx on PATH; absent azctx/project emits a notice and allows, any guard failure blocks. Marketplace activation remains manual acceptance. These mistake-reduction tools are no security boundary: Azure RBAC, PIM and Conditional Access still control access. |
 
 ## Upgrade checklist
 
 - Check the breaking changes above before upgrading.
 - Choose a binary for your operating system and architecture: Linux
   (`amd64`, `arm64`, `arm`), macOS (`amd64`, `arm64`), or Windows (`amd64`, `arm64`).
-- Follow the [installation instructions](../README.md#installation) for your
+- Follow the [installation instructions](../README.md#3-install) for your
   package manager or binary installation.
 
 ## Contributor and maintenance changes
@@ -87,7 +173,8 @@ their changes to the table below.
 | Area | Change | Who is affected | What to do |
 | --- | --- | --- | --- |
 | CI checks | Every pull request (including stacked branches) and push to `main` runs race-enabled tests on Linux, macOS and Windows, Go/workflow linting, module verification and vulnerability scanning; Linux and Windows snapshot builds never publish. | Contributors. | Run `make check` before opening a PR and resolve failing checks. All reachable vulnerability findings and scanner errors fail; the layer 02 temporary x/text exceptions have been removed after the dependency upgrade. |
-| Hardening checks and reproducibility | Six strict linters and assertion checks are explicitly enabled; CI fuzzes each of the profile/config/project parsers for 60 seconds. Builds disable CGO, use `-trimpath` and GoReleaser derives binary timestamps and `BuildDate` from the commit. | Contributors and binary builders. | Run `make check` and `make fuzz`; the latter uses only offline synthetic corpora. Release workflow permissions/environments remain layer-17 work. Branch configuration is not evidence of a clean remote-main OpenSSF Scorecard run. |
+| Hardening checks and reproducibility | Six strict linters and assertion checks are explicitly enabled; CI fuzzes each of the profile/config/project parsers for 60 seconds. Builds disable CGO, use `-trimpath` and GoReleaser derives binary timestamps and `BuildDate` from the commit. | Contributors and binary builders. | Run `make check` and `make fuzz`; the latter uses only offline synthetic corpora. See [release configuration](releasing.md) for least-privilege publisher configuration and the native enforcement blocker. Branch configuration is not evidence of a clean remote-main OpenSSF Scorecard run. |
 | Dependency and build metadata | Legacy UI, logging, filesystem and version dependencies are replaced with Bubble Tea/Bubbles/Lip Gloss, sahilm/fuzzy, x/term and the standard library. Both release configs now set `internal/version.Version`, `BuildDate` and `Commit` under the module import path. | Contributors and custom binary builders. | Use the new ldflags when building release binaries; Go build information supplies fallback metadata. Run `make golden` for intentional picker screen updates. The Go 1.26 language floor and preferred Go 1.27.3 toolchain are unchanged. |
 | Dependency updates | Go module and GitHub Actions minor/patch updates are grouped per ecosystem, with a three-day cooldown and at most one open version-update PR per ecosystem. | Maintainers. | Review the weekly grouped updates; major updates remain separate and share the same version-update PR limit. Security updates are not delayed by the cooldown or this limit. |
-| Security posture | OpenSSF Scorecard runs on pushes to `main` and weekly, uploading SARIF to GitHub code scanning without publishing externally. Existing CodeQL remains enabled. | Maintainers. | Review the security results. Release-workflow credential-persistence, broad-permission and setup-go cache findings are precisely location-excepted until layer 17 (#98); snapshot jobs disable setup-go caching and all other workflow audits remain active. |
+| Security posture | OpenSSF Scorecard runs on pushes to `main` and weekly, uploading SARIF to GitHub code scanning without publishing externally. Existing CodeQL remains enabled. | Maintainers. | Review the security results. Release-debt scanner exceptions have been removed; all workflows remain under strict audit. Release setup-go caching is disabled and checkout credentials are not persisted. A public Scorecard badge can be unavailable because results are not publicly published. |
+| Help and generated reference | All public commands now have detailed help and two or three parsed examples; `docs/cli/` is generated with Cobra. | Users and contributors. | Use `azctx help` or per-command `--help`; run `make docs` and `make docs-check` after help edits. CI rejects changed, missing or extra reference files. No selection, authentication, output schema or switching behavior changes in this documentation layer. |

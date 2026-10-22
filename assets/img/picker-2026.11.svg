@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="360" viewBox="0 0 1480 360" role="img" aria-labelledby="title desc">
+<title id="title">azctx built-in subscription picker</title>
+<desc id="desc">Static capture of the actual 160-column picker renderer using synthetic subscription and tenant identities.</desc>
+<rect width="1480" height="360" rx="12" fill="#15202b"/>
+<g fill="#e6edf3" font-family="monospace" font-size="14" xml:space="preserve">
+<text x="24" y="32">  Name        | Subscription ID                      | Tenant</text>
+<text x="24" y="53"></text>
+<text x="24" y="74">▸ Development | 22222222-2222-2222-2222-222222222222 | Example Engineering</text>
+<text x="24" y="95">  Production  | 11111111-1111-1111-1111-111111111111 | Example Production</text>
+<text x="24" y="116"></text>
+<text x="24" y="137"></text>
+<text x="24" y="158"></text>
+<text x="24" y="179"></text>
+<text x="24" y="200"></text>
+<text x="24" y="221"></text>
+<text x="24" y="242"></text>
+<text x="24" y="263"></text>
+<text x="24" y="284"></text>
+<text x="24" y="305"></text>
+<text x="24" y="326">  ↑/k up • ↓/j down • / filter • ? more</text>
+</g>
+</svg>

@@ -1,6 +1,8 @@
 # CLI contract
 
-This contract applies to azctx 2026.11. Subscription JSON has schema version
+This contract applies to the unreleased azctx 2026.11 source. The
+[generated reference](cli/azctx.md) includes per-command help and examples.
+Subscription JSON has schema version
 **1**. Commands read only `azureProfile.json`, INI `config` and `clouds.config`
 in the Azure configuration root. Doctor may stat, but never read, a leftover
 `azctxTenants.json`. They never access credentials/MSAL caches or directly write
@@ -14,7 +16,7 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | `azctx` | Open the subscription picker when input is interactive; otherwise print the same table as `azctx list`. |
 | `azctx <query> [--all] [--yes]` | Switch by subscription name, alias, subscription ID or `tenant/subscription`. Successful switches are quiet. Protected targets require confirmation or `--yes`. |
 | `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `tenant`, `history`, `env`, `exec`, `guard`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
-| `azctx -` | Switch to the previous subscription, preserving the layer-06 private-state/rollback behavior. |
+| `azctx -` | Switch to the previous subscription using private state, rolling it back if Azure CLI switching fails. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
 | `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
 | `azctx tenant [query] [--all] [--yes]` | Select a GUID-distinct tenant, then a subscription within it. A unique tenant with one selectable subscription switches directly. Queries support text/JSON output; no-input/JSON ambiguities exit 2 with subscription candidates. Bare no-input or explicit table/JSON output lists subscriptions, with `--all` enabling inspection only of Azure-filtered entries. |
@@ -148,7 +150,8 @@ passthrough tenant flag. Other flags still pass after `--`.
 
 Login classifies documented per-tenant stderr warnings: 50076/50079 can be
 retried once, after one default-yes confirmation; 53003 is explained as a
-Conditional Access block and never retried; other codes are shown verbatim.
+Conditional Access block and never retried; other diagnostics are retained,
+subject to heuristic redaction.
 Without azctx interactive input, initial failures are listed on stderr and exit
 3 without retries/discovery. Partial or declined sign-ins also exit 3, not
 success; completed attempts strictly reload the profile for the count summary.
@@ -271,9 +274,9 @@ and does not carry `schemaVersion`. Only ambiguity adds `candidates`, an array
 of complete version-1 subscription objects in stable priority order, including IDs and
 tenant IDs. Its code is `ambiguous_match` and its exit status is 2.
 
-Codes in this layer are `error`, `no_match`, `ambiguous_match` and `interrupted`.
-The typed boundary reserves `sign_in_failed` (3) and `context_mismatch` (4)
-for later layers. Messages may give context; scripts should use `code` and
+Codes are `error`, `no_match`, `ambiguous_match`, `interrupted`,
+`sign_in_failed` (3) and `context_mismatch` (4).
+Messages may give context; scripts should use `code` and
 `exit_code`, not parse message text.
 
 The last output flag before `--` selects error presentation, even if Cobra
