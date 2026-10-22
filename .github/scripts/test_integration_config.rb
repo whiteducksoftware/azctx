@@ -41,6 +41,7 @@ class IntegrationWorkflowTest < Minitest::Test
                                               azure.fetch('if').include?("needs.prerequisites.outputs.ready == 'true'")
     raise 'minimal OIDC permissions' unless azure.fetch('permissions') == { 'contents' => 'read', 'id-token' => 'write' }
     raise 'protected environment' unless azure.fetch('environment') == 'azure-integration'
+    raise 'Azure Login requires default JSON output' unless azure.fetch('env').fetch('AZURE_CORE_OUTPUT', 'json') == 'json'
     matrix = azure.fetch('strategy').fetch('matrix').fetch('include')
     raise 'both CLI versions' unless matrix.map { |item| item['cli'] } == ['2.61.0', 'latest']
     raise 'old image digest pin' unless matrix.first.fetch('image').match?(%r{\Amcr.microsoft.com/azure-cli:2.61.0@sha256:[a-f0-9]{64}\z})
@@ -89,6 +90,7 @@ class IntegrationWorkflowTest < Minitest::Test
       ->(w) { w['jobs']['azure']['container'] = 'mcr.microsoft.com/azure-cli:2.61.0' },
       ->(w) { w['jobs']['prerequisites']['if'] = 'true' },
       ->(w) { w['jobs']['azure']['if'] = 'always()' },
+      ->(w) { w['jobs']['azure']['env']['AZURE_CORE_OUTPUT'] = 'none' },
       ->(w) { w['jobs']['azure']['strategy']['matrix']['include'][0]['image'] = 'mcr.microsoft.com/azure-cli:2.61.0' },
       ->(w) { w['jobs']['azure']['steps'][0]['uses'] = 'step-security/harden-runner@main' },
       ->(w) { w['jobs']['azure']['steps'].delete_if { |step| step['name'] == 'Check real profile, switching, env and guard' } },
