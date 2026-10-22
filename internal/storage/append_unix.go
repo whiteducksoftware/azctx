@@ -25,11 +25,11 @@ func openAppend(path string) (*os.File, error) {
 		if errors.Is(err, syscall.ELOOP) {
 			return nil, errors.New("output destination must not be a symlink")
 		}
-		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+		return nil, &os.PathError{Op: openOp, Path: path, Err: err}
 	}
 	if err := syscall.SetNonblock(fd, false); err != nil {
 		_ = syscall.Close(fd)
-		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+		return nil, &os.PathError{Op: openOp, Path: path, Err: err}
 	}
 	return os.NewFile(uintptr(fd), path), nil
 }
