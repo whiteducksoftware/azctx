@@ -158,7 +158,10 @@ It writes only ignored `.release-check/` outputs. The source configuration is
 unchanged. RC snapshots also skip the Chocolatey pipe.
 
 `release-check.yaml` configures stable/RC snapshots on native Linux, macOS and
-Windows. Only native Windows with real `choco pack` can satisfy Chocolatey
+Windows. Its pinned GoReleaser action uses `install-only: true` to export the
+tool on `PATH` before either configuration check or the snapshot helper runs;
+the action's normal `args` mode does not export `PATH` for later steps.
+Only native Windows with real `choco pack` can satisfy Chocolatey
 acceptance: the job requires a nonempty `.nupkg` and inspects the packaged nuspec.
 The Windows job also validates the three real GoReleaser winget manifests against
 Microsoft's versioned JSON schemas using PowerShell's `Test-Json`; this is schema
