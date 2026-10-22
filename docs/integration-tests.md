@@ -29,6 +29,35 @@ JSON output requested. Read-only env/exec/guard tests snapshot Azure and azctx
 files and require no Azure runner invocation. Existing agent hook, manifest,
 documented-command, signal and PTY tests remain part of `make check`.
 
+### Completion performance acceptance
+
+`make test` (and therefore `make check` and every CI test matrix leg) first runs
+the full correctness/race/coverage suite, then requires `make completion-perf`.
+The latter runs the `completionperf`-tagged test once, uncached, with race and
+coverage instrumentation explicitly disabled and inherited `GOFLAGS` cleared.
+It uses the same 500-subscription fixture and offline correctness checks as
+`TestCompletion500SubscriptionsIsOffline` in the instrumented suite: the Azure
+profile/settings filesystem is injected (`fstest.MapFS`), while azctx config
+is an isolated real file. This measures native completion callback latency,
+not process startup or real Azure profile disk latency.
+
+Every one of ten completion calls, including the first, must take **under
+50 ms**. There is no warm-up exclusion, averaging, retry or relaxed threshold.
+The timed boundary remains `ValidArgsFunction`: it includes profile/settings
+and azctx config reads, profile JSON decoding, visibility filtering, candidate
+generation and sorting. Fixture construction and correctness assertions are
+outside the timer. All 1,499 expected sorted candidates (499 visible subscriptions'
+names and tenant-qualified names, plus the domain-qualified name and alias),
+hidden/`--all` behavior, prefix matching, no Azure/update calls and no new
+config/state files are checked in both runs.
+
+Race instrumentation substantially increases JSON/profile-read costs; atomic
+coverage counters and concurrent package tests can add further overhead. Those
+diagnostic costs are not the latency of the shipped binary. Separating the
+mandatory native gate keeps that measurement truthful without excluding any
+correctness checks from the instrumented suite. It does not eliminate shared
+runner scheduling noise: a native call at or above 50 ms still fails CI.
+
 ## Coverage policy
 
 `make test` writes `coverage.out` with the race-enabled Go suite and runs
