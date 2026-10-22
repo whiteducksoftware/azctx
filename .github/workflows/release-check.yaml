@@ -110,3 +110,9 @@ jobs:
               throw 'invalid packaged Chocolatey metadata'
             }
           } finally { $zip.Dispose() }
+
+      - name: Verify the Chocolatey package embeds the snapshot archive SHA-256
+        if: runner.os == 'Windows' && matrix.channel == 'stable'
+        run: python -B .github/scripts/verify_chocolatey.py .release-check/windows-stable --archives .release-check/windows-stable
+        env:
+          RELEASE_TAG: '2026.11.0'

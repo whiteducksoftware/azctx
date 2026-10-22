@@ -5,11 +5,58 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import urllib.error
 import urllib.request
 
 
 ENDPOINT = "https://api.github.com/repos/whiteducksoftware/homebrew-tap/contents/Casks/azctx.rb"
+ORIGINAL = Path(".release-check/original/azctx.rb")
+NORMALIZED = Path(".release-check/cask/azctx.rb")
+# Stanzas native style may reorder or reformat but must never change.
+IMMUTABLE = ("version", "url", "sha256", "binary", "depends_on")
+TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|\w+:|:\w+')
+STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
+
+
+def cask_semantics(cask):
+    """Return sorted (enclosing blocks, stanza, tokens) for every immutable stanza."""
+    blocks, statements, pending = [], [], ""
+    for line in cask.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        pending = f"{pending} {line}".strip()
+        unquoted = STRING.sub('""', pending)
+        if unquoted.endswith(",") or unquoted.count("[") + unquoted.count("(") > unquoted.count("]") + unquoted.count(")"):
+            continue
+        statement, pending = pending, ""
+        stanza, _, arguments = statement.partition(" ")
+        if statement == "end":
+            if not blocks:
+                raise ValueError("unbalanced cask block")
+            blocks.pop()
+        elif unquoted.endswith(" do"):
+            blocks.append(stanza)
+        elif stanza in IMMUTABLE:
+            # Order, whitespace, trailing commas and one-element arrays are formatting only.
+            statements.append((tuple(blocks), stanza, tuple(TOKEN.findall(arguments))))
+    if pending or blocks:
+        raise ValueError("unbalanced cask block")
+    return sorted(statements)
+
+
+def verify_normalized(original, normalized):
+    """Reject native normalization that changed a Linux-generated immutable stanza."""
+    expected = cask_semantics(original)
+    if {stanza for _, stanza, _ in expected} != set(IMMUTABLE):
+        raise ValueError("original Linux cask lacks comparable immutable stanzas")
+    if cask_semantics(normalized) != expected:
+        raise ValueError("normalized cask changed version/url/sha256/binary/depends_on semantics")
+
+
+def read_casks():
+    return ORIGINAL.read_text(encoding="utf-8"), NORMALIZED.read_text(encoding="utf-8")
 
 
 def payload(cask, tag, previous):
@@ -37,16 +84,22 @@ def payload(cask, tag, previous):
     return result
 
 
-def main():
+def main(argv):
+    if argv not in ([], ["--check"]):
+        sys.exit("usage: publish_cask.py [--check]")
+    original, cask = read_casks()
+    # Validate the tag and artifacts before any credential use or network request.
+    verify_normalized(original, cask)
+    request_payload = payload(cask, os.environ["RELEASE_TAG"], None)
+    if argv == ["--check"]:
+        print("PASS: normalized cask keeps the original Linux cask's immutable semantics")
+        return
     token = os.environ["GH_TOKEN"]
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2026-03-10",
     }
-    cask = Path(".release-check/cask/azctx.rb").read_text(encoding="utf-8")
-    # Validate the tag and artifact before any network request.
-    request_payload = payload(cask, os.environ["RELEASE_TAG"], None)
     try:
         with urllib.request.urlopen(
             urllib.request.Request(f"{ENDPOINT}?ref=main", headers=headers), timeout=30
@@ -79,4 +132,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
