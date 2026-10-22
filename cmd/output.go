@@ -13,6 +13,7 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/config"
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/selection"
+	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
 const (
@@ -118,7 +119,10 @@ func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
 		if subscription.Delegated {
 			access = "delegated"
 		}
-		if _, err := fmt.Fprintf(output, "%s\t%s\t%s\t%s\t%t\t%s\t%s\t%s\n", subscription.Name, subscription.ID, subscription.TenantName, subscription.State, subscription.IsDefault, model.AccountType(), subscription.Environment, access); err != nil {
+		if _, err := fmt.Fprintf(output, "%s\t%s\t%s\t%s\t%t\t%s\t%s\t%s\n",
+			ui.DisplayText(subscription.Name), ui.DisplayText(subscription.ID), ui.DisplayText(subscription.TenantName),
+			ui.DisplayText(subscription.State), subscription.IsDefault, ui.DisplayText(model.AccountType()),
+			ui.DisplayText(subscription.Environment), access); err != nil {
 			return err
 		}
 	}
@@ -156,7 +160,9 @@ func writeCurrent(command *cobra.Command, subscription profile.Subscription, pro
 		if protected {
 			marker = " [protected]"
 		}
-		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)%s\n", subscription.TenantLabel(), subscription.DisplayName(), subscription.Tenant, subscription.Id, marker)
+		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)%s\n",
+			ui.DisplayText(subscription.TenantLabel()), ui.DisplayText(subscription.DisplayName()),
+			ui.DisplayText(subscription.Tenant), ui.DisplayText(subscription.Id), marker)
 		return err
 	}
 }

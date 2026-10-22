@@ -73,8 +73,8 @@ func newOrderedPicker(subscriptions []profile.Subscription, width, height int) P
 	items := make([]list.Item, len(subscriptions))
 	for index, subscription := range subscriptions {
 		items[index] = subscriptionItem{subscription: subscription, index: index}
-		delegate.nameWidth = max(delegate.nameWidth, lipgloss.Width(subscription.DisplayName()))
-		delegate.tenantWidth = max(delegate.tenantWidth, lipgloss.Width(tenantLabel(subscription)))
+		delegate.nameWidth = max(delegate.nameWidth, lipgloss.Width(DisplayText(subscription.DisplayName())))
+		delegate.tenantWidth = max(delegate.tenantWidth, lipgloss.Width(DisplayText(tenantLabel(subscription))))
 	}
 	picker := Picker{delegate: delegate, selected: -1, err: ErrCanceled}
 	picker.list = list.New(items, delegate, max(1, width), max(1, height))
@@ -236,6 +236,7 @@ func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, 
 }
 
 func (delegate subscriptionDelegate) row(width int, name, id, tenant string) string {
+	name, id, tenant = DisplayText(name), DisplayText(id), DisplayText(tenant)
 	if delegate.tenants {
 		nameWidth := min(delegate.nameWidth, max(1, width-2-3-36))
 		line := lipgloss.NewStyle().Width(nameWidth).MaxWidth(nameWidth).Render(name) + " | " + id

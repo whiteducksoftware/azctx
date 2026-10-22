@@ -159,6 +159,13 @@ identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
 with their state marked. Nonempty different home/token tenant IDs mark delegated
 Azure Lighthouse access; `managedByTenants` alone does not imply delegation.
 Tenant labels prefer the display name, then default domain, then tenant ID.
+Built-in and fzf picker cells, subscription tables, current text, protected
+confirmation and human error/switch diagnostics replace each Unicode control
+character with a space before layout or styling. Tabs, newlines, terminal
+escape characters and C1 controls in profile values cannot create extra rows,
+columns or terminal commands. Ordinary Unicode text is preserved. This is
+display-only: matching, selected identities, schema-1 JSON, plain-field current
+formats, environment exports and raw `exec` streams retain their original values.
 Human lists, current text and pickers emit one line suggesting `az login` only
 when a displayed record lacks both usable modern tenant fields. Current output
 checks only the current record; narrowed pickers check only their candidates.
@@ -226,6 +233,9 @@ schema and safety boundaries are in [authentication](authentication.md).
   JSON mode also suppresses them.
   The inherited daily cache and two-second deadline remain; a check failure
   cannot fail a successful switch. Listing/current/version never check updates.
+  A future cache `checkedAt` is expired (including cached failed attempts), so
+  clock rollback cannot suppress the next eligible check. Offline cached status
+  marks the same future timestamp stale; a refreshed attempt uses the current clock.
   Doctor only reads an existing private update cache; it never checks the
   network, creates cache files or acquires update locks.
 
