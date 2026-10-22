@@ -128,8 +128,9 @@ func (w *Writer) consume(output *strings.Builder, value byte) {
 	}
 	escaped := w.visibleEscape
 	w.visibleEscape = w.visibleQuote != 0 && !escaped && value == '\\'
+	literal := w.literalDelimiter(value, escaped)
 	if w.hiding {
-		if !w.valueEnd(value) {
+		if escaped || !w.valueEnd(value) {
 			return
 		}
 		w.hiding = false
@@ -143,7 +144,7 @@ func (w *Writer) consume(output *strings.Builder, value byte) {
 	// word that may still be one standard-base64 value.
 	if delimiter(value) || value == '/' && !base64Word(w.word) {
 		w.finishWord(output)
-		w.consumeDelimiter(output, value, escaped)
+		w.consumeDelimiter(output, value, literal)
 		return
 	}
 	if w.pending && w.separator {
@@ -152,6 +153,12 @@ func (w *Writer) consume(output *strings.Builder, value byte) {
 		return
 	}
 	w.appendWord(output, value)
+}
+
+// Apostrophes within unquoted words are prose, not opening quotes. Inspect the
+// word and hiding state before either is cleared at the delimiter.
+func (w *Writer) literalDelimiter(value byte, escaped bool) bool {
+	return escaped || value == '\'' && w.visibleQuote == 0 && (len(w.word) > 0 || w.hiding)
 }
 
 func (w *Writer) consumeQuoted(output *strings.Builder, value byte) {
@@ -275,9 +282,9 @@ func (w *Writer) emitFirstSegment(output *strings.Builder) {
 	w.word = append(w.word[:0], rest[:kept]...)
 }
 
-func (w *Writer) consumeDelimiter(output *strings.Builder, value byte, escaped bool) {
+func (w *Writer) consumeDelimiter(output *strings.Builder, value byte, literal bool) {
 	output.WriteByte(value)
-	if escaped {
+	if literal {
 		return
 	}
 	if w.consumeQuote(output, value) {
