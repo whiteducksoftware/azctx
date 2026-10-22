@@ -1,5 +1,8 @@
 # Configuration and subscription selection
 
+This guide documents the unreleased 2026.11 source schema. Project expectations
+and private user preferences are separate files and serve different purposes.
+
 `azctx config` prints the effective version-1 YAML configuration on stdout;
 `azctx config path` prints its filename, even if the file is absent or malformed.
 These commands and `azctx alias set|rm|list` do not need an Azure profile or an
@@ -40,6 +43,46 @@ Owned files use the shared atomic writer with `0600` files and `0700`
 directories on Unix. Locations within either the resolved or environment Azure
 configuration directory are rejected before reads/writes, including symlinks.
 No credentials, token caches or Azure files are written.
+
+## File locations and environment
+
+Default locations follow Go's `os.UserConfigDir` and `os.UserCacheDir`:
+
+| OS | Private config/state/history directory | Separate update cache directory |
+| --- | --- | --- |
+| Linux | `$XDG_CONFIG_HOME/azctx`, or `$HOME/.config/azctx` | `$XDG_CACHE_HOME/azctx`, or `$HOME/.cache/azctx` |
+| macOS | `$HOME/Library/Application Support/azctx` | `$HOME/Library/Caches/azctx` |
+| Windows | `%AppData%\\azctx` | `%LocalAppData%\\azctx` |
+
+The first directory holds `config.yaml`, `state.json`, `history.json` and
+`history.lock`. The cache holds `update.json` and `update.json.lock`.
+Windows private configuration resolution requires `AppData`; cache resolution
+requires `LocalAppData`. These are not Azure CLI paths.
+Missing user configuration remains absent until a user edit such as alias set.
+State tracks previous/recent IDs, not credentials. History is best-effort
+identity-only data, not a compliance ledger. Treat both as private.
+
+| Variable | Effect |
+| --- | --- |
+| `AZCTX_CONFIG_DIR` | Directory itself for config, state, history and its lock; no extra `azctx` suffix and no effect on update cache |
+| `AZCTX_NO_INPUT=1` | Disable azctx-owned prompts; other values do not activate this gate |
+| `AZCTX_NO_UPDATE_CHECK=1` | Skip optional post-switch update work |
+| `CI` | Presence, even empty, disables input and update checks |
+| `NO_COLOR` | Presence, even empty, disables colors, including when force-color variables are set |
+| `AZURE_CONFIG_DIR` | Azure root, default `~/.azure`; azctx only reads its allowlisted files |
+| `AZURE_CLOUD_NAME` | Active cloud override; absent/blank uses shared settings/default resolution |
+| `AZURE_CORE_LOGIN_EXPERIENCE_V2` | Read as a setting; overridden to `off` only for wrapped login children |
+| `AZURE_CORE_ENABLE_BROKER_ON_WINDOWS`, `AZURE_CORE_ENABLE_BROKER_ON_MAC` | Effective broker override; a conflicting value blocks persisted broker changes |
+| `AZURE_{SECTION}_{NAME}` | General uppercase environment form of an Azure CLI section/key, such as the two broker variables above; wins over INI |
+| `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `AppData`, `LocalAppData` | Platform-specific home/config/cache resolution as above |
+
+`GITHUB_ENV` is the existing destination used only by `env --format github`.
+`FZF_*` variables are removed from the fzf child so default options, option
+files and execute/preview bindings cannot add commands.
+See [CI/CD](ci-cd.md) for export timing and [the CLI contract](cli-contract.md)
+for streams, input/color gates and Azure boolean parsing.
+Development-only `AZCTX_TEST_*` and opt-in nightly variables are not runtime
+configuration; see [integration tests](integration-tests.md).
 
 ## Project context
 

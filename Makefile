@@ -1,4 +1,4 @@
-.PHONY: build lint test check golden agent-check fuzz e2e ci-check completion-perf
+.PHONY: build lint test check golden agent-check fuzz e2e ci-check completion-perf docs docs-check
 
 build:
 	CGO_ENABLED=0 go build -trimpath .
@@ -16,6 +16,12 @@ completion-perf:
 
 check: lint test
 
+docs:
+	go run ./tools/gendocs
+
+docs-check:
+	go run ./tools/gendocs -check
+
 agent-check:
 	python3 -B -m unittest discover -s plugins/azctx/tests -p 'test_*.py' -v
 
@@ -25,6 +31,7 @@ ci-check:
 	ruby .github/scripts/test_integration_config.rb
 	ruby .github/scripts/test_release_config.rb
 	ruby .github/scripts/test_publish_winget.rb
+	ruby .github/scripts/test_docs_config.rb
 
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1

@@ -53,7 +53,7 @@ func TestAgentSkillAndManifests(t *testing.T) {
 		t.Fatalf("invalid or unversioned skill metadata: %+v", metadata)
 	}
 	for _, required := range []string{
-		"azctx -c -o json", "azctx list -o json", "--subscription", "azctx exec",
+		currentJSONInvocation, "azctx list -o json", "--subscription", "azctx exec",
 		"azctx guard", agentContextMismatch, "azctx login", "azctx auth broker", "--yes",
 		"schemaVersion", "exit_code", "stderr", "RBAC", "PIM", "Conditional Access",
 	} {
@@ -142,7 +142,7 @@ func readAgentFile(t *testing.T, name string) []byte {
 }
 
 func TestAgentDocumentedCommandsParseOffline(t *testing.T) {
-	files := []string{"../AGENTS.md", "../skills/azctx/SKILL.md", agentPlugin + "skills/azctx/SKILL.md"}
+	files := []string{"../README.md", "../AGENTS.md", "../skills/azctx/SKILL.md", agentPlugin + "skills/azctx/SKILL.md"}
 	err := filepath.WalkDir("../docs", func(path string, entry fs.DirEntry, err error) error {
 		if err == nil && !entry.IsDir() && strings.HasSuffix(path, ".md") {
 			files = append(files, path)
@@ -178,7 +178,7 @@ type agentSnippet struct {
 func agentCommandSnippets(markdown string) []agentSnippet {
 	var snippets []agentSnippet
 	inline := regexp.MustCompile("`(azctx(?:[ \\t]+[^`\\n]*)?)`")
-	command := regexp.MustCompile(`(?:^|[ \t"($])(azctx(?:[ \t]+.*|$))`)
+	command := regexp.MustCompile(`(?:^[ \t]*|[$][(][ \t]*|[:=][ \t]*["'])(azctx(?:[ \t]+.*|$))`)
 	fenced := false
 	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
 	markdown = strings.ReplaceAll(markdown, "\\\n", " ")
@@ -207,12 +207,14 @@ func agentCommandSnippets(markdown string) []agentSnippet {
 // of this text is evaluated by a shell, and no Cobra handler is allowed to run.
 func expandAgentSynopsis(text string) [][]string {
 	text = strings.ReplaceAll(text, `\|`, "|")
+	text = strings.NewReplacer("[flags]", "", "[command]", "").Replace(text)
 	text = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(text, "VALUE")
 	text = strings.NewReplacer("[", "", "]", "", " | ", "|").Replace(text)
 	words := regexp.MustCompile(`'[^']*'|"[^"]*"|[^\s]+`).FindAllString(text, -1)
+	redirect := regexp.MustCompile(`^\d*[<>]`)
 	results := [][]string{{}}
 	for _, word := range words[1:] {
-		if strings.HasPrefix(word, "#") || strings.HasPrefix(word, "&&") || strings.HasPrefix(word, "||") {
+		if strings.HasPrefix(word, "#") || strings.HasPrefix(word, "&&") || strings.HasPrefix(word, "||") || redirect.MatchString(word) {
 			break
 		}
 		word = strings.TrimRight(word, `)",;`)
@@ -276,6 +278,9 @@ func TestAgentDocumentParserRejectsBrokenExamples(t *testing.T) {
 		"azctx exec VALUE terraform plan",
 		"azctx exec VALUE --",
 		"azctx alias set only-one-argument",
+		"azctx list [flags] --invented",
+		"azctx auth [command] nonexistent",
+		"azctx list --invented > output.txt",
 	} {
 		if err := parseAgentExample(expandAgentSynopsis(text)[0], true); err == nil {
 			t.Errorf("invalid example accepted: %s", text)
@@ -284,6 +289,23 @@ func TestAgentDocumentParserRejectsBrokenExamples(t *testing.T) {
 	snippets := agentCommandSnippets("`azctx list -o json`\n```sh\nx=\"$(azctx env \\\n --shell bash)\"\n```\n")
 	if len(snippets) != 2 || !snippets[1].invocation {
 		t.Fatalf("lost inline or embedded multiline shell example: %+v", snippets)
+	}
+}
+
+func TestAgentDocumentParserDistinguishesPackageNamesAndRedirections(t *testing.T) {
+	markdown := "```sh\nchoco install azctx --version=2026.11.0\ncommand -v azctx >/dev/null 2>&1\n" +
+		"azctx completion bash > completion.sh\ncontext=\"$(azctx env --shell bash)\"\n" +
+		"command = \"azctx -c -o name\"\n{\"command\":\"azctx -c -o name\"}\n```\n"
+	snippets := agentCommandSnippets(markdown)
+	if len(snippets) != 4 {
+		t.Fatalf("package names must not become CLI invocations: %+v", snippets)
+	}
+	for _, snippet := range snippets {
+		for _, args := range expandAgentSynopsis(snippet.text) {
+			if err := parseAgentExample(args, true); err != nil {
+				t.Errorf("shell wrapper handling: %q: %v", snippet.text, err)
+			}
+		}
 	}
 }
 

@@ -28,6 +28,8 @@ make fuzz   # Profile, config and project parsers, 60 seconds each (also in CI)
 make e2e    # Existing real-binary/fake-az suite, portable across all three OSes
 make ci-check # Offline workflow, coverage, schema and scanner-policy regressions
 make completion-perf # Native 500-subscription completion, every call under 50 ms
+make docs   # Generate the deterministic Cobra CLI reference
+make docs-check # Reject missing, changed or extra CLI reference files
 ```
 
 Python 3.10+ (`python3` on PATH) is required for the agent hook tests. Go tests
@@ -38,7 +40,7 @@ continuations; this does not relax the byte-exact output fixture checks below.
 For plugin changes also run `claude plugin validate .` and
 `claude plugin validate ./plugins/azctx` when Claude Code is available; report
 an unavailable CLI as a manual acceptance limitation rather than a pass.
-See the draft [AI agent guide](docs/ai-agents.md) for installation and limits.
+See the [AI agent guide](docs/ai-agents.md) for installation and limits.
 
 The [Makefile](Makefile) is the source of truth for available targets.
 `make test`/`make check` now write `coverage.out` and require statement-weighted
@@ -72,7 +74,7 @@ exception: test it only with injected runners or the portable fake `az`, never
 against real Azure accounts. Its clear/config/login sequence must stop at the
 first failure. Doctor must remain useful without a profile or installed Azure
 CLI and must never print identities, secrets or raw subprocess diagnostics.
-See the draft [authentication guide](docs/authentication.md) for the capability
+See the [authentication guide](docs/authentication.md) for the capability
 and confirmation matrix and the still-unverified live acceptance checklist.
 Picker tests run real Bubble Tea programs with bounded waits and synthetic key
 events at 60, 100 and 160 columns; they do not need an interactive terminal.
