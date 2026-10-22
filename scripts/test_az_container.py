@@ -1,4 +1,7 @@
-"""Test the host/container argv boundary with an offline Docker stand-in."""
+"""Test the host/container argv boundary with an offline Docker stand-in.
+
+The fake records argv only; no image is pulled or run and nothing signs in.
+"""
 
 import json
 import os
@@ -11,22 +14,12 @@ import uuid
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-SHIM = ROOT / ".github/scripts/az-container.sh"
+ROOT = Path(__file__).resolve().parents[1]
+SHIM = ROOT / "scripts/az-container.sh"
 IMAGE = "mcr.microsoft.com/azure-cli@sha256:" + "a" * 64
 
 
 class ContainerShimTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        workflow_env = subprocess.run(
-            ["ruby", "-ryaml", "-rjson", "-e",
-             "puts JSON.generate(YAML.safe_load(File.read(ARGV[0]))['jobs']['azure']['env'])",
-             str(ROOT / ".github/workflows/integration.yaml")],
-            text=True, capture_output=True, check=True,
-        )
-        cls.workflow_env = json.loads(workflow_env.stdout)
-
     def setUp(self):
         self.scratch = ROOT / ".test-work" / ("docker-" + uuid.uuid4().hex)
         self.scratch.mkdir(parents=True)
@@ -66,10 +59,11 @@ class ContainerShimTests(unittest.TestCase):
             encoding="utf-8",
         )
         docker.chmod(0o700)
-        self.env = dict(os.environ)
-        self.env.pop("AZURE_CORE_OUTPUT", None)
-        self.env.update(self.workflow_env)
+        self.env = {key: value for key, value in os.environ.items() if not key.startswith("AZURE_")}
+        self.home = self.scratch / "home"
+        (self.home / ".azure").mkdir(parents=True)
         self.env.update({
+            "HOME": str(self.home),
             "PATH": os.pathsep.join((str(self.scratch), str(Path(sys.executable).parent), os.environ["PATH"])),
             "DOCKER_TEST_RECORD": str(self.record),
             "AZCTX_AZURE_CLI_IMAGE": IMAGE,
@@ -91,13 +85,13 @@ class ContainerShimTests(unittest.TestCase):
         )
 
     def test_immutable_container_and_literal_argv_with_only_allowlisted_mount(self):
-        args = ["login", "--federated-token", "synthetic $(never-execute); value"]
+        args = ["account", "set", "--subscription", "synthetic $(never-execute); value"]
         result = self.run_shim(*args)
         self.assertEqual(result.returncode, 0, result.stderr)
         argv = json.loads(self.record.read_text(encoding="utf-8"))
         azure = self.env["AZURE_CONFIG_DIR"]
         self.assertEqual(argv, [
-            "run", "--rm", "--interactive", "--cap-drop=ALL",
+            "run", "--rm", "--interactive", "--pull=never", "--cap-drop=ALL",
             "--security-opt=no-new-privileges", "--user", f"{os.getuid()}:{os.getgid()}",
             "--volume", f"{azure}:{azure}",
             "--env", f"HOME={azure}", "--env", "AZURE_CONFIG_DIR",
@@ -120,14 +114,13 @@ class ContainerShimTests(unittest.TestCase):
         env = [argv[index + 1] for index, value in enumerate(argv) if value == "--env"]
         self.assertIn(f"HOME={azure}", env, "arbitrary container UID needs a writable HOME")
 
-    def test_azure_login_version_invocation_retains_default_json(self):
-        # Azure/login v3.1.0 calls ["version"], then JSON.parse(stdout)["azure-cli"].
+    def test_version_without_output_flag_keeps_default_json(self):
         for version in ("2.61.0", "2.99.0"):
             with self.subTest(version=version):
                 self.env["DOCKER_TEST_CLI_VERSION"] = version
                 result = self.run_shim("version")
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertTrue(result.stdout.strip(), "Azure Login needs JSON from az version without -o")
+                self.assertTrue(result.stdout.strip(), "az version without -o must stay JSON")
                 self.assertEqual(json.loads(result.stdout)["azure-cli"], version)
                 argv = json.loads(self.record.read_text(encoding="utf-8"))
                 self.assertEqual(argv[argv.index(IMAGE):], [IMAGE, "az", "version"])
@@ -152,7 +145,7 @@ class ContainerShimTests(unittest.TestCase):
         self.env["AZURE_CORE_OUTPUT"] = "none"
         result = self.run_shim("version")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(result.stdout.strip(), "host output overrides must not suppress Azure Login JSON")
+        self.assertTrue(result.stdout.strip(), "host output overrides must not reach the isolated CLI")
         self.assertEqual(json.loads(result.stdout)["azure-cli"], "2.61.0")
 
     def test_unresolved_image_and_missing_config_never_launch_docker(self):
@@ -162,9 +155,22 @@ class ContainerShimTests(unittest.TestCase):
                 self.assertNotEqual(self.run_shim("version").returncode, 0)
                 self.assertFalse(self.record.exists())
         self.env["AZCTX_AZURE_CLI_IMAGE"] = IMAGE
-        self.env["AZURE_CONFIG_DIR"] = ""
-        self.assertNotEqual(self.run_shim("version").returncode, 0)
-        self.assertFalse(self.record.exists())
+        for config in ("", str(self.scratch / "absent"), "relative"):
+            with self.subTest(config=config):
+                self.env["AZURE_CONFIG_DIR"] = config
+                self.assertNotEqual(self.run_shim("version").returncode, 0)
+                self.assertFalse(self.record.exists())
+
+    def test_default_host_azure_config_is_never_mounted(self):
+        link = self.scratch / "host-link"
+        link.symlink_to(self.home / ".azure", target_is_directory=True)
+        for config in (self.home / ".azure", link, self.home / ".azure" / "."):
+            with self.subTest(config=config):
+                self.env["AZURE_CONFIG_DIR"] = str(config)
+                result = self.run_shim("version")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("dedicated", result.stderr)
+                self.assertFalse(self.record.exists())
 
 
 if __name__ == "__main__":

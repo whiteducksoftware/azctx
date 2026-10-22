@@ -27,8 +27,8 @@ or disable scanner failures to make a change pass.
 CI also runs native Linux/macOS/Windows tests, strict actionlint/zizmor,
 module checks, vulnerability policy and fuzz campaigns.
 [Integration tests](integration-tests.md) describes command coverage and the
-explicitly opt-in dedicated-tenant nightly. An unconfigured/skipped nightly
-is not live acceptance.
+manual dedicated-tenant live test (`make live-test`), which maintainers run
+locally and CI never runs. Offline fake runs are not live acceptance.
 
 ## Generated reference and help
 
