@@ -10,6 +10,8 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/redact"
 )
 
+const redactedInlineNote = `{"note": "Bearer [REDACTED]", "token_type": "Bearer", "access_token": "[REDACTED]"}`
+
 func TestTextRedactsTokenValueAfterTokenType(t *testing.T) {
 	input := `{"token_type": "Bearer", "access_token": "synthetic-secret"}`
 	want := `{"token_type": "Bearer", "access_token": "[REDACTED]"}`
@@ -94,18 +96,60 @@ func TestStreamingKeepsJSONSecretLabelsWithinTheirFields(t *testing.T) {
 	}
 }
 
+func TestStreamingKeepsFieldBoundariesAfterUnquotedApostrophes(t *testing.T) {
+	tests := map[string]struct{ input, want string }{
+		"contraction before JSON": {
+			`ERROR: couldn't refresh token: {"token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			`ERROR: couldn't refresh token: {"token_type": "Bearer", "access_token": "[REDACTED]"}`,
+		},
+		"possessive before JSON": {
+			`tenant's diagnostic: {"token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			`tenant's diagnostic: {"token_type": "Bearer", "access_token": "[REDACTED]"}`,
+		},
+		"contraction before delimited fields": {
+			`couldn't authenticate: Bearer; access_token=synthetic-secret`,
+			`couldn't authenticate: Bearer; access_token=[REDACTED]`,
+		},
+		"contraction before quoted fields": {
+			`can't authenticate: {'token_type': 'Bearer', 'access_token': 'synthetic-secret'}`,
+			`can't authenticate: {'token_type': 'Bearer', 'access_token': '[REDACTED]'}`,
+		},
+		"apostrophe after a bounded hidden word": {
+			strings.Repeat("x", 80) + `'s diagnostic: {"token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			`[REDACTED]'s diagnostic: {"token_type": "Bearer", "access_token": "[REDACTED]"}`,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) { assertStreamed(t, test.input, test.want) })
+	}
+}
+
 func TestStreamingKeepsFieldBoundariesAfterEscapesInHiddenValues(t *testing.T) {
-	input := `{"note": "Bearer synthetic-inline\" done", "token_type": "Bearer", "access_token": "synthetic-secret"}`
-	eachStreamed(t, input, func(how, got string) {
-		for _, secret := range []string{"synthetic-inline", "synthetic-secret"} {
-			if strings.Contains(got, secret) {
-				t.Fatalf("%s: secret %q leaked in %q", how, secret, got)
-			}
-		}
-		if !strings.Contains(got, `"access_token": "[REDACTED]"`) {
-			t.Fatalf("%s: secret field key/value lost in %q", how, got)
-		}
-	})
+	tests := map[string]struct{ input, want string }{
+		"escaped quote before ordinary text": {
+			`{"note": "Bearer synthetic-inline\" done", "token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			`{"note": "Bearer [REDACTED] done", "token_type": "Bearer", "access_token": "[REDACTED]"}`,
+		},
+		"escaped quote within inline secret": {
+			`{"note": "Bearer synthetic-inline\"secret-tail", "token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			redactedInlineNote,
+		},
+		"escaped single quote within inline secret": {
+			`{'note': 'Bearer synthetic-inline\'secret-tail', 'token_type': 'Bearer', 'access_token': 'synthetic-secret'}`,
+			`{'note': 'Bearer [REDACTED]', 'token_type': 'Bearer', 'access_token': '[REDACTED]'}`,
+		},
+		"escaped backslash before closing quote": {
+			`{"note": "Bearer synthetic-inline\\", "token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			redactedInlineNote,
+		},
+		"escaped backslash and quote within inline secret": {
+			`{"note": "Bearer synthetic-inline\\\"secret-tail", "token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			redactedInlineNote,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) { assertStreamed(t, test.input, test.want) })
+	}
 }
 
 func TestStreamingRedactionAcrossEverySplit(t *testing.T) {
@@ -237,6 +281,7 @@ func TestStreamingKeepsOrdinaryDiagnosticsReadable(t *testing.T) {
 		strings.Repeat("Dir1/", 40) + "file.txt\n",
 		"/home/Runner2/work/" + strings.Repeat("Pkg3/Sub4/", 12) + "main.go:12: unused\n",
 		"Use device code SYNTHETIC [array] and accountKeys list\n",
+		"Couldn't open the tenant's diagnostic file; don't retry.\n",
 	}
 	for index, input := range inputs {
 		t.Run(string(rune('A'+index)), func(t *testing.T) { assertStreamed(t, input, input) })
@@ -259,7 +304,11 @@ func TestStreamingRedactionLargeAdversarialInputs(t *testing.T) {
 		},
 		"hidden escaped bytes": {
 			`{"note": "Bearer ` + strings.Repeat(`s\\x`, 1<<10) + `", "token_type": "Bearer", "access_token": "synthetic-secret"}`,
-			`{"note": "Bearer [REDACTED]", "token_type": "Bearer", "access_token": "[REDACTED]"}`,
+			redactedInlineNote,
+		},
+		"hidden escaped quote tails": {
+			`{"note": "Bearer ` + strings.Repeat(`synthetic\"secret-tail`, 1<<10) + `", "token_type": "Bearer", "access_token": "synthetic-secret"}`,
+			redactedInlineNote,
 		},
 	}
 	for name, test := range tests {
