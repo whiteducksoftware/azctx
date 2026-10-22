@@ -84,6 +84,9 @@ func TestBinaryContractMatrix(t *testing.T) {
 	}
 }
 
+// TestBinaryContractNoninteractiveVariants runs with non-TTY input, so the CI,
+// flag and environment rows prove real-binary acceptance only; the discriminating
+// TTY gate coverage is TestContractInputGates in contract_gates_test.go.
 func TestBinaryContractNoninteractiveVariants(t *testing.T) {
 	binary, config, record := fakeBinary(t, `[]`)
 	for _, gate := range []string{"devnull", "pipe", envCI, gateEmptyCI, gateFlag, gateEnvironment} {

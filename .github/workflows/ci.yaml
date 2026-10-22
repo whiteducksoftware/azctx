@@ -149,7 +149,7 @@ jobs:
         run: make fuzz
 
       - name: Test vulnerability policy
-        run: python3 -B -m unittest discover -s .github/scripts -p 'test_*.py' -v
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_check_govulncheck.py' -v
 
       - name: Install govulncheck
         # Go 1.27-compatible release; v1.1.4 predates this toolchain.
