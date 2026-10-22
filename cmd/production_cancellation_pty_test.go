@@ -7,13 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -119,18 +119,14 @@ func runShellJob(t *testing.T, binary, self, helper string, tc shellJobCase) {
 		}
 	}()
 	_ = slave.Close()
-	screen := make(chan string, 1)
-	go func() {
-		data, _ := io.ReadAll(master)
-		screen <- string(data)
-	}()
+	screen := recordPTY(master)
 	if tc.interrupt {
-		interruptShellChild(ctx, t, master, started, ready)
+		interruptShellChild(ctx, t, master, screen, started, ready)
 	}
 	err := shell.Wait()
 	waited = true
 	_ = master.Close()
-	output := <-screen
+	output := screen.output()
 	want := fmt.Sprintf("job exit=%d restored=true", tc.code)
 	if err != nil || ctx.Err() != nil || !strings.Contains(result.String(), want) {
 		t.Fatalf("shell job: err=%v context=%v result=%q screen=%q", err, ctx.Err(), &result, output)
@@ -165,7 +161,68 @@ func killRecordedProcess(path string, group bool) {
 	_ = syscall.Kill(pid, syscall.SIGKILL)
 }
 
-func interruptShellChild(ctx context.Context, t *testing.T, master *os.File, started, ready string) {
+// ptyScreen drains a PTY master and records everything the terminal displayed.
+type ptyScreen struct {
+	mu      sync.Mutex
+	data    []byte
+	updated chan struct{}
+	done    chan struct{}
+}
+
+func recordPTY(master *os.File) *ptyScreen {
+	screen := &ptyScreen{updated: make(chan struct{}, 1), done: make(chan struct{})}
+	go func() {
+		defer close(screen.done)
+		buffer := make([]byte, 4096)
+		for {
+			n, err := master.Read(buffer)
+			screen.mu.Lock()
+			screen.data = append(screen.data, buffer[:n]...)
+			screen.mu.Unlock()
+			select {
+			case screen.updated <- struct{}{}:
+			default:
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return screen
+}
+
+func (s *ptyScreen) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return string(s.data)
+}
+
+// waitFor returns once the reader has drained marker from the terminal output queue.
+func (s *ptyScreen) waitFor(ctx context.Context, t *testing.T, marker string) {
+	t.Helper()
+	for !strings.Contains(s.String(), marker) {
+		select {
+		case <-s.updated:
+		case <-s.done:
+			if !strings.Contains(s.String(), marker) {
+				t.Fatalf("terminal closed before %q: %q", marker, s)
+			}
+		case <-ctx.Done():
+			t.Fatalf("terminal never displayed %q: %q", marker, s)
+		}
+	}
+}
+
+func (s *ptyScreen) output() string {
+	<-s.done
+	return s.String()
+}
+
+// interruptShellChild sends Ctrl-C only after the screen reader has received the
+// child's input acknowledgement. Without NOFLSH, VINTR discards unread terminal
+// output, so the ready file and the input echo cannot prove the acknowledgement
+// survives the interrupt.
+func interruptShellChild(ctx context.Context, t *testing.T, master *os.File, screen *ptyScreen, started, ready string) {
 	t.Helper()
 	pid := waitExecChild(ctx, t, started)
 	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
@@ -173,6 +230,7 @@ func interruptShellChild(ctx context.Context, t *testing.T, master *os.File, sta
 		t.Fatal(err)
 	}
 	waitExecChild(ctx, t, ready)
+	screen.waitFor(ctx, t, "child read hello")
 	if _, err := master.Write([]byte{3}); err != nil {
 		t.Fatal(err)
 	}
@@ -316,23 +374,11 @@ func TestProductionTerminalInterruptDeliveredOnce(t *testing.T) {
 			}
 			defer func() { _ = process.Process.Kill() }()
 			_ = slave.Close()
-			screen := make(chan string, 1)
-			go func() {
-				data, _ := io.ReadAll(master)
-				screen <- string(data)
-			}()
-			pid := waitExecChild(ctx, t, started)
-			defer func() { _ = syscall.Kill(pid, syscall.SIGKILL) }()
-			if _, err := master.Write([]byte("hello\n")); err != nil {
-				t.Fatal(err)
-			}
-			waitExecChild(ctx, t, ready)
-			if _, err := master.Write([]byte{3}); err != nil {
-				t.Fatal(err)
-			}
+			screen := recordPTY(master)
+			interruptShellChild(ctx, t, master, screen, started, ready)
 			err := process.Wait()
 			_ = master.Close()
-			output := <-screen
+			output := screen.output()
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) || exit.ExitCode() != 130 || ctx.Err() != nil || stdout.Len() != 0 {
 				t.Fatalf("terminal interruption: err=%v stdout=%q screen=%q context=%v", err, &stdout, output, ctx.Err())
