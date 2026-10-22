@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -91,9 +92,16 @@ func CRLFCheckout(t *testing.T, source string, paths ...string) string {
 			t.Fatal(err)
 		}
 	}
+	var gitEnv []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(entry), "GIT_") {
+			gitEnv = append(gitEnv, entry)
+		}
+	}
+	gitEnv = append(gitEnv, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_ATTR_NOSYSTEM=1")
 	const configFlag = "-c"
 	for _, args := range [][]string{
-		{"init", "--quiet"},
+		{"init", "--quiet", "--template="},
 		{configFlag, "core.autocrlf=false", "add", "--force", "--", "."},
 		{
 			configFlag, "core.autocrlf=true", configFlag, "core.eol=crlf", "checkout-index", "--all",
@@ -101,8 +109,9 @@ func CRLFCheckout(t *testing.T, source string, paths ...string) string {
 		},
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		command := exec.CommandContext(ctx, "git", args...)
+		command := exec.CommandContext(ctx, "git", append([]string{configFlag, "core.hooksPath=" + os.DevNull}, args...)...) //nolint:gosec // Fixed Git operations use only test-owned paths, without a shell.
 		command.Dir = snapshot
+		command.Env = gitEnv
 		output, err := command.CombinedOutput()
 		cancel()
 		if err != nil {

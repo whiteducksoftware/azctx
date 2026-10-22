@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
@@ -57,6 +58,48 @@ func (r *loginRecordingRunner) Run(ctx context.Context, args []string, options a
 	result, err := r.Runner.Run(ctx, args, options)
 	r.results = append(r.results, result)
 	return result, err
+}
+
+func TestRunnerDiscardsOversizedTenantFailureLines(t *testing.T) {
+	dir := testutil.BuildFakeAZ(t)
+	const ignoredID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	const validID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	const secret = "synthetic-overflow-secret"
+	const warning = "WARNING: Authentication failed against tenant " + ignoredID + " 'Token': AADSTS50076: "
+	const valid = "WARNING: Authentication failed against tenant " + validID + " 'Directory': AADSTS50079: MFA required"
+	long := strings.Repeat("pending ", 160000)
+	for _, tc := range []struct {
+		name, input string
+		want        int
+	}{
+		{"unterminated overflow", warning + long + "access_token=" + secret, 0},
+		{"resume after overflow", warning + long + "access_token=" + secret + "\n" + valid, 1},
+		{"ignore valid looking overflow tail", long + warning + "access_token=" + secret + "\n" + valid, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := fakeLoginProcess(t, dir, []loginFixture{{Args: []string{loginCommand}, Stderr: tc.input}})
+			var output bytes.Buffer
+			var failures []azcli.TenantFailure
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			result, err := runner.Run(ctx, []string{loginCommand}, azcli.Options{
+				Terminal: &azcli.Terminal{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: &output},
+				ObserveTenantFailure: func(failure azcli.TenantFailure) {
+					failures = append(failures, failure)
+				},
+			})
+			if err != nil || result.ExitCode != 0 || len(failures) != tc.want {
+				t.Fatalf("exit=%d err=%v failure count=%d; want %d", result.ExitCode, err, len(failures), tc.want)
+			}
+			if tc.want == 1 && (failures[0].ID != validID || failures[0].Code != "50079" || failures[0].Name != "Directory") {
+				t.Fatalf("next unterminated warning not classified: %+v", failures)
+			}
+			assertRedactedLoginDiagnostics(t, secret, output.String(), result.Stderr)
+			if output.String() != result.Stderr || (tc.want == 1 && !strings.HasSuffix(result.Stderr, valid)) {
+				t.Fatal("overflow changed redacted forwarding or swallowed the following diagnostic")
+			}
+		})
+	}
 }
 
 func TestLoginClassifiesTenantFailuresBeforeDiagnosticRedaction(t *testing.T) {

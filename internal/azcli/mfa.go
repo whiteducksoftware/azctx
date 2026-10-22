@@ -31,6 +31,9 @@ type LoginResult struct {
 
 var tenantFailureLine = regexp.MustCompile(`^(?:(?:WARNING|ERROR): )?Authentication failed against tenant ([0-9a-fA-F-]{36})(?: '(.*)')?: AADSTS([0-9]+):.*$`)
 
+// Allow long warnings while bounding transient, unredacted diagnostic storage.
+const maxTenantFailureLine = 128 << 10
+
 // ParseTenantFailures classifies transient Azure CLI diagnostics into safe
 // metadata. Returned names and messages are redacted, never raw stderr.
 func ParseTenantFailures(stderr string) []TenantFailure {
@@ -61,21 +64,34 @@ func parseTenantFailure(line string) (TenantFailure, bool) {
 
 // tenantFailureWriter observes one raw line transiently, while forwarding every
 // write immediately through the diagnostic redactor (including partial prompts).
+// Oversized lines are discarded for observation, never for redacted forwarding.
 type tenantFailureWriter struct {
 	output  io.Writer
 	observe func(TenantFailure)
 	pending []byte
+	discard bool
 }
 
 func (w *tenantFailureWriter) Write(data []byte) (int, error) {
 	remaining := data
 	for len(remaining) != 0 {
 		index := bytes.IndexByte(remaining, '\n')
+		line := remaining
+		if index >= 0 {
+			line = remaining[:index]
+		}
+		if !w.discard {
+			if len(line) > maxTenantFailureLine-len(w.pending) {
+				clear(w.pending)
+				w.pending = nil
+				w.discard = true
+			} else {
+				w.pending = append(w.pending, line...)
+			}
+		}
 		if index < 0 {
-			w.pending = append(w.pending, remaining...)
 			break
 		}
-		w.pending = append(w.pending, remaining[:index]...)
 		w.flush()
 		remaining = remaining[index+1:]
 	}
@@ -83,9 +99,12 @@ func (w *tenantFailureWriter) Write(data []byte) (int, error) {
 }
 
 func (w *tenantFailureWriter) flush() {
-	if failure, ok := parseTenantFailure(string(w.pending)); ok {
-		w.observe(failure)
+	if !w.discard {
+		if failure, ok := parseTenantFailure(string(w.pending)); ok {
+			w.observe(failure)
+		}
 	}
 	clear(w.pending)
 	w.pending = w.pending[:0]
+	w.discard = false
 }

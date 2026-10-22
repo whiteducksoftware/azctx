@@ -44,7 +44,7 @@ func TestDocumentedGuardedExecutionFailClosed(t *testing.T) {
 		{readme, "For GitHub Actions:\n", "For Azure DevOps:\n", 2},
 		{readme, "For Azure DevOps:\n", "## 12. AI agents\n", 2},
 	} {
-		t.Run(example.file, func(t *testing.T) {
+		t.Run(example.file+"/"+strings.TrimSpace(strings.TrimPrefix(example.section, "## ")), func(t *testing.T) {
 			document := strings.ReplaceAll(string(readAgentFile(t, example.file)), "\r\n", "\n")
 			_, section, ok := strings.Cut(document, example.section)
 			if !ok {
