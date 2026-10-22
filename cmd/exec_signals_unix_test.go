@@ -38,7 +38,7 @@ func TestExecCancellationForwardsInterrupt(t *testing.T) {
 	command.SetErr(&messages)
 	done := make(chan error, 1)
 	go func() { done <- command.Execute() }()
-	waitExecChild(t, ctx, ready)
+	waitExecChild(ctx, t, ready)
 	cancel()
 	select {
 	case err := <-done:
@@ -80,12 +80,12 @@ func TestExecBinaryForwardsSignalsAndSignalStatuses(t *testing.T) {
 				t.Fatal(err)
 			}
 			cleanProcess(t, command, cancel)
-			pid := waitExecChild(t, ctx, ready)
+			pid := waitExecChild(ctx, t, ready)
 			child, err := os.FindProcess(pid)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer child.Release()
+			defer func() { _ = child.Release() }()
 			childCompleted := false
 			defer func() {
 				if !childCompleted {

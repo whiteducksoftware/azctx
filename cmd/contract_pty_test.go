@@ -69,6 +69,7 @@ func runInterruptedPTY(t *testing.T, binary string, args []string) {
 	output := <-screen
 	var exit *exec.ExitError
 	if ctx.Err() != nil || !errors.As(err, &exit) || exit.ExitCode() != 130 || stdout.Len() != 0 ||
+		!strings.Contains(output, "\x1b[?25h") ||
 		regexp.MustCompile("\x1b\\[[0-9;]*(?:[34][0-9]|9[0-7]|10[0-7])(?:;[0-9]+)*m").MatchString(output) || strings.Contains(output, "\a") {
 		t.Fatalf("err=%v stdout=%q screen=%q", err, stdout.String(), output)
 	}

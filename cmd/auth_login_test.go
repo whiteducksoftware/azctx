@@ -42,7 +42,11 @@ func TestLoginPlatformAndHeadlessMessages(t *testing.T) {
 			if tc.env != "" {
 				t.Setenv(tc.env, "") // Presence alone is sufficient.
 			}
-			deps.FS.(fstest.MapFS)[azureConfigFile] = &fstest.MapFile{Data: []byte("[core]\n" + tc.config)}
+			files, ok := deps.FS.(fstest.MapFS)
+			if !ok {
+				t.Fatal("fixture is not a MapFS")
+			}
+			files[azureConfigFile] = &fstest.MapFile{Data: []byte("[core]\n" + tc.config)}
 			args := []string{loginCommand}
 			if tc.device {
 				args = append(args, deviceCodeFlag)

@@ -15,6 +15,7 @@ import (
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
 	"github.com/whiteducksoftware/azctx/internal/profile"
+	"github.com/whiteducksoftware/azctx/internal/redact"
 	"github.com/whiteducksoftware/azctx/internal/update"
 	"github.com/whiteducksoftware/azctx/internal/version"
 )
@@ -133,6 +134,9 @@ func doctorReport(command *cobra.Command, resolve runnerFactory, deps Dependenci
 	if err := command.Context().Err(); err != nil {
 		return report, err
 	}
+	report.ConfigDirectory = redact.Text(report.ConfigDirectory)
+	report.ActiveCloud = redact.Text(report.ActiveCloud)
+	report.LegacyTenantFile.DeleteCommand = redact.Text(report.LegacyTenantFile.DeleteCommand)
 	return report, nil
 }
 
@@ -140,10 +144,10 @@ func diagnoseAzure(command *cobra.Command, resolve runnerFactory) (DoctorAzureCL
 	info := DoctorAzureCLI{Status: diagnosticUnavailable}
 	runner, err := resolve()
 	if err != nil {
-		return info, nil
+		return info, nil //nolint:nilerr // Doctor succeeds offline without az; never expose raw lookup diagnostics.
 	}
 	if resolved, ok := runner.(interface{ Path() string }); ok {
-		info.Path = resolved.Path()
+		info.Path = redact.Text(resolved.Path())
 	}
 	azureVersion, err := azcli.CheckVersion(command.Context(), runner)
 	if ExitCode(err) == ExitInterrupted {

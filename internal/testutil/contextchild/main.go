@@ -11,14 +11,21 @@ import (
 	"time"
 )
 
-const ignoreMode = "ignore"
+const (
+	ignoreMode  = "ignore"
+	azLoginMode = "az-login"
+)
 
 func main() {
+	if os.Getenv("AZCTX_TEST_CHILD_MODE") == azLoginMode && len(os.Args) > 1 && os.Args[1] == "version" {
+		fmt.Fprintln(os.Stdout, `{"azure-cli":"2.91.0"}`)
+		return
+	}
 	switch os.Getenv("AZCTX_TEST_CHILD_MODE") {
 	case "exit":
 		fmt.Fprintln(os.Stderr, "child stderr")
 		os.Exit(37)
-	case "trap", "wait", ignoreMode:
+	case "trap", "wait", ignoreMode, azLoginMode:
 		wait()
 	default:
 		echo()
@@ -47,7 +54,7 @@ func echo() {
 func wait() {
 	signals := make(chan os.Signal, 1)
 	mode := os.Getenv("AZCTX_TEST_CHILD_MODE")
-	if mode == "trap" || mode == ignoreMode {
+	if mode == "trap" || mode == ignoreMode || mode == azLoginMode {
 		signal.Notify(signals, os.Interrupt)
 	}
 	if err := os.WriteFile(os.Getenv("AZCTX_TEST_CHILD_READY"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil { //nolint:gosec // Test-only helper: the test owns the readiness path.

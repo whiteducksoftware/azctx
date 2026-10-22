@@ -62,7 +62,7 @@ func TestPickerTenantDomainFallbackAndFiltering(t *testing.T) {
 			updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(query)})
 			updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 			updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
-			index, err := updated.(ui.Picker).Selection()
+			index, err := requirePicker(t, updated).Selection()
 			if err != nil || index < 0 || subscriptions[index].Id != productionID {
 				t.Fatalf("tenant filter: index=%d err=%v view=%s", index, err, updated.View())
 			}
