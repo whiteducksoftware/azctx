@@ -34,8 +34,8 @@ const (
 // Nil fields use production implementations, resolved lazily where needed.
 type Dependencies struct {
 	Runner       azcli.Runner
-	FS           fs.FS // Read-only filesystem rooted at the Azure configuration directory.
-	ConfigDir    string
+	FS           fs.FS  // Read-only filesystem rooted at the Azure configuration directory.
+	ConfigDir    string // Explicit Azure directory for reads and az children; empty preserves inherited behavior.
 	Select       func([]profile.Subscription) (int, error)
 	CheckUpdates func(string, string) error
 	StdinTTY     func() bool // Nil probes Cobra stdin; input opt-outs still take precedence.

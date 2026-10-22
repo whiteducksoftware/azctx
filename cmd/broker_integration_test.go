@@ -53,8 +53,10 @@ func testBrokerAttached(t *testing.T, dir, platform, action string) {
 	writeFixture(t, fixturePath, string(data))
 	t.Setenv("FAKEAZ_FIXTURES", fixturePath)
 	t.Setenv("FAKEAZ_RECORD", record)
-	t.Setenv("FAKEAZ_ENV_KEYS", "AZURE_CORE_LOGIN_EXPERIENCE_V2")
-	t.Setenv("AZURE_CORE_LOGIN_EXPERIENCE_V2", "on")
+	t.Setenv("FAKEAZ_ENV_KEYS", "AZURE_CORE_LOGIN_EXPERIENCE_V2,AZURE_CONFIG_DIR,AZURE_EXTENSION_USE_DYNAMIC_INSTALL")
+	t.Setenv("AZURE_CORE_LOGIN_EXPERIENCE_V2", childPickerOn)
+	t.Setenv("AZURE_CONFIG_DIR", "inherited azure")
+	t.Setenv("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "yes_without_prompt")
 	deps.Runner, err = azcli.NewRunner()
 	if err != nil {
 		t.Fatal(err)
@@ -75,8 +77,11 @@ func testBrokerAttached(t *testing.T, dir, platform, action string) {
 		if index == 3 {
 			env = childPickerOff
 		}
-		if !reflect.DeepEqual(call.Args, want[index]) || !reflect.DeepEqual(call.Env, []string{env}) {
+		if !reflect.DeepEqual(call.Args, want[index]) || !reflect.DeepEqual(call.Env, []string{
+			env, childConfigDirPrefix + deps.ConfigDir, "AZURE_EXTENSION_USE_DYNAMIC_INSTALL=yes_without_prompt",
+		}) {
 			t.Fatalf("call %d=%+v", index, call)
 		}
 	}
+	assertInheritedAzureEnvironment(t)
 }

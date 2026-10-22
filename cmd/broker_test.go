@@ -45,11 +45,12 @@ func TestBrokerConfirmedSequence(t *testing.T) {
 				deps.FS = fstest.MapFS{azureConfigFile: &fstest.MapFile{Data: []byte("[core]\n" + key + "=" + before)}}
 				var stdout, stderr bytes.Buffer
 				code := cmd.Run([]string{authCommand, brokerCommand, action, confirmFlag, noInputFlag}, deps, strings.NewReader(""), &stdout, &stderr)
+				configEnv := []string{childConfigDirPrefix + deps.ConfigDir}
 				want := []testutil.Call{
-					{Args: []string{versionCommand, outputFlag, jsonFormat}},
-					{Args: []string{accountCommand, "clear"}},
-					{Args: []string{azureConfigFile, setCommand, "core." + key + "=" + after}},
-					{Args: []string{loginCommand}, Attached: true, Env: []string{childPickerOff}},
+					{Args: []string{versionCommand, outputFlag, jsonFormat}, Env: configEnv},
+					{Args: []string{accountCommand, "clear"}, Env: configEnv},
+					{Args: []string{azureConfigFile, setCommand, "core." + key + "=" + after}, Env: configEnv},
+					{Args: []string{loginCommand}, Attached: true, Env: []string{childPickerOff, childConfigDirPrefix + deps.ConfigDir}},
 				}
 				if code != 0 || !reflect.DeepEqual(fake.Calls, want) || stdout.String() != "Azure login data\n" ||
 					!strings.Contains(stderr.String(), "Azure login prompt") {
