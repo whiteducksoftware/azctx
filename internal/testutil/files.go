@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 var directoryID atomic.Uint64
@@ -50,6 +52,64 @@ func ExecutableName(name string) string {
 		return name + ".exe"
 	}
 	return name
+}
+
+// CRLFCheckout imports current files into an isolated Git index, then checks
+// them out with real autocrlf and attribute handling, without using source Git metadata.
+func CRLFCheckout(t *testing.T, source string, paths ...string) string {
+	t.Helper()
+	snapshot, checkout := WorkDir(t), WorkDir(t)
+	root, err := os.OpenRoot(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := root.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	for _, name := range append([]string{".gitattributes"}, paths...) {
+		from, to := filepath.Join(source, name), filepath.Join(snapshot, name)
+		info, err := os.Stat(from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.IsDir() {
+			if err := os.CopyFS(to, os.DirFS(from)); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		data, err := os.ReadFile(from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := root.MkdirAll(filepath.Dir(name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := root.WriteFile(name, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const configFlag = "-c"
+	for _, args := range [][]string{
+		{"init", "--quiet"},
+		{configFlag, "core.autocrlf=false", "add", "--force", "--", "."},
+		{
+			configFlag, "core.autocrlf=true", configFlag, "core.eol=crlf", "checkout-index", "--all",
+			"--prefix=" + filepath.ToSlash(checkout) + "/",
+		},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		command := exec.CommandContext(ctx, "git", args...)
+		command.Dir = snapshot
+		output, err := command.CombinedOutput()
+		cancel()
+		if err != nil {
+			t.Fatalf("isolated Git CRLF checkout: %v\n%s", err, output)
+		}
+	}
+	return checkout
 }
 
 // BuildFakeAZ builds the portable fixture process with the active Go toolchain.
