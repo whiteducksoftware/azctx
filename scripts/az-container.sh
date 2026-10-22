@@ -12,10 +12,16 @@ if [[ $config != /* || ! -d $config ]]; then
   echo 'AZURE_CONFIG_DIR must be an existing absolute dedicated config directory' >&2
   exit 1
 fi
+# Refuse the host ~/.azure, anything inside it and any directory containing it
+# (such as $HOME or /), even before ~/.azure exists.
 resolved=$(cd "$config" && pwd -P)
-host=$(cd "${HOME:-/nonexistent}/.azure" 2>/dev/null && pwd -P || true)
-if [[ -n $host && ( $resolved == "$host" || $resolved == "$host"/* ) ]]; then
-  echo 'AZURE_CONFIG_DIR must be a dedicated directory, not the host ~/.azure' >&2
+home=$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P || true)
+host=$(cd "$home/.azure" 2>/dev/null && pwd -P || true)
+overlaps() { [[ -n $2 && ( $1 == "$2" || $1 == "$2"/* || $2 == "$1"/* ) ]]; }
+if [[ $resolved == / ]] || overlaps "$resolved" "$host" ||
+  { [[ -n $home ]] && overlaps "$resolved" "$home/.azure"; } ||
+  { [[ -n $home && ( $resolved == "$home" || $home == "$resolved"/* ) ]]; }; then
+  echo 'AZURE_CONFIG_DIR must be a dedicated directory, separate from the host ~/.azure' >&2
   exit 1
 fi
 

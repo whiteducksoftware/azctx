@@ -94,9 +94,11 @@ identity or signs in. The script refuses CI environments and requires explicit
 opt-in, the expected tenant GUID and two distinct subscription GUIDs. It
 verifies the signed-in tenant before any switch, always attempts to restore the
 initial subscription and fails visibly (exit 3) when it cannot. It uses the
-existing host sign-in and never reads, copies or mounts credentials or the
-default `~/.azure`. Optional container legs use only dedicated, separately
-signed-in directories you pass explicitly. See
+existing host sign-in. It never reads or copies credentials and never mounts
+the host credential cache (`~/.azure` or the host `AZURE_CONFIG_DIR`).
+Optional container legs intentionally mount only the dedicated container config
+directories you pass explicitly and sign in to separately; those directories
+hold that container CLI's own profile and tokens. See
 [integration tests](integration-tests.md#manual-live-azure-test).
 
 ## Redaction is heuristic
