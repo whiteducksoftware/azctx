@@ -23,6 +23,7 @@ ci-check:
 	python3 -B -m unittest discover -s .github/scripts -p 'test_*.py' -v
 	ruby .github/scripts/test_ci_config.rb
 	ruby .github/scripts/test_integration_config.rb
+	ruby .github/scripts/test_release_config.rb
 
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1
