@@ -76,108 +76,109 @@ CI publishes the raw `coverage.out` per OS (seven-day retention); locally use
 `go tool cover -func=coverage.out` or `go tool cover -html=coverage.out`.
 `make ci-check` runs offline gate, schema, container-shim, workflow and
 vulnerability-policy regressions, including negative cases.
-`make check` also runs the nightly script through the portable fake executable:
-success, invalid schema, foreign tenant and a failing guard, including context
-restoration after failure. Those adapter checks are not live Azure acceptance.
+`make ci-check` also runs the offline tests of the manual live script and its
+container shim with recording fake azctx/az/docker processes, and a workflow
+policy test proving that no workflow signs in to Azure or runs the live script.
+`make check` runs the live script through the portable fake executable on all
+three platforms: success, refusal without opt-in, foreign tenant, invalid
+schema, a failing guard with restoration and a failed restore. Those adapter
+checks are not live Azure acceptance.
 
-## Opt-in real Azure CLI nightly
+## Manual live Azure test
 
-`.github/workflows/integration.yaml` schedules 03:37 UTC daily and supports a
-manual dispatch **on the upstream main branch only**. It never handles PRs,
-forks, arbitrary image/ref inputs or dispatch-supplied identities. Disabled
-integration is explicitly **SKIPPED / UNVERIFIED**, not a successful live test.
-No dedicated tenant was supplied during implementation, so neither real matrix
-leg nor failure notification delivery has been verified.
+Live Azure checks are a **manual maintainer action**. No workflow signs in to
+Azure, holds an Azure identity or runs `scripts/live-azure-test.py`; the script
+refuses to start when `CI`, `GITHUB_ACTIONS` or `TF_BUILD` is set. Native CI
+keeps the offline suites above. The script has not been run against a real
+tenant during implementation.
 
-A maintainer must provision and review these prerequisites separately:
+### Prerequisites
 
 1. A **dedicated non-production AzureCloud test tenant**, never a customer or
-   production tenant, with at least two enabled subscriptions in that tenant.
-2. A federated service principal with **Reader only** on both subscriptions.
-   No client secret or password is needed. Configure GitHub OIDC trust for
-   `repo:whiteducksoftware/azctx:environment:azure-integration`, issuer
-   `https://token.actions.githubusercontent.com`, audience
-   `api://AzureADTokenExchange`.
-3. A GitHub environment named `azure-integration`, restricted to the upstream
-   `main` branch (and reviewers if required by the organization). Do not broaden
-   federation to PRs/forks or use an identity with resource write permissions.
-4. Set these **repository variables**, not secrets or workflow inputs:
+   production tenant, with two enabled subscriptions you may switch between.
+2. An existing Azure CLI sign-in on your machine (`az login`) to that tenant,
+   with the current subscription set to one of the two test subscriptions.
+   The script never signs in or out, never reads or copies credentials and
+   never mounts the host `~/.azure` or host `AZURE_CONFIG_DIR`.
 
-   | Variable | Required value |
-   | --- | --- |
-   | `AZCTX_TEST_CLIENT_ID` | Federated application/client GUID |
-   | `AZCTX_TEST_TENANT_ID` | Dedicated test tenant GUID |
-   | `AZCTX_TEST_SUBSCRIPTION_ID` | First test subscription GUID, initial default |
-   | `AZCTX_TEST_SECOND_SUBSCRIPTION_ID` | Distinct second subscription GUID |
-   | `AZCTX_INTEGRATION_DEDICATED_TENANT` | Exact `true`: maintainer attests the dedicated, non-production prerequisite |
-   | `AZCTX_INTEGRATION_ENABLED` | Exact `true`: explicit opt-in after reviewing all prerequisites |
+### Run it
 
-When enabled, missing/invalid IDs, duplicate subscriptions or a missing tenant
-attestation fail before the OIDC job. The script revalidates the opt-in before
-executing even the binary. Disabling the last variable skips all Azure work.
-These public identifiers are configuration, not credentials; restrict who can
-edit repository variables and the workflow.
+```sh
+make live-test LIVE_TEST_ARGS='--opt-in-live-azure --tenant <tenant-guid> \
+  --subscription <first-guid> --subscription <second-guid>'
+```
 
-### Container and permission boundaries
+`make live-test` builds `./azctx`, then runs the script. `--opt-in-live-azure`,
+a nonzero tenant GUID and exactly two distinct subscription GUIDs are required;
+anything else is refused before a process starts. The script first reads the
+current context of every requested Azure CLI and refuses unless it is signed in
+to `--tenant` in AzureCloud on one of the two subscriptions. It then lists both
+subscriptions, switches to each, checks `-c`, the four `env --shell bash`
+exports, a quiet matching guard and a mismatching guard's exit 4 JSON error,
+and finally switches back to the initial subscription and verifies it.
 
-Both Azure CLI **2.61.0** and **latest** execute inside official
-`mcr.microsoft.com/azure-cli` containers. The 2.61.0 manifest is digest-pinned;
-latest is intentionally pulled fresh, resolved to an MCR digest and logged
-with its actual CLI version in the job summary. Every subsequent invocation
-uses that immutable digest, including login, account switching and logout.
-Re-review the legacy digest when changing the compatibility baseline.
+Each leg uses a fresh private azctx state directory (`AZCTX_CONFIG_DIR`) with
+input and update checks disabled; the work directory is removed afterwards.
+Output never echoes Azure CLI or azctx diagnostics: failures name the azctx
+command, its exit code and, at most, azctx's JSON error code.
 
-The old 2.61.0 image is Alpine-based; Microsoft stopped maintaining Alpine CLI
-images after 2.63.0. Do not assume it can run the Node24 runtime of current
-checkout/login actions or install a different CLI into it. Instead all pinned
-JavaScript actions run on the Ubuntu host. A PATH shim invokes **only the
-container CLI** for both `azure/login` and azctx, sharing a fresh, dedicated
-`AZURE_CONFIG_DIR` mount. No Node runtime is needed inside either CLI image.
-Only that Azure directory is mounted, never the host home or Docker socket.
-The shim uses the host user's exact UID:GID so the container can access the
-host-owned `0700` config directory without creating root-owned files. Container
-`HOME` points to that same writable directory. Containers still drop all
-capabilities and disallow privilege escalation.
+| Exit | Meaning |
+| --- | --- |
+| 0 | All requested legs passed and were restored |
+| 1 | A check failed; the initial context was restored (or never changed) |
+| 2 | Refused or usage error; nothing was changed |
+| 3 | **RESTORE FAILED**: run the printed `az account set` command yourself |
+| 130/143 | Ctrl+C or SIGTERM; the initial context was restored (or never changed) |
 
-The shim leaves Azure CLI's default JSON output enabled: Azure Login v3.1.0
-invokes `az version` without an output flag and parses its JSON stdout. Host
-`AZURE_CORE_OUTPUT` overrides are not forwarded; explicit `-o`/`--output` flags
-are passed through unchanged. Login/account-set output is suppressed by the
-login action itself, not by changing the CLI's default output format. Offline
-Docker-recording tests check these boundaries; they do not execute containers
-or prove Linux filesystem permissions or live OIDC acceptance.
+Interrupts never abort restoration: a signal is recorded, the current command
+finishes, the initial subscription is restored and verified, then the script
+exits. A timed-out command (120 s) is killed and counts as a failure.
 
-OIDC `id-token: write` exists only on the `azure` matrix job, which otherwise
-has `contents: read`. The prerequisite job has only read access. A separate
-failure-only job has only `issues: write`: it opens or comments on a fixed
-failure issue and mentions the current CODEOWNERS with a run link, never Azure
-output. Every job starts with audit-mode runner hardening; checkouts do not
-persist credentials and privileged Go setup disables caching.
+### Optional Azure CLI 2.61.0 and latest containers
 
-### Live assertions and acceptance
+Without `--container`, the summary prints **NOT RUN ... unverified** for the
+minimum supported (2.61.0) and latest Azure CLI. To cover them, prepare each
+container leg yourself; the script never pulls images or signs in:
 
-The host builds the static azctx binary and the official login action signs
-in through the shim. The check script uses azctx's schema-1 JSON to verify both
-configured subscriptions and their tenant/cloud before switching. It switches
-to each test subscription, confirms current context, verifies all four env
-exports, accepts the matching guard and requires exit 4 plus the JSON error
-contract for a mismatching guard. The mismatch must not switch. A `finally`
-step restores and verifies the initial test context.
+```sh
+docker pull mcr.microsoft.com/azure-cli@sha256:b83a4620937eccf09244e4dfbf310f774b01b3083b7accf49ab74d77247c8043
+docker pull mcr.microsoft.com/azure-cli:latest
+mkdir -m 700 ~/azctx-live/cli-2.61.0 ~/azctx-live/cli-latest
+AZURE_CONFIG_DIR=$HOME/azctx-live/cli-2.61.0 \
+  AZCTX_AZURE_CLI_IMAGE=mcr.microsoft.com/azure-cli@sha256:b83a4620937eccf09244e4dfbf310f774b01b3083b7accf49ab74d77247c8043 \
+  scripts/az-container.sh login --tenant <tenant-guid> --use-device-code
+# Repeat for latest with its local digest:
+# docker image inspect --format '{{json .RepoDigests}}' mcr.microsoft.com/azure-cli:latest
+make live-test LIVE_TEST_ARGS='--opt-in-live-azure --tenant <tenant-guid> \
+  --subscription <first-guid> --subscription <second-guid> \
+  --container 2.61.0=$HOME/azctx-live/cli-2.61.0 --container latest=$HOME/azctx-live/cli-latest'
+```
 
-Only Azure CLI may manage its own login/configuration files. Neither azctx nor
-the check scripts read credentials/MSAL caches, directly write Azure files or
-issue Azure resource writes. Azure Login's post-job cleanup logs out through
-the same shim. **Never upload `.integration/`, Azure files or login output**;
-the disposable hosted runner is the final filesystem cleanup boundary.
+Each `--container VERSION=DIR` must be an absolute, existing, non-symlink
+directory owned by you with mode `0700`, different for each leg and neither
+inside nor containing `~/.azure` or the host `AZURE_CONFIG_DIR`. The 2.61.0 leg
+requires the local image to carry the pinned digest and report exactly 2.61.0;
+latest must resolve locally to exactly one MCR digest reporting at least
+2.61.0. All image and version checks, then every leg's tenant check, happen
+before the first switch. azctx runs on the host; `scripts/az-container.sh` is
+put first on its PATH as `az` and runs the CLI with `--pull=never`, all
+capabilities dropped, `no-new-privileges`, your UID:GID, only that config
+directory mounted and `HOME` set to it. That dedicated directory holds the
+container CLI's own sign-in, so treat it like a credential cache. The shim
+refuses the host `~/.azure`, anything inside it and any directory containing
+it, such as your home directory or `/`.
+The 2.61.0 image is Alpine-based and retired upstream; it only runs the CLI.
+Sign out of or delete these dedicated directories when you are done.
 
-Acceptance still requires actual native CI success on all three OSes and a
-green, opt-in real run for **both** container versions, plus verified issue
-notification permissions/delivery. Interactive MFA stays manual and out of
-scope. A skipped nightly does not satisfy these requirements.
+### Boundaries and acceptance
+
+Only the Azure CLI manages its own sign-in and config files. The script and
+azctx never read credentials or MSAL caches, write Azure files directly or
+issue Azure resource writes; `az account set` changes only the local CLI
+profile. Live acceptance means a maintainer ran the script successfully for
+the host and both container legs against the dedicated tenant. A NOT RUN leg
+or offline fake run is not live acceptance. Interactive MFA stays manual.
 
 Sources:
 
 - [Official Azure CLI Docker images and Alpine retirement](https://learn.microsoft.com/en-us/cli/azure/run-azure-cli-docker)
-- [Azure Login v3.1.0 OIDC and action runtime](https://github.com/Azure/login/tree/v3.1.0)
-- [GitHub OIDC with Azure](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-azure)
-- [Workload identity federation](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation)

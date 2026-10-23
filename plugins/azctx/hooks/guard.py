@@ -44,6 +44,7 @@ def main():
         if not isinstance(command, str) or not command.strip() or "\0" in command:
             raise ValueError
         # Only the first literal word is inspected. Never evaluate command text.
+        # azctx exec bypasses this hook; agents must use the documented preflight.
         lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
         if lexer.get_token() not in ("az", "azd", "terraform", "bicep"):

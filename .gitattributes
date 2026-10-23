@@ -13,3 +13,6 @@
 # Keep portable skill frontmatter and its cached plugin copy byte-identical.
 /skills/**/SKILL.md text eol=lf
 /plugins/**/SKILL.md text eol=lf
+
+# Exact real GoReleaser and brew style release fixtures are compared byte for byte.
+/.github/scripts/testdata/** text eol=lf

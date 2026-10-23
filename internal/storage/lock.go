@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 )
@@ -34,4 +35,24 @@ func Lock(path, azureDir string) (release func(), acquired bool, err error) {
 		unlock()
 		_ = file.Close()
 	}, true, nil
+}
+
+// WaitLock retries the nonblocking Lock until it is acquired, calling wait
+// after each busy attempt. Cancellation stops waiting without taking the lock.
+func WaitLock(ctx context.Context, path, azureDir string, wait func(context.Context) error) (release func(), err error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		release, acquired, err := Lock(path, azureDir)
+		if err != nil {
+			return nil, err
+		}
+		if acquired {
+			return release, nil
+		}
+		if err := wait(ctx); err != nil {
+			return nil, err
+		}
+	}
 }

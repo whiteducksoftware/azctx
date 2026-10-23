@@ -61,7 +61,7 @@ func TestHistoryReadOnlyWithoutProfileAndCorruptionWarning(t *testing.T) {
 	t.Setenv("AZCTX_CONFIG_DIR", dir)
 	deps.FS, deps.Runner = nil, nil
 	out := configCommandOutput(t, deps, historyCommand, outputFlag, jsonFormat)
-	if out != "{\"schemaVersion\":1,\"entries\":[]}\n" {
+	if out != emptyHistoryJSON {
 		t.Fatalf("empty history=%q", out)
 	}
 	if files, err := os.ReadDir(dir); err != nil || len(files) != 0 {

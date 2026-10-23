@@ -6,6 +6,11 @@ class ReleaseConfigurationTest < Minitest::Test
   ROOT = File.expand_path('../..', __dir__)
   WINDOWS_TRANSFER = "dist/*.zip\ndist/*_Windows_checksums.txt\ndist/*.sbom.json\ndist/winget/**/*.yaml\n".freeze
   ARCHIVE_PERMISSIONS = { 'contents' => 'write', 'id-token' => 'write', 'attestations' => 'write' }.freeze
+  STABLE = "${{ !contains(github.ref_name, '-') }}".freeze
+  STABLE_UPSTREAM = "${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}".freeze
+  WINDOWS_ASSET_UPLOAD = 'python3 -B .github/scripts/upload_release_assets.py .release-check/windows/*.zip ' \
+                         '.release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json'.freeze
+  CHOCOLATEY_VERIFY = 'python -B .github/scripts/verify_chocolatey.py .release-check/chocolatey'.freeze
 
   def setup
     @unix = YAML.safe_load(File.read(File.join(ROOT, '.goreleaser.yaml')))
@@ -61,11 +66,18 @@ class ReleaseConfigurationTest < Minitest::Test
   def validate_workflow(workflow)
     raise 'workflow permissions' unless workflow.fetch('permissions') == {}
     raise 'release jobs' unless workflow.fetch('jobs').keys.sort ==
-                                %w[goreleaser-linux goreleaser-windows homebrew homebrew-publish release-readiness windows-publish]
+                                %w[chocolatey-publish goreleaser-linux goreleaser-windows homebrew homebrew-publish
+                                   release-readiness windows-publish]
+    raise 'release assets must be uploaded idempotently, never overwritten' if
+      workflow.to_s.match?(/gh release upload|--clobber|gh release delete-asset/)
+    workflow.fetch('jobs').each do |name, job|
+      next if name == 'chocolatey-publish'
+      raise 'Chocolatey push/credential only in the final verified publisher' if job.to_s.match?(/choco push|CHOCO_API_KEY/)
+    end
     workflow.fetch('jobs').each do |name, job|
       raise 'release failures must not be bypassed' if job.key?('continue-on-error') ||
                                                      job.fetch('steps').any? { |step| step.key?('continue-on-error') }
-      unless %w[homebrew homebrew-publish].include?(name)
+      unless %w[homebrew homebrew-publish chocolatey-publish].include?(name)
         raise 'upstream successful jobs only' unless job.fetch('if') == "github.repository == 'whiteducksoftware/azctx'"
       end
       validate_step_integrity(job.fetch('steps'))
@@ -77,7 +89,7 @@ class ReleaseConfigurationTest < Minitest::Test
         validate_homebrew_job(job)
         next
       end
-      raise 'protected environment' unless job.fetch('environment') == 'release'
+      raise 'protected environment' unless job['environment'] == 'release'
       if name == 'homebrew-publish'
         validate_homebrew_publisher(job)
         next
@@ -88,6 +100,10 @@ class ReleaseConfigurationTest < Minitest::Test
       end
       if name == 'windows-publish'
         validate_windows_publisher(job)
+        next
+      end
+      if name == 'chocolatey-publish'
+        validate_chocolatey_publisher(job)
         next
       end
       raise 'release permissions' unless job.fetch('permissions') == ARCHIVE_PERMISSIONS
@@ -109,7 +125,7 @@ class ReleaseConfigurationTest < Minitest::Test
       ) && steps.any? { |step| step.fetch('run', '').include?('ruby .github/scripts/release_snapshot.rb defer-homebrew') }
       validate_upload(steps, 'homebrew-cask', 'dist/homebrew/Casks/azctx.rb')
       upload = steps.find { |step| step.fetch('uses', '').start_with?('actions/upload-artifact@') }
-      raise 'stable-only raw cask transfer' unless upload.fetch('if') == "${{ !contains(github.ref_name, '-') }}"
+      raise 'stable-only raw cask transfer' unless upload.fetch('if') == STABLE
 
       attest = steps.find { |step| step.fetch('uses', '').start_with?('actions/attest@') }
       raise 'all archive attestations' unless attest.fetch('with').fetch('subject-path') == 'dist/*.tar.gz'
@@ -166,19 +182,27 @@ class ReleaseConfigurationTest < Minitest::Test
   end
 
   def validate_upload(steps, name, path)
+    validate_uploads(steps, name => path)
+  end
+
+  def validate_uploads(steps, expected)
     uploads = steps.select { |step| step.fetch('uses', '').start_with?('actions/upload-artifact@') }
-    raise 'only declared release files can be transferred' unless uploads.length == 1 &&
-      uploads.first.fetch('with') == {
-        'name' => name, 'path' => path, 'if-no-files-found' => 'error', 'retention-days' => 1
-      }
+    raise 'only declared release files can be transferred' unless uploads.length == expected.length &&
+      uploads.map { |upload| upload.fetch('with') } == expected.map do |name, path|
+        { 'name' => name, 'path' => path, 'if-no-files-found' => 'error', 'retention-days' => 1 }
+      end
   end
 
   def validate_download(steps, name, path = '.release-check/cask')
+    validate_downloads(steps, name => path)
+  end
+
+  def validate_downloads(steps, expected)
     downloads = steps.select { |step| step.fetch('uses', '').start_with?('actions/download-artifact@') }
-    raise 'verified same-run artifact only' unless downloads.length == 1 &&
-      downloads.first.fetch('with') == {
-        'name' => name, 'path' => path, 'digest-mismatch' => 'error'
-      }
+    raise 'verified same-run artifact only' unless downloads.length == expected.length &&
+      downloads.map { |download| download.fetch('with') } == expected.map do |name, path|
+        { 'name' => name, 'path' => path, 'digest-mismatch' => 'error' }
+      end
   end
 
   def validate_windows_native(job)
@@ -198,16 +222,13 @@ class ReleaseConfigurationTest < Minitest::Test
     raise 'native GoReleaser never publishes' unless build.fetch('with').fetch('args') ==
       "release --clean --skip=publish --config .goreleaser-windows.yaml ${{ contains(github.ref_name, '-') && '--skip=chocolatey' || '' }}" &&
       build.fetch('env') == { 'GITHUB_TOKEN' => '${{ github.token }}' }
-    validate_upload(steps, 'windows-release-files', WINDOWS_TRANSFER)
-    choco = steps.last
-    raise 'only stable native Chocolatey push can receive its credential' unless
-      choco.fetch('if') == "${{ !contains(github.ref_name, '-') }}" && choco.fetch('shell') == 'pwsh' &&
-      choco.fetch('env') == { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' } &&
-      choco.fetch('run').include?('choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY') &&
-      choco.fetch('run').include?('[string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)') &&
-      choco.fetch('run').include?('$packages.Count -ne 1') &&
-      choco.fetch('run').include?('if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }')
-    raise 'no credentials before the last native push step' if steps[0...-1].to_s.match?(/secrets\./)
+    validate_uploads(steps, 'windows-release-files' => WINDOWS_TRANSFER, 'chocolatey-package' => 'dist/azctx.*.nupkg')
+    package = steps.last
+    raise 'transfer the same-run stable Chocolatey package last' unless
+      package.fetch('uses', '').start_with?('actions/upload-artifact@') &&
+      package.fetch('with').fetch('name') == 'chocolatey-package' && package['if'] == STABLE
+    raise 'native package generation never pushes or receives package credentials' if
+      job.to_s.match?(/secrets\.|choco push|CHOCO_API_KEY/)
   end
 
   def validate_windows_publisher(job)
@@ -240,12 +261,46 @@ class ReleaseConfigurationTest < Minitest::Test
     raise 'all Windows archive attestations' unless attest.fetch('with') == {
       'subject-path' => '.release-check/windows/*.zip', 'create-storage-record' => false
     }
-    upload = steps.find { |step| step.fetch('run', '').include?('gh release upload') }
-    raise 'verified Windows archive and SBOM upload' unless upload.fetch('run') ==
-      'gh release upload "$RELEASE_TAG" .release-check/windows/*.zip .release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json' &&
-      upload.fetch('env') == { 'GH_TOKEN' => '${{ github.token }}', 'RELEASE_TAG' => '${{ github.ref_name }}' }
+    uploads = steps.each_index.select { |index| steps[index].fetch('run', '').include?('upload_release_assets.py') }
+    raise 'digest-aware idempotent Windows archive and SBOM upload' unless uploads.length == 1 &&
+      steps[uploads.first].fetch('run') == WINDOWS_ASSET_UPLOAD && !steps[uploads.first].key?('if') &&
+      steps[uploads.first].fetch('env') == { 'GH_TOKEN' => '${{ github.token }}', 'RELEASE_TAG' => '${{ github.ref_name }}' }
+    attest_index = steps.index { |step| step.fetch('uses', '').start_with?('actions/attest@') }
+    raise 'upload verified assets before attestation and winget publication' unless uploads.first < attest_index &&
+                                                                                    uploads.first < check
     raise 'no toolchain rebuild or Chocolatey credentials in the portable publisher' if
       job.to_s.match?(/setup-go|goreleaser-action|CHOCO_API_KEY/)
+  end
+
+  def validate_chocolatey_publisher(job)
+    raise 'native Chocolatey push needs native Windows' unless job.fetch('runs-on') == 'windows-latest'
+    raise 'Chocolatey publisher cannot write GitHub content' unless job.fetch('permissions') == { 'contents' => 'read' }
+    raise 'Chocolatey waits for successful Windows asset publication' unless job.fetch('needs') == 'windows-publish'
+    raise 'stable-only Chocolatey publisher' unless job.fetch('if') == STABLE_UPSTREAM
+    raise 'Chocolatey credential must not be job-scoped' if job.key?('env')
+    steps = job.fetch('steps')
+    raise 'do not claim unsupported Windows blocking' unless
+      steps.first.fetch('uses').start_with?('step-security/harden-runner@') &&
+      steps.first.fetch('with') == { 'egress-policy' => 'audit' }
+    validate_download(steps, 'chocolatey-package', '.release-check/chocolatey')
+    download = steps.index { |step| step.fetch('uses', '').start_with?('actions/download-artifact@') }
+    verify = steps.index { |step| step.fetch('run', '') == CHOCOLATEY_VERIFY }
+    push = steps.length - 1
+    raise 'verify the embedded checksum against the uploaded archive before the final push' unless
+      download && verify && download < verify && verify == push - 1 &&
+      steps.fetch(verify).fetch('env') == { 'RELEASE_TAG' => '${{ github.ref_name }}' } && !steps.fetch(verify).key?('if')
+    choco = steps.fetch(push)
+    raise 'only the verified same-run package push receives its credential' unless
+      choco.fetch('shell') == 'pwsh' && !choco.key?('if') &&
+      choco.fetch('env') == { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' } &&
+      choco.fetch('run').include?('$packages = @(Get-ChildItem .release-check/chocolatey/azctx.*.nupkg)') &&
+      choco.fetch('run').include?('choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY') &&
+      choco.fetch('run').include?('[string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)') &&
+      choco.fetch('run').include?('$packages.Count -ne 1') &&
+      choco.fetch('run').include?('if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }')
+    raise 'no credentials before the final Chocolatey push' if steps[0...-1].to_s.match?(/secrets\.|TOKEN|token/)
+    raise 'no rebuild, GitHub publication or portable publishers in the Chocolatey job' if
+      job.to_s.match?(/setup-go|goreleaser|sbom-action|create-github-app-token|publish_winget|publish_cask|actions\/attest@|upload_release_assets|upload-artifact/)
   end
 
   def validate_release_readiness(job)
@@ -263,6 +318,7 @@ class ReleaseConfigurationTest < Minitest::Test
   def test_native_windows_only_retains_unavoidable_chocolatey_publishing
     validate_windows_native(release_workflow.fetch('jobs').fetch('goreleaser-windows'))
     validate_windows_publisher(release_workflow.fetch('jobs').fetch('windows-publish'))
+    validate_chocolatey_publisher(release_workflow.fetch('jobs').fetch('chocolatey-publish'))
   end
 
   def test_release_readiness_is_actually_blocked_before_any_publisher
@@ -291,9 +347,73 @@ class ReleaseConfigurationTest < Minitest::Test
         build = w['jobs']['goreleaser-windows']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
         build['with']['args'].sub!('--skip=publish ', '')
       end,
-      'prerelease Chocolatey credential' => ->(w) { w['jobs']['goreleaser-windows']['steps'].last['if'] = 'true' },
+      'prerelease Chocolatey credential' => ->(w) { w['jobs']['chocolatey-publish']['if'] = "github.repository == 'whiteducksoftware/azctx'" },
       'implicit Chocolatey credential fallback' => ->(w) do
-        w['jobs']['goreleaser-windows']['steps'].last['run'].sub!(/^.*IsNullOrWhiteSpace.*\n/, '')
+        w['jobs']['chocolatey-publish']['steps'].last['run'].sub!(/^.*IsNullOrWhiteSpace.*\n/, '')
+      end,
+      'Chocolatey pushed before Windows assets exist' => ->(w) { w['jobs']['chocolatey-publish']['needs'] = 'goreleaser-windows' },
+      'Chocolatey ignores failed Windows publication' => ->(w) do
+        w['jobs']['chocolatey-publish']['if'] = "${{ always() && github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}"
+      end,
+      'native build pushes Chocolatey again' => ->(w) do
+        w['jobs']['goreleaser-windows']['steps'] << {
+          'shell' => 'pwsh', 'run' => 'choco push dist/azctx.nupkg --api-key $env:CHOCO_API_KEY',
+          'env' => { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' }
+        }
+      end,
+      'native build receives Chocolatey credential' => ->(w) do
+        w['jobs']['goreleaser-windows']['env']['CHOCO_API_KEY'] = '${{ secrets.CHOCO_API_KEY }}'
+      end,
+      'missing same-run package transfer' => ->(w) do
+        w['jobs']['goreleaser-windows']['steps'].delete_if { |s| s.fetch('with', {})['name'] == 'chocolatey-package' }
+      end,
+      'prerelease package transfer' => ->(w) { w['jobs']['goreleaser-windows']['steps'].last.delete('if') },
+      'Chocolatey push before checksum verification' => ->(w) do
+        steps = w['jobs']['chocolatey-publish']['steps']
+        steps[-1], steps[-2] = steps[-2], steps[-1]
+      end,
+      'Chocolatey push without checksum verification' => ->(w) do
+        w['jobs']['chocolatey-publish']['steps'].delete_if { |s| s.fetch('run', '').include?('verify_chocolatey.py') }
+      end,
+      'Chocolatey verification only warns' => ->(w) do
+        w['jobs']['chocolatey-publish']['steps'][-2]['continue-on-error'] = true
+      end,
+      'Chocolatey package from another run' => ->(w) do
+        download = w['jobs']['chocolatey-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
+        download['with']['run-id'] = '12345'
+      end,
+      'Chocolatey transfer digest only warns' => ->(w) do
+        download = w['jobs']['chocolatey-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
+        download['with']['digest-mismatch'] = 'warn'
+      end,
+      'Chocolatey publisher rebuilds' => ->(w) do
+        w['jobs']['chocolatey-publish']['steps'].insert(2, w['jobs']['goreleaser-windows']['steps'].find do |s|
+          s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@')
+        end)
+      end,
+      'Chocolatey credential job-scoped' => ->(w) do
+        w['jobs']['chocolatey-publish']['env'] = { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' }
+      end,
+      'Chocolatey publisher writes GitHub content' => ->(w) { w['jobs']['chocolatey-publish']['permissions']['contents'] = 'write' },
+      'Chocolatey publisher pretends native block support' => ->(w) do
+        w['jobs']['chocolatey-publish']['steps'][0]['with']['egress-policy'] = 'block'
+      end,
+      'Chocolatey publisher without protected environment' => ->(w) { w['jobs']['chocolatey-publish'].delete('environment') },
+      'non-idempotent Windows upload' => ->(w) do
+        upload = w['jobs']['windows-publish']['steps'].find { |s| s.fetch('run', '').include?('upload_release_assets.py') }
+        upload['run'] = 'gh release upload "$RELEASE_TAG" .release-check/windows/*.zip'
+      end,
+      'overwriting Windows upload' => ->(w) do
+        upload = w['jobs']['windows-publish']['steps'].find { |s| s.fetch('run', '').include?('upload_release_assets.py') }
+        upload['run'] += ' --clobber'
+      end,
+      'missing Windows SBOM upload' => ->(w) do
+        upload = w['jobs']['windows-publish']['steps'].find { |s| s.fetch('run', '').include?('upload_release_assets.py') }
+        upload['run'] = upload['run'].sub(' .release-check/windows/*.sbom.json', '')
+      end,
+      'Windows upload failure ignored' => ->(w) do
+        upload = w['jobs']['windows-publish']['steps'].find { |s| s.fetch('run', '').include?('upload_release_assets.py') }
+        upload['continue-on-error'] = true
       end,
       'credential precedes native transfer' => ->(w) do
         w['jobs']['goreleaser-windows']['steps'][1]['env'] = { 'GH_TOKEN' => '${{ secrets.RELEASE_APP_PRIVATE_KEY }}' }
@@ -339,11 +459,16 @@ class ReleaseConfigurationTest < Minitest::Test
       harden.fetch('with').fetch('allowed-endpoints').split.sort ==
       %w[github.com:443 api.github.com:443 *.actions.githubusercontent.com:443 *.blob.core.windows.net:443].sort
     validate_app_token(steps, 'homebrew-tap')
-    validate_download(steps, 'homebrew-cask-normalized')
-    download = steps.index { |step| step.fetch('uses', '').start_with?('actions/download-artifact@') }
+    validate_downloads(steps, 'homebrew-cask' => '.release-check/original', 'homebrew-cask-normalized' => '.release-check/cask')
+    download = steps.rindex { |step| step.fetch('uses', '').start_with?('actions/download-artifact@') }
     token = steps.index { |step| step.fetch('uses', '').start_with?('actions/create-github-app-token@') }
-    publish = steps.index { |step| step.fetch('run', '').include?('publish_cask.py') }
-    raise 'verify artifact before token before publish' unless download && token && publish && download < token && token < publish
+    compare = steps.index { |step| step.fetch('run', '') == 'python3 -B .github/scripts/publish_cask.py --check' }
+    publish = steps.index { |step| step.fetch('run', '') == 'python3 -B .github/scripts/publish_cask.py' }
+    raise 'compare normalized semantics with the original Linux cask before token before publish' unless
+      download && compare && token && publish && download < compare && compare < token && token < publish
+    raise 'semantic comparison has no credentials' unless steps.fetch(compare).fetch('env') == {
+      'RELEASE_TAG' => '${{ github.ref_name }}'
+    } && !steps.fetch(compare).key?('if')
     raise 'publish token handoff' unless steps.fetch(publish).fetch('env') == {
       'GH_TOKEN' => '${{ steps.publisher-token.outputs.token }}', 'RELEASE_TAG' => '${{ github.ref_name }}'
     }
@@ -373,7 +498,11 @@ class ReleaseConfigurationTest < Minitest::Test
         upload['with']['path'] = '.'
       end,
       'unverified transfer' => ->(w) do
-        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
+        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('with', {})['name'] == 'homebrew-cask-normalized' }
+        download['with']['digest-mismatch'] = 'warn'
+      end,
+      'unverified original transfer' => ->(w) do
+        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('with', {})['name'] == 'homebrew-cask' }
         download['with']['digest-mismatch'] = 'warn'
       end,
       'unverified raw cask transfer' => ->(w) do
@@ -385,12 +514,40 @@ class ReleaseConfigurationTest < Minitest::Test
         upload['with']['path'] = '.release-check/cask/azctx.rb'
       end,
       'different workflow run' => ->(w) do
-        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
+        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('with', {})['name'] == 'homebrew-cask-normalized' }
         download['with']['run-id'] = '12345'
       end,
       'publish raw unstyled cask' => ->(w) do
-        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
+        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('with', {})['name'] == 'homebrew-cask-normalized' }
         download['with']['name'] = 'homebrew-cask'
+      end,
+      'no original Linux cask for comparison' => ->(w) do
+        w['jobs']['homebrew-publish']['steps'].delete_if { |s| s.fetch('with', {})['name'] == 'homebrew-cask' }
+      end,
+      'original Linux cask from another run' => ->(w) do
+        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('with', {})['name'] == 'homebrew-cask' }
+        download['with']['run-id'] = '12345'
+      end,
+      'compare against the normalized cask itself' => ->(w) do
+        download = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('with', {})['name'] == 'homebrew-cask' }
+        download['with']['name'] = 'homebrew-cask-normalized'
+      end,
+      'publish without semantic comparison' => ->(w) do
+        w['jobs']['homebrew-publish']['steps'].delete_if { |s| s.fetch('run', '').end_with?('publish_cask.py --check') }
+      end,
+      'semantic comparison after tap token' => ->(w) do
+        steps = w['jobs']['homebrew-publish']['steps']
+        compare = steps.index { |s| s.fetch('run', '').end_with?('publish_cask.py --check') }
+        token = steps.index { |s| s.fetch('uses', '').start_with?('actions/create-github-app-token@') }
+        steps[compare], steps[token] = steps[token], steps[compare]
+      end,
+      'semantic comparison sees tap token' => ->(w) do
+        compare = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('run', '').end_with?('publish_cask.py --check') }
+        compare['env']['GH_TOKEN'] = '${{ steps.publisher-token.outputs.token }}'
+      end,
+      'semantic comparison ignored' => ->(w) do
+        compare = w['jobs']['homebrew-publish']['steps'].find { |s| s.fetch('run', '').end_with?('publish_cask.py --check') }
+        compare['continue-on-error'] = true
       end,
       'native publisher' => ->(w) { w['jobs']['homebrew-publish']['runs-on'] = 'macos-latest' },
       'audit publisher' => ->(w) { w['jobs']['homebrew-publish']['steps'][0]['with']['egress-policy'] = 'audit' },
@@ -405,7 +562,7 @@ class ReleaseConfigurationTest < Minitest::Test
       'prerelease token' => ->(w) { w['jobs']['homebrew-publish']['if'] = 'true' },
       'token before verification' => ->(w) do
         steps = w['jobs']['homebrew-publish']['steps']
-        download = steps.index { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
+        download = steps.rindex { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
         token = steps.index { |s| s.fetch('uses', '').start_with?('actions/create-github-app-token@') }
         steps[download], steps[token] = steps[token], steps[download]
       end,
@@ -450,6 +607,10 @@ class ReleaseConfigurationTest < Minitest::Test
                               step.fetch('run', '').include?("GetEntry('azctx.nuspec')") }
     assert steps.any? { |step| step.fetch('if', '') == "runner.os == 'Windows'" &&
                               step.fetch('run', '').include?('check_winget.ps1') }
+    assert steps.any? { |step| step.fetch('if', '') == "runner.os == 'Windows' && matrix.channel == 'stable'" &&
+                              step.fetch('run', '') == 'python -B .github/scripts/verify_chocolatey.py ' \
+                                                       '.release-check/windows-stable --archives .release-check/windows-stable' &&
+                              step.fetch('env') == { 'RELEASE_TAG' => '2026.11.0' } }
     refute_match(/secrets\.|publisher-token|publish_cask\.py|publish_winget\.rb/, workflow.to_s)
   end
 

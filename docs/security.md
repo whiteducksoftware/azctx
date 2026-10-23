@@ -37,14 +37,19 @@ failed login. See [authentication](authentication.md#inspect-or-change-the-broke
 This exception must not be described as unrestricted Azure config access.
 
 Private writes include alias edits to `config.yaml`, previous/recent
-`state.json`, best-effort bounded `history.json`, and optional update cache
-and lock files. Shared atomic writes use `0600` files and `0700` directories
+`state.json` with its retained `state.lock`, best-effort bounded `history.json`
+with `history.lock`, and optional update cache and lock files. Shared atomic writes use `0600` files and `0700` directories
 on Unix; existing permissions are tightened where the writer requires it.
 Windows ACLs follow the user's filesystem policy, not a POSIX-mode guarantee.
 Paths inside either resolved or environment Azure configuration are rejected,
 including existing symlink targets.
-`env --format github` replaces the existing validated `GITHUB_ENV` file
-atomically; its parent permissions are unchanged. No tokens are exported.
+`env --format github` is not a private azctx write: it appends in place to the
+runner-owned `GITHUB_ENV` through one no-follow `O_APPEND` handle (Windows:
+append-only, reparse points opened rather than followed, no delete sharing),
+preserving its inode, owner and mode and leaving its parent untouched. It
+re-checks after opening that the handle is the validated single-link regular
+file outside Azure configuration, and reports open, partial-write and close
+errors. No tokens are exported.
 
 The private history records UTC completion time, previous/new subscription and
 token tenant GUIDs, cloud and terminal/script source, never names, queries or
@@ -82,12 +87,31 @@ Cancellation forwards interrupts to the direct child with a two-second kill
 fallback. Windows uses a console process group and Ctrl+Break. There is no
 promise of killing arbitrary descendant processes.
 
+## Manual live Azure test
+
+Maintainers run `make live-test` locally; no CI workflow holds an Azure
+identity or signs in. The script refuses CI environments and requires explicit
+opt-in, the expected tenant GUID and two distinct subscription GUIDs. It
+verifies the signed-in tenant before any switch, always attempts to restore the
+initial subscription and fails visibly (exit 3) when it cannot. It uses the
+existing host sign-in. It never reads or copies credentials and never mounts
+the host credential cache (`~/.azure` or the host `AZURE_CONFIG_DIR`).
+Optional container legs intentionally mount only the dedicated container config
+directories you pass explicitly and sign in to separately; those directories
+hold that container CLI's own profile and tokens. See
+[integration tests](integration-tests.md#manual-live-azure-test).
+
 ## Redaction is heuristic
 
 Verbose output, doctor string diagnostics, errors and streamed Azure CLI
 stderr replace recognized token-shaped values with `[REDACTED]`. Filtering
-recognizes JWT-like values, provider prefixes, long opaque words and labelled
-token/secret/password/Bearer values, including split writes.
+recognizes JWT-like values, provider prefixes, long opaque words (including
+80+ character base64 containing `/`) and labelled token/secret/password/Bearer
+values, `AccountKey=`/`SharedAccessKey=` connection-string values,
+`Authorization: Basic` credentials and labelled arrays such as
+`"password": ["…"]`, including split writes. The writer buffers at most 80
+bytes, so shorter unlabelled keys are emitted unchanged. Path segments that
+share an 80-byte window with a recognized key may be hidden with it.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
 

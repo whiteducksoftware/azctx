@@ -1,4 +1,4 @@
-.PHONY: build lint test check golden agent-check fuzz e2e ci-check completion-perf docs docs-check
+.PHONY: build lint test check golden agent-check fuzz e2e ci-check completion-perf docs docs-check live-test
 
 build:
 	CGO_ENABLED=0 go build -trimpath .
@@ -27,11 +27,17 @@ agent-check:
 
 ci-check:
 	python3 -B -m unittest discover -s .github/scripts -p 'test_*.py' -v
+	python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
 	ruby .github/scripts/test_ci_config.rb
-	ruby .github/scripts/test_integration_config.rb
+	ruby .github/scripts/test_live_azure_policy.rb
 	ruby .github/scripts/test_release_config.rb
 	ruby .github/scripts/test_publish_winget.rb
 	ruby .github/scripts/test_docs_config.rb
+
+# Manual maintainer check against a dedicated test tenant; never run in CI.
+# Example: make live-test LIVE_TEST_ARGS='--opt-in-live-azure --tenant T --subscription S1 --subscription S2'
+live-test: build
+	python3 -B scripts/live-azure-test.py --binary ./azctx $(LIVE_TEST_ARGS)
 
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1

@@ -91,7 +91,7 @@ func (c Checker) Check(owner, repo string) error {
 	if err != nil {
 		return err
 	}
-	if !cached.CheckedAt.IsZero() && now.Sub(cached.CheckedAt) < interval {
+	if !cached.CheckedAt.IsZero() && !cached.CheckedAt.After(now) && now.Sub(cached.CheckedAt) < interval {
 		return c.notice(owner, repo, cached.Tag)
 	}
 	// Cache attempts too, so offline/proxy failures do not recur every run.
