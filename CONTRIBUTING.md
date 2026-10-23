@@ -26,7 +26,7 @@ make golden # Update picker screen goldens; review and commit intentional change
 make agent-check # Offline Python hook tests (also included in test/check)
 make fuzz   # Profile, config and project parsers, 60 seconds each (also in CI)
 make e2e    # Existing real-binary/fake-az suite, portable across all three OSes
-make ci-check # Offline workflow, coverage, schema and scanner-policy regressions
+make ci-check # Offline tool-pin consistency plus CI, security and schema policy checks
 make completion-perf # Native 500-subscription completion, every call under 50 ms
 make docs   # Generate the deterministic Cobra CLI reference
 make docs-check # Reject missing, changed or extra CLI reference files
@@ -84,15 +84,58 @@ first failure. Doctor must remain useful without a profile or installed Azure
 CLI and must never print identities, secrets or raw subprocess diagnostics.
 See the [authentication guide](docs/authentication.md) for the capability
 and confirmation matrix and the still-unverified live acceptance checklist.
-Picker tests run real Bubble Tea programs with bounded waits and synthetic key
-events at 60, 100 and 160 columns; they do not need an interactive terminal.
-After `make golden`, run `make check` and confirm a second `make golden` leaves
-the reviewed golden files unchanged.
+Picker tests run real Bubble Tea v2 programs through teatest v2 with bounded
+waits and synthetic key events at 60, 100 and 160 columns; they do not need an
+interactive terminal. After `make golden`, run `make check` and confirm a second
+`make golden` leaves the reviewed golden files unchanged. When picker output
+changes, also regenerate the README demo with `go run ./tools/demogif` and
+review it; see [demo GIF](docs/development.md#demo-gif).
 
 JSON contract fixtures in `cmd/testdata/contract/` are compared byte-for-byte,
 including their single trailing LF. `.gitattributes` preserves LF on Windows
 checkouts too; keep these fixtures canonical rather than normalizing output or
 loosening assertions.
+
+### Where tests live
+
+Keep Go tests package-local: put `*_test.go` files next to the code they
+test, in the same directory. Use the same package for tests of unexported
+behavior and a `_test` package (for example `package ui_test`) for
+black-box tests of the exported API. Put fixtures in that package's
+`testdata/` directory and shared helpers in `internal/testutil`. Real-binary
+end-to-end tests stay in `cmd` as `TestBinary...`. Do not move existing tests
+into a central test tree; add new tests beside the package they cover.
+
+### Dependency maintenance
+
+Dependabot proposes weekly Go module and GitHub Actions updates: minor/patch
+updates grouped per ecosystem and major updates as individual PRs. Review them
+like any other change. Tool versions embedded in workflows and the preferred
+Go toolchain are listed in `.github/tool-pins.json`; edit the inventory and
+every listed source together. `make ci-check` verifies their consistency
+offline. Maintainers can report newer stable versions without changing
+anything:
+
+```sh
+python3 -B .github/scripts/check_tool_pins.py --online
+```
+
+It needs the GitHub CLI with API access and exits 0 when everything is
+current, 1 when updates are available and 2 for configuration or upstream
+errors. It never edits pins. See
+[dependency maintenance](docs/development.md#dependency-maintenance) for
+untagged module exceptions, compatibility floors and platform-managed tools.
+
+### Trying a pull request's binary
+
+CI uploads a native `azctx-validation-<os>-<arch>-<sha>` artifact for each
+Linux, macOS and Windows test job, kept for 14 days. For pull requests the SHA
+is GitHub's tested merge commit, not the PR head. Download it with
+`gh run download`, extract the tar, check `SHA256SUMS` and compare
+`./azctx version -o json` with `metadata.json`, following
+[PR validation binaries](docs/development.md#pr-validation-binaries). These
+builds contain unreviewed code: they are not releases, and checksums are not
+signatures. Never give them real credentials.
 
 ## Changes and review
 
