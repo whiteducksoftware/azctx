@@ -25,6 +25,8 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 - `internal/storage/`: atomic private files and update-check process locks outside Azure configuration.
 - `internal/config/`: strict version-1 YAML and shared private config paths.
 - `internal/selection/`: read-only visibility/matching catalog without IO or prompts.
+- `internal/project/`: strict read-only nearest project expectations, never switch instructions.
+- `internal/child/`: one resolved, attached exec command with isolated environment and signals.
 - `internal/testutil/`: recording runner and portable fake `az`.
 - `log/`: plain stderr diagnostics through slog and Lip Gloss.
 

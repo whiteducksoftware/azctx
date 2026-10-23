@@ -1,0 +1,4 @@
+$env:ARM_SUBSCRIPTION_ID = '11111111-1111-1111-1111-111111111111'
+$env:ARM_TENANT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+$env:AZURE_SUBSCRIPTION_ID = '11111111-1111-1111-1111-111111111111'
+$env:AZURE_TENANT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
