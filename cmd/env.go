@@ -30,7 +30,7 @@ func newEnvCommand(deps Dependencies) *cobra.Command {
 			}
 			return nil
 		},
-		RunE: commandHandler(func(command *cobra.Command, args []string) error {
+		RunE: func(command *cobra.Command, args []string) error {
 			if err := command.Context().Err(); err != nil {
 				return err
 			}
@@ -60,7 +60,7 @@ func newEnvCommand(deps Dependencies) *cobra.Command {
 				return err
 			}
 			return writeEnvironment(command, target, syntax, cli.ConfigDir())
-		}),
+		},
 	}
 	command.Flags().String("shell", shellBash, "Shell syntax: bash, zsh, fish, powershell (default bash)")
 	command.Flags().String("format", "", "Pipeline format: github (append GITHUB_ENV), azure-devops")

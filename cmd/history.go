@@ -17,7 +17,7 @@ import (
 func newHistoryCommand(deps Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use: "history", Short: "Show the last 100 completed subscription switches", Args: cobra.NoArgs,
-		RunE: commandHandler(func(command *cobra.Command, _ []string) error {
+		RunE: func(command *cobra.Command, _ []string) error {
 			if err := validateOutput(outputFormat(command), "history", formatText, formatJSON); err != nil {
 				return err
 			}
@@ -47,7 +47,7 @@ func newHistoryCommand(deps Dependencies) *cobra.Command {
 				}
 			}
 			return output.Flush()
-		}),
+		},
 	}
 }
 

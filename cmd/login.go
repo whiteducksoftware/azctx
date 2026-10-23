@@ -19,9 +19,15 @@ func newLoginCommand(newCLI func() (azcli.CLI, error), deps Dependencies) *cobra
 	Requires Azure CLI 2.61.0 or newer; tenant metadata comes from its profile.
 	Azure CLI's subscription selector is disabled only for this login process.
 	All args after -- are directly passed to the 'az login' command.`,
-		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
+		Args: func(cmd *cobra.Command, args []string) error {
+			if dash := cmd.ArgsLenAtDash(); dash >= 0 {
+				args = args[:dash]
+			}
+			return cobra.NoArgs(cmd, args)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
 			return loginRunE(cmd, args, newCLI, deps)
-		}),
+		},
 	}
 	loginCmd.Flags().Bool("all-tenants", false, "Discover Azure tenants and sign in to each separately")
 	loginCmd.Flags().Bool("use-device-code", false, "Sign in using a device code")

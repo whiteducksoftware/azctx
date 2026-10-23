@@ -25,7 +25,7 @@ make build  # Build the azctx executable
 make golden # Update picker screen goldens; review and commit intentional changes
 make agent-check # Offline Python hook tests (also included in test/check)
 make fuzz   # Profile, config and project parsers, 60 seconds each (also in CI)
-make e2e    # Existing real-binary/fake-az suite, portable across all three OSes
+make e2e    # Standalone real-binary/fake-az subset, already included in test/check
 make ci-check # Offline CI, security and schema policy checks
 make completion-perf # Native 500-subscription completion, every call under 50 ms
 make docs   # Generate the deterministic Cobra CLI reference
@@ -57,6 +57,9 @@ CI publishes the profile separately for each OS. See [integration tests](docs/in
 for the command coverage map, coverage policy and the manual live Azure test
 (`make live-test`), which maintainers run locally against a dedicated test
 tenant; CI never runs it. Offline fake runs are not live acceptance.
+Native Linux/macOS/Windows CI runs the real-binary suite once through `make test`,
+not a second `make e2e` invocation. Its Go test harness is race/coverage-instrumented;
+the separately built subprocess binaries are not.
 Lint explicitly enables `errcheck` (including type assertions), `govet`,
 `revive`, `gocritic`, `nilerr` and `errorlint` (including error assertions).
 Fuzz seeds run with ordinary tests; `make fuzz` additionally mutates each
@@ -114,6 +117,11 @@ like any other change. Dependabot cannot update tool versions embedded in
 workflows, the contributor install command or the preferred Go toolchain;
 update those manually, changing every occurrence together, then update version
 mentions in README, AGENTS, CONTRIBUTING and `docs/` (such as "Go 1.27.3").
+Before updating pins in protected release workflows or GoReleaser publishers,
+obtain explicit maintainer authorization for narrowly scoped dependency/tool pin
+maintenance in those files. It does not authorize changes to publication behavior,
+permissions, secrets or release blockers. Without that authorization, stop and
+report the protected occurrences rather than changing them or leaving pins inconsistent.
 When an update changes picker rendering (Charm modules), regenerate and review
 goldens along with the docs. See
 [dependency maintenance](docs/development.md#dependency-maintenance) for

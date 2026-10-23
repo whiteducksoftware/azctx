@@ -26,6 +26,9 @@ statement-weighted `internal/` coverage >=70%, and the separate uncached native
 or disable scanner failures to make a change pass.
 CI also runs native Linux/macOS/Windows tests, strict actionlint/zizmor,
 module checks, vulnerability policy and fuzz campaigns.
+The real-binary/fake-az E2E suite is included once in each native `make test` run;
+`make e2e` is only a standalone developer subset. Race/coverage instrumentation
+applies to the Go test harness, not its separately built subprocess binaries.
 [Integration tests](integration-tests.md) describes command coverage and the
 manual dedicated-tenant live test (`make live-test`), which maintainers run
 locally and CI never runs. Offline fake runs are not live acceptance.
@@ -55,11 +58,17 @@ Dependabot cannot update tool versions embedded in workflow inputs
 preferred Go `toolchain`. Update these seven pins (golangci-lint, actionlint,
 govulncheck, zizmor, GoReleaser, Syft and Go) manually. When upgrading one:
 
-1. Change every occurrence in the same change: the workflows under
+1. Inventory every occurrence: the workflows under
    `.github/workflows/`, the `toolchain` line in `go.mod`, the contributor
    `go install` command, the GoReleaser version literal in
    `.github/scripts/test_release_config.rb` and exact version literals in
-   CONTRIBUTING and the docs.
+   CONTRIBUTING and the docs. Changing pins in protected release workflows or
+   GoReleaser publishers requires explicit maintainer authorization for narrowly
+   scoped dependency/tool pin maintenance in those files. It does not authorize
+   changes to publication behavior, permissions, secrets or release blockers.
+   Without that authorization, stop and report the protected occurrences; do not
+   change them or leave pins inconsistent. With authorization, update every
+   occurrence together.
 2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
    are spelled differently, such as "Go 1.27.3" or "GoReleaser 2.19.0". Leave
    released upgrade-guide history unchanged.
@@ -79,7 +88,7 @@ by the platform and are not pinned in this repository.
 ## PR validation binaries
 
 The native `test` job on Linux, macOS and Windows uploads one validation
-binary per runner after its tests and end-to-end suite pass. Use them to try a
+binary per runner after `make test` (including its end-to-end suite) passes. Use them to try a
 pull request without building it. They contain proposed, unreviewed code: they
 are not releases, and their checksums detect corruption but are not
 signatures or provenance. Do not expose real credentials or production
@@ -209,6 +218,18 @@ Use `testutil.WorkDir` and `testutil.IsolateUserDirs` for synthetic private
 files under package-local `.test-work/`, cleaned after tests. No real Azure
 profile, token cache or Azure CLI is touched. Tests that simulate an Azure
 profile refresh do so in the fixture, never through production direct writes.
+
+Packages using `testutil.Build`/`BuildFakeAZ` call `testutil.RunTests` from
+`TestMain`. Default builds reuse one successful compilation per package recipe
+within that test process, using the compiler environment and working directory
+captured before tests change them. Requests are synchronized; failed builds
+are reported and can retry. Executables are byte copies, never hard links or
+symlinks, in each test's own layout, so replacement/mutation tests cannot alter
+another fixture. HOME, Azure config, state, fixtures and call logs stay isolated
+per test. Custom-ldflags builds remain independent. Shared build files are
+removed before `TestMain` exits (including failed test runs); cleanup errors
+fail the run. There is no persistent cross-run fixture cache or source-change
+invalidation within a run; ordinary Go's own build cache is unchanged.
 
 ## Demo GIF
 

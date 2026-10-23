@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -111,5 +112,27 @@ func TestContractInterruptedRunRemains130(t *testing.T) {
 		if code != 130 || stdout.Len() != 0 || stderr.Len() != 0 || len(fake.Calls) != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q calls=%+v", code, stdout.String(), stderr.String(), fake.Calls)
 		}
+	}
+}
+
+func TestCommandPreservesSelectionErrors(t *testing.T) {
+	for _, failure := range []error{
+		errors.New("selection failed"),
+		context.Canceled,
+		ui.ErrInterrupted,
+		&cmd.ExitError{Code: cmd.CodeNoMatch, Message: missingQuery, Status: cmd.ExitNoMatch},
+	} {
+		t.Run(failure.Error(), func(t *testing.T) {
+			fake := &testutil.FakeRunner{}
+			deps := commandDependencies(t, fake)
+			deps.Select = func([]profile.Subscription) (int, error) { return -1, failure }
+			root := cmd.NewRootCommand(deps)
+			root.SetArgs([]string{})
+			root.SetOut(&bytes.Buffer{})
+			root.SetErr(&bytes.Buffer{})
+			if err := root.Execute(); err != failure || len(fake.Calls) != 0 { //nolint:errorlint // This regression requires exact error identity, not just errors.Is through a wrapper.
+				t.Fatalf("error=(%T) %v want original=(%T) %v calls=%+v", err, err, failure, failure, fake.Calls)
+			}
+		})
 	}
 }

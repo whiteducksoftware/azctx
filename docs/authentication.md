@@ -25,6 +25,8 @@ included. Unknown or ambiguous selectors fail without signing in; use a GUID
 when there is no profile, or to disambiguate. Names are never sent to a tenant
 API. Do not combine the friendly `--tenant` with `--all-tenants` or a second
 passthrough tenant flag. Other Azure CLI arguments still go after `--`.
+Positional arguments before that delimiter, such as `azctx login unexpected`,
+fail with exit 1 before any Azure subprocess, including the version check.
 
 Login progress describes the effective setting, including `AZURE_CORE_*`
 environment overrides:
