@@ -34,6 +34,11 @@ events at 60, 100 and 160 columns; they do not need an interactive terminal.
 After `make golden`, run `make check` and confirm a second `make golden` leaves
 the reviewed golden files unchanged.
 
+JSON contract fixtures in `cmd/testdata/contract/` are compared byte-for-byte,
+including their single trailing LF. `.gitattributes` preserves LF on Windows
+checkouts too; keep these fixtures canonical rather than normalizing output or
+loosening assertions.
+
 ## Changes and review
 
 - Keep each PR focused; the 2026.11 release uses one layer per PR, based on the
