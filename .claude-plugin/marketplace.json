@@ -1,0 +1,14 @@
+{
+  "name": "azctx",
+  "description": "Azure context guidance and mistake-reduction hooks for AI agents.",
+  "owner": {
+    "name": "white duck GmbH"
+  },
+  "plugins": [
+    {
+      "name": "azctx",
+      "source": "./plugins/azctx",
+      "description": "Agent-safe Azure context guidance and an optional Bash context guard."
+    }
+  ]
+}

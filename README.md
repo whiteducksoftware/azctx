@@ -144,6 +144,20 @@ timestamps, previous/new GUID+cloud identities and terminal/script source, never
 raw user or credential fields. History warnings go to stderr and cannot fail a
 completed switch. See [the format and limitations](docs/configuration.md#completed-switch-history).
 
+### AI agent guidance (2026.11 draft)
+
+The portable [azctx skill and optional Claude Bash hook](docs/ai-agents.md)
+help agents inspect context without switching the user's shared default.
+For Claude Code 2.1.275+, after the release is published:
+
+```text
+/plugin install azctx --marketplace whiteducksoftware/azctx
+```
+
+See the guide for the two-step marketplace installation, Copilot/Codex/Cursor
+skill directories, Python requirements and limitations. These tools reduce
+mistakes, not Azure authorization requirements.
+
 ### Homebrew (macOS)
 
 * Install `azctx` with `brew install whiteducksoftware/tap/azctx`

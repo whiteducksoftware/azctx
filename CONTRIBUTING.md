@@ -23,7 +23,18 @@ make check  # Lint and race-enabled tests with coverage
 make test   # Tests alone
 make build  # Build the azctx executable
 make golden # Update picker screen goldens; review and commit intentional changes
+make agent-check # Offline Python hook tests (also included in test/check)
 ```
+
+Python 3.10+ (`python3` on PATH) is required for the agent hook tests. Go tests
+validate the skill/marketplace manifests and parse documented azctx commands
+without invoking handlers. CI's existing `make test` includes this coverage.
+Documentation parsing accepts LF and CRLF, including multiline shell
+continuations; this does not relax the byte-exact output fixture checks below.
+For plugin changes also run `claude plugin validate .` and
+`claude plugin validate ./plugins/azctx` when Claude Code is available; report
+an unavailable CLI as a manual acceptance limitation rather than a pass.
+See the draft [AI agent guide](docs/ai-agents.md) for installation and limits.
 
 The [Makefile](Makefile) is the source of truth for available targets.
 Tests use injected dependencies and a portable fake `az`; no Azure CLI
