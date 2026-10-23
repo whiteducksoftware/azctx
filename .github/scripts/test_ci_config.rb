@@ -246,4 +246,34 @@ assert(ci.fetch('jobs').fetch('test').fetch('strategy').fetch('matrix').fetch('o
        ci.fetch('jobs').fetch('test').fetch('steps').any? { |step| step['run'] == 'make test' },
        'all three native platforms must run correctness and completion performance acceptance')
 
-puts 'PASS: YAML; Dependabot coverage/groups; all-workflow SHA/exact-tag pins; embedded tool inventory; read-only freshness workflow; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness, weighted coverage and native completion acceptance'
+native_test = ci.fetch('jobs').fetch('test')
+native_steps = native_test.fetch('steps')
+assert(native_test.fetch('permissions') == { 'contents' => 'read' } &&
+       ci.fetch('jobs').keys.sort == %w[ci-linux ci-windows lint security test],
+       'validation artifacts must reuse the native test matrix without new jobs or publishing permissions')
+checkout = native_steps.find { |step| step.fetch('uses', '').start_with?('actions/checkout@') }
+assert(checkout.fetch('with') == { 'persist-credentials' => false },
+       'validation must build the default tested checkout, not replace the PR merge revision with head')
+uploads = native_steps.select { |step| step.fetch('uses', '').start_with?('actions/upload-artifact@') }
+assert(uploads.length == 2, 'native tests must publish coverage and a separate downloadable binary')
+coverage = uploads.find { |step| step['name'] == 'Publish coverage report' }
+assert(coverage && coverage.fetch('with') == {
+  'name' => 'coverage-${{ matrix.os }}', 'path' => 'coverage.out',
+  'if-no-files-found' => 'error', 'retention-days' => 7
+}, 'the existing per-OS coverage artifact must remain unchanged')
+builds = native_steps.select { |step| step['run'] == 'python3 -B .github/scripts/build_validation_artifact.py' }
+assert(builds.length == 1 && builds.first['id'] == 'validation-artifact' &&
+       builds.first['shell'] == 'bash' && !builds.first.key?('if') &&
+       !builds.first.key?('continue-on-error'),
+       'each native test must build and smoke-test one validation binary, failing closed')
+binary_upload = uploads.find { |step| step['name'] == 'Upload native validation artifact' }
+assert(binary_upload && binary_upload.fetch('uses') == coverage.fetch('uses') &&
+       binary_upload.fetch('with') == {
+         'name' => '${{ steps.validation-artifact.outputs.artifact-name }}',
+         'path' => '${{ steps.validation-artifact.outputs.archive-path }}',
+         'if-no-files-found' => 'error', 'retention-days' => 14
+       } && !binary_upload.key?('if') && !binary_upload.key?('continue-on-error') &&
+       native_steps.index(binary_upload) > native_steps.index(builds.first),
+       'upload only the exact binary archive with the shared SHA pin, bounded retention and missing-file failure')
+
+puts 'PASS: YAML; Dependabot coverage/groups; all-workflow SHA/exact-tag pins; embedded tool inventory; read-only freshness workflow; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness, weighted coverage and native completion acceptance; native validation archives and unchanged coverage uploads'
