@@ -39,6 +39,7 @@ ci-check:
 live-test: build
 	python3 -B scripts/live-azure-test.py --binary ./azctx$(shell go env GOEXE) $(LIVE_TEST_ARGS)
 
+# Standalone subset; make test/check already includes these tests.
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1
 

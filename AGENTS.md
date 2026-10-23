@@ -78,7 +78,10 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
   Obtain a code owner decision before changing them.
 - Keep changes scoped to the task and preserve unrelated behavior.
 - Do not hand-edit generated `docs/cli/` when present.
-- Do not touch release workflows, GoReleaser publishers or secrets.
+- Do not touch release workflows, GoReleaser publishers or secrets. Narrowly
+  scoped dependency/tool pin maintenance in protected release files requires
+  explicit maintainer authorization for those files. That exception never
+  authorizes changes to publication behavior, permissions, secrets or release blockers.
 
 ## Delivery
 

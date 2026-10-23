@@ -55,8 +55,8 @@ func TestInvalidIDsNeverReachAZ(t *testing.T) {
 			t.Fatalf("accepted subscription %q", id)
 		}
 		for _, args := range [][]string{{"--subscription", id}, {"--subscription=" + id}, {"--tenant", id}, {"--tenant=" + id}, {"-t", id}} {
-			if err := cli.InteractiveLogin(args); err == nil {
-				t.Fatalf("accepted login IDs %q", args)
+			if result, err := cli.Login(args); err == nil || result.Attempted {
+				t.Fatalf("accepted login IDs %q: result=%+v error=%v", args, result, err)
 			}
 		}
 		if len(fake.Calls) != 0 {
@@ -78,8 +78,8 @@ func TestLoginKeepsFailureCauseWithoutERRORPrefix(t *testing.T) {
 		}
 		var stderr bytes.Buffer
 		cli.Terminal = &azcli.Terminal{Stderr: &stderr}
-		if err := cli.InteractiveLogin(nil); !errors.Is(err, failure) {
-			t.Fatalf("lost login failure: %v", err)
+		if result, err := cli.Login(nil); !errors.Is(err, failure) || !result.Attempted {
+			t.Fatalf("lost login failure: result=%+v error=%v", result, err)
 		}
 		if stderr.String() != message {
 			t.Fatalf("login stderr=%q want %q", stderr.String(), message)
