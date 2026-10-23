@@ -44,6 +44,12 @@ type Picker struct {
 
 // NewPicker sorts subscriptions in place; Selection indexes this sorted slice.
 func NewPicker(subscriptions []profile.Subscription, width, height int) Picker {
+	SortSubscriptions(subscriptions)
+	return newOrderedPicker(subscriptions, width, height)
+}
+
+// SortSubscriptions establishes the deterministic base order before priorities.
+func SortSubscriptions(subscriptions []profile.Subscription) {
 	slices.SortFunc(subscriptions, func(a, b profile.Subscription) int {
 		return cmp.Or(
 			strings.Compare(strings.ToLower(tenantLabel(a)), strings.ToLower(tenantLabel(b))),
@@ -51,6 +57,9 @@ func NewPicker(subscriptions []profile.Subscription, width, height int) Picker {
 			strings.Compare(strings.ToLower(a.Id), strings.ToLower(b.Id)),
 		)
 	})
+}
+
+func newOrderedPicker(subscriptions []profile.Subscription, width, height int) Picker {
 	delegate := subscriptionDelegate{nameWidth: len("Name"), tenantWidth: len("Tenant")}
 	items := make([]list.Item, len(subscriptions))
 	for index, subscription := range subscriptions {
@@ -141,6 +150,12 @@ func (picker Picker) View() string { return picker.list.View() }
 func (picker Picker) Selection() (int, error) { return picker.selected, picker.err }
 
 func Select(subscriptions []profile.Subscription) (int, error) {
+	SortSubscriptions(subscriptions)
+	return SelectOrdered(subscriptions)
+}
+
+// SelectOrdered preserves caller ranking and returns an index into that slice.
+func SelectOrdered(subscriptions []profile.Subscription) (int, error) {
 	_, noColor := os.LookupEnv("NO_COLOR")
 	if noColor || !term.IsTerminal(int(os.Stderr.Fd())) {
 		previous := lipgloss.ColorProfile()
@@ -156,7 +171,7 @@ func Select(subscriptions []profile.Subscription) (int, error) {
 		// Hide the fd so Windows readers consume redirected stdin, not CONIN$.
 		input = struct{ io.Reader }{os.Stdin}
 	}
-	result, err := tea.NewProgram(NewPicker(subscriptions, width, height), tea.WithInput(input), tea.WithOutput(os.Stderr)).Run()
+	result, err := tea.NewProgram(newOrderedPicker(subscriptions, width, height), tea.WithInput(input), tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return -1, ErrInterrupted
 	}

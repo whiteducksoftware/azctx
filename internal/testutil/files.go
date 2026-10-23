@@ -19,6 +19,7 @@ func IsolateUserDirs(t *testing.T) string {
 	for _, key := range []string{"HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "APPDATA", "LOCALAPPDATA"} {
 		t.Setenv(key, dir)
 	}
+	t.Setenv("AZCTX_CONFIG_DIR", "")
 	return dir
 }
 
