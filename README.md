@@ -23,32 +23,35 @@ _And please star this repo ⭐_
 ```bash
 azctx is a CLI tool for managing azure cli subscriptions.
         It is a helper for the azure cli and provides a simple interface for managing subscriptions.
-        Pass a subscription name to select a specific subscription.
-        Pass - to switch to the previous subscription.
+        Pass a subscription name, tenant/subscription or subscription ID to switch.
+        Use -- before names that equal a command. Pass - for the previous subscription.
+        Without interactive input, the bare command lists subscriptions.
 
 Usage:
-  azctx [- / -- NAME] [flags]
+  azctx [query | -] [flags]
   azctx [command]
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   login       Login to Azure
+  list        List subscriptions
   version     Print the CLI version
 
 Flags:
-  -c, --current               Display the current active subscription
-      --filter-tenant-level   Filter tenant level accounts with no available subscriptions (default true)
-  -h, --help                  help for azctx
-  -s, --short                 Use a short prompt.
-                                Deprecated. Size is now automatically determined.
+  -c, --current         Display the current active subscription
+  -h, --help            help for azctx
+      --no-input        Never open a picker or prompt (also AZCTX_NO_INPUT=1)
+  -o, --output string   Output format (depends on command)
+      --verbose         Enable debug diagnostics
 
 Use "azctx [command] --help" for more information about a command.
 ```
 
 ```bash
 Login to Azure (wrapped around 'az login')
-        Authenticates the CLI instance to Azure and fetches all available tenants and subscriptions.
+        Requires Azure CLI 2.61.0 or newer; tenant metadata comes from its profile.
+        Azure CLI's subscription selector is disabled only for this login process.
         All args after -- are directly passed to the 'az login' command.
 
 Usage:
@@ -64,7 +67,21 @@ Flags:
 ## Installation
 
 See the [2026.11 upgrade guide](docs/upgrade.md) for breaking changes and minimum
-operating system requirements.
+operating system requirements. Azure CLI **2.61.0 or newer** is required.
+
+Tenant names and domains come directly from Azure CLI's subscription profile,
+even after plain `az login`. Labels prefer display names, then default domains,
+then tenant IDs. A displayed record missing both modern fields gets a one-line
+hint to refresh with `az login`. azctx reads Azure's profile/settings but never writes
+anything in `AZURE_CONFIG_DIR`. Wrapped login disables Azure CLI's subscription
+selector only for that child process, without changing your environment.
+
+`azctx list` shows active-cloud subscriptions by default. Disabled and
+tenant-level accounts, and records from other/unknown clouds, are hidden;
+`azctx list --all` exposes them for inspection. Change clouds with Azure CLI
+before switching to a subscription in another cloud. Tables/pickers label
+account types, delegation and attention states. See the
+[CLI contract](docs/cli-contract.md) for JSON, matching and per-cloud defaults.
 
 ### Homebrew (macOS)
 
@@ -85,8 +102,10 @@ operating system requirements.
 
 ### Missing Azure configuration or `azureProfile.json`
 
-Run `az login` to create the subscription profile. An unset `AZURE_CONFIG_DIR`
-silently uses the default `~/.azure` directory.
+Run `az login` or `azctx login` to let Azure CLI create the subscription profile,
+even when the Azure directory does not exist yet. azctx itself never creates
+Azure configuration files. An unset `AZURE_CONFIG_DIR` silently uses the default
+`~/.azure` directory.
 
 Check the [Microsoft Documentation](https://docs.microsoft.com/en-us/cli/azure/azure-cli-configuration?view=azure-cli-latest#cli-configuration-file) for the correct path to the azure cli config directory and export it as AZURE_CONFIG_DIR environment variable.  
 
@@ -128,7 +147,7 @@ environment entries. The production runner resolves `az` once with `LookPath`.
 Login uses this attached mode: device codes on stdout or stderr are visible
 immediately, and stderr remains captured for authentication diagnostics.
 
-Search matches subscription names, tenant names and subscription IDs without
+Search matches subscription names, profile tenant names/domains/IDs and subscription IDs without
 collapsing duplicate names. `azctx -` swaps the current and previous subscription
 across processes. The previous ID is stored privately in
 `os.UserConfigDir()/azctx/state.json`, never in the Azure configuration directory.

@@ -30,7 +30,9 @@ func (cli CLI) execLogin(extraArgs []string) error {
 	if terminal == nil {
 		terminal = &Terminal{}
 	}
-	result, err := cli.runner.Run(context.Background(), args, Options{Terminal: terminal})
+	result, err := cli.runner.Run(context.Background(), args, Options{
+		Terminal: terminal, Env: []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"},
+	})
 	if err != nil {
 		var errs []string
 		for _, line := range strings.Split(result.Stderr, "\n") {

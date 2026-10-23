@@ -15,7 +15,6 @@ import (
 const (
 	listCommand     = "list"
 	developmentName = "Development"
-	tenantCacheFile = "azctxTenants.json"
 	verboseFlag     = "--verbose"
 	envCI           = "CI"
 	missingQuery    = "missing"
@@ -26,6 +25,7 @@ const (
 	gateEnvironment = "environment"
 	textFormat      = "text"
 	nameFormat      = "name"
+	idFormat        = "id"
 	gateFlag        = "flag"
 )
 

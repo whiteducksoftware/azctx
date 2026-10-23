@@ -14,8 +14,8 @@ import (
 func TestBinaryAmbiguousNonTTYJSON(t *testing.T) {
 	binary, config, record := fakeBinary(t, `[]`)
 	writeFixture(t, filepath.Join(config, profileFile), `{"subscriptions":[
-		{"id":"`+productionID+`","name":"Production","tenantId":"`+tenantID+`","isDefault":true},
-		{"id":"`+developmentID+`","name":"Production","tenantId":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]}`)
+		{"id":"`+productionID+`","name":"Production","tenantId":"`+tenantID+`","environmentName":"AzureCloud","isDefault":true},
+		{"id":"`+developmentID+`","name":"Production","tenantId":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","environmentName":"AzureCloud"}]}`)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	process := exec.CommandContext(ctx, binary, verboseFlag, outputFlag, jsonFormat, productionName)

@@ -10,12 +10,12 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/profile"
 )
 
-// Find matches names, tenant names and IDs, preserving source order and identity.
+// Find matches names, tenant names/domains and IDs, preserving order and identity.
 func Find(subscriptions []profile.Subscription, query string) ([]profile.Subscription, error) {
 	if tenant, subscription, qualified := strings.Cut(query, "/"); qualified {
 		var scoped []profile.Subscription
 		for _, candidate := range subscriptions {
-			if tenant != "" && (strings.EqualFold(candidate.Tenant, tenant) || strings.EqualFold(candidate.TenantName, tenant)) {
+			if tenant != "" && (strings.EqualFold(candidate.Tenant, tenant) || strings.EqualFold(candidate.TenantName, tenant) || strings.EqualFold(candidate.TenantDomain, tenant)) {
 				scoped = append(scoped, candidate)
 			}
 		}
@@ -30,7 +30,8 @@ func Find(subscriptions []profile.Subscription, query string) ([]profile.Subscri
 }
 
 func find(subscriptions []profile.Subscription, query string, includeTenants bool) ([]profile.Subscription, error) {
-	names, tenants, ids := make([]string, len(subscriptions)), make([]string, len(subscriptions)), make([]string, len(subscriptions))
+	names, ids := make([]string, len(subscriptions)), make([]string, len(subscriptions))
+	tenants, domains, tenantIDs := make([]string, len(subscriptions)), make([]string, len(subscriptions)), make([]string, len(subscriptions))
 	for i, subscription := range subscriptions {
 		if strings.EqualFold(subscription.Id, query) {
 			return []profile.Subscription{subscription}, nil
@@ -38,11 +39,13 @@ func find(subscriptions []profile.Subscription, query string, includeTenants boo
 		names[i] = strings.ToLower(subscription.Name)
 		if includeTenants {
 			tenants[i] = strings.ToLower(subscription.TenantName)
+			domains[i] = strings.ToLower(subscription.TenantDomain)
+			tenantIDs[i] = strings.ToLower(subscription.Tenant)
 		}
 		ids[i] = strings.ToLower(subscription.Id)
 	}
 	matched := make([]bool, len(subscriptions))
-	for _, field := range [][]string{names, tenants, ids} {
+	for _, field := range [][]string{names, tenants, domains, tenantIDs, ids} {
 		for _, result := range fuzzy.FindNoSort(strings.ToLower(query), field) {
 			matched[result.Index] = true
 		}
