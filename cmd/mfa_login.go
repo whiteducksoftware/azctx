@@ -135,7 +135,7 @@ func retryTenantLogin(command *cobra.Command, cli azcli.CLI, args []string, fail
 			}
 			attempted = true
 		}
-		log.Info("Signing in to tenant %s.", tenant.ID)
+		log.InfoParts("Signing in to tenant ", log.Identity(tenant.ID), ".")
 		result, err := cli.LoginTenant(tenant.ID, args)
 		if ExitCode(err) == ExitInterrupted {
 			return nil, err

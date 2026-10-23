@@ -12,6 +12,7 @@ import (
 
 	"github.com/whiteducksoftware/azctx/cmd"
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 	"github.com/whiteducksoftware/azctx/log"
 )
@@ -23,7 +24,85 @@ type feedbackStream struct {
 
 func (stream *feedbackStream) Fd() uintptr { return stream.fd }
 
-const greenProduction = "\x1b[32mProduction"
+const (
+	greenProduction    = "\x1b[32mProduction"
+	greenSuccess       = "\x1b[32m✓"
+	feedbackNoColor    = "NO_COLOR"
+	feedbackRedirected = "redirected"
+)
+
+func feedbackColorEnvironment(t *testing.T, noColor bool) {
+	t.Helper()
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("FORCE_COLOR", "1")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv(feedbackNoColor, "")
+	if !noColor {
+		if err := os.Unsetenv(feedbackNoColor); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSwitchIdentityFeedbackKeepsGUIDsAndValidStyles(t *testing.T) {
+	for _, labels := range []struct{ name, tenant string }{
+		{"Token", "Password"},
+		{"Password", "Token"},
+		{"Development Token", "Tenant Password"},
+	} {
+		for _, mode := range []string{"color", feedbackRedirected, feedbackNoColor} {
+			t.Run(labels.name+"/"+mode, func(t *testing.T) {
+				fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
+				deps := tenantDependencies(t, fake, []profile.Subscription{{
+					Name: labels.name, Id: productionID, Tenant: tenantID, TenantName: labels.tenant,
+					Environment: azureCloudName, IsDefault: true,
+				}})
+				writeSelectionConfig(t, "protected: ["+productionID+"]\n")
+				feedbackColorEnvironment(t, mode == feedbackNoColor)
+				master, slave := openContractPTY(t)
+				defer master.Close()
+				defer slave.Close()
+				stderr := feedbackStream{fd: slave.Fd()}
+				if mode == feedbackRedirected {
+					stderr.fd = ^uintptr(0)
+				}
+				var stdout bytes.Buffer
+				code := cmd.Run([]string{confirmFlag, productionID}, deps, strings.NewReader(""), &stdout, &stderr)
+				if code != 0 || stdout.Len() != 0 || len(fake.Calls) != 1 {
+					t.Fatalf("switch code=%d stdout=%q stderr=%q calls=%+v", code, &stdout, &stderr, fake.Calls)
+				}
+				want := strings.TrimSuffix(switchFeedback(labels.name, productionID, labels.tenant, tenantID), "\n") + " [protected]\n"
+				assertFeedbackStyle(t, stderr.String(), want, mode == "color", []string{
+					greenSuccess, "\x1b[36m" + labels.name, "\x1b[36m" + productionID,
+					"\x1b[36m" + labels.tenant, "\x1b[36m" + tenantID,
+				})
+				if strings.Contains(stderr.String(), "\x1b[36m [protected]") || !strings.HasSuffix(stderr.String(), ") [protected]\n") {
+					t.Fatalf("protected marker acquired an identity style: %q", &stderr)
+				}
+			})
+		}
+	}
+}
+
+func TestListDoesNotStyleEmptyCells(t *testing.T) {
+	deps := tenantDependencies(t, &testutil.FakeRunner{}, []profile.Subscription{{Environment: azureCloudName}})
+	feedbackColorEnvironment(t, false)
+	master, slave := openContractPTY(t)
+	defer master.Close()
+	defer slave.Close()
+	stdout := feedbackStream{fd: slave.Fd()}
+	var stderr bytes.Buffer
+	code := cmd.Run([]string{listCommand, metadataAllFlag}, deps, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("list code=%d stdout=%q stderr=%q", code, &stdout, &stderr)
+	}
+	for _, sequence := range []string{"\x1b[32m\x1b[m", "\x1b[36m\x1b[m", "\x1b[2m\x1b[m"} {
+		if strings.Contains(stdout.String(), sequence) {
+			t.Fatalf("empty table cell emitted %q in %q", sequence, &stdout)
+		}
+	}
+}
 
 func TestFeedbackUsesTargetStreamTTYAndNoColor(t *testing.T) {
 	for _, mode := range []struct {
@@ -49,16 +128,7 @@ func TestFeedbackUsesTargetStreamTTYAndNoColor(t *testing.T) {
 			deps := commandDependencies(t, fake)
 			deps.Platform = platformWindows
 			deps.StdinTTY = func() bool { return false }
-			t.Setenv("TERM", "xterm-256color")
-			t.Setenv("COLORTERM", "truecolor")
-			t.Setenv("FORCE_COLOR", "1")
-			t.Setenv("CLICOLOR_FORCE", "1")
-			t.Setenv("NO_COLOR", "")
-			if !mode.noColor {
-				if err := os.Unsetenv("NO_COLOR"); err != nil {
-					t.Fatal(err)
-				}
-			}
+			feedbackColorEnvironment(t, mode.noColor)
 			master, slave := openContractPTY(t)
 			defer master.Close()
 			defer slave.Close()
@@ -96,11 +166,14 @@ func TestFeedbackUsesTargetStreamTTYAndNoColor(t *testing.T) {
 			if out != "" {
 				t.Fatalf("switch stdout=%q", out)
 			}
-			assertFeedbackStyle(t, messages, switchFeedback(productionName, productionID, tenantID, tenantID), stderrColor, []string{"\x1b[32m✓", "\x1b[36mProduction", "\x1b[36m" + productionID})
+			assertFeedbackStyle(t, messages, switchFeedback(productionName, productionID, tenantID, tenantID), stderrColor, []string{greenSuccess, "\x1b[36mProduction", "\x1b[36m" + productionID})
 			_, messages = run(loginCommand, deviceCodeFlag)
 			assertFeedbackStyle(t, messages,
 				"Logging in... Follow the Azure CLI device code instructions.\n✓ Signed in: 1 tenants, 2 subscriptions\n"+wantCurrent,
-				stderrColor, []string{"\x1b[32m✓", greenProduction, "\x1b[36m" + productionID})
+				stderrColor, []string{greenSuccess, greenProduction, "\x1b[36m" + productionID})
+			if !strings.HasPrefix(messages, "Logging in... Follow the Azure CLI device code instructions.\n") {
+				t.Fatalf("login instructions acquired identity styling: %q", messages)
+			}
 			assertPartialLoginFeedback(t, deps, &stdout, &stderr, stderrColor)
 			doctor, _ := run("doctor")
 			if ansi.Strip(doctor) != doctor {
@@ -112,7 +185,7 @@ func TestFeedbackUsesTargetStreamTTYAndNoColor(t *testing.T) {
 			}
 			stderr.Reset()
 			log.InitLogger(&stderr)
-			log.Info("Signing in to tenant %s.", tenantID)
+			log.InfoParts("Signing in to tenant ", log.Identity(tenantID), ".")
 			log.Error("failure")
 			assertFeedbackStyle(t, stderr.String(), "Signing in to tenant "+tenantID+".\nError: failure\n", stderrColor, []string{"\x1b[36m" + tenantID, "\x1b[31mError:"})
 		})
@@ -120,12 +193,12 @@ func TestFeedbackUsesTargetStreamTTYAndNoColor(t *testing.T) {
 }
 
 func TestVersionUpdateNoticeUsesStderrColorPolicy(t *testing.T) {
-	for _, mode := range []string{"terminal notice", "redirected notice", "NO_COLOR"} {
+	for _, mode := range []string{"terminal notice", "redirected notice", feedbackNoColor} {
 		t.Run(mode, func(t *testing.T) {
 			fixture := newVersionFeedbackFixture(t)
-			t.Setenv("NO_COLOR", "")
-			if mode != "NO_COLOR" {
-				if err := os.Unsetenv("NO_COLOR"); err != nil {
+			t.Setenv(feedbackNoColor, "")
+			if mode != feedbackNoColor {
+				if err := os.Unsetenv(feedbackNoColor); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -179,9 +179,9 @@ func (picker *Picker) resize(width, height int) {
 	picker.list.SetSize(max(1, width), max(1, height))
 	header := picker.delegate
 	header.color = false
-	picker.list.Title = "  " + header.row(width, "Name", "Subscription ID", "Tenant")
+	picker.list.Title = "  " + header.row(width, "Name", "Subscription ID", "Tenant", false)
 	if picker.delegate.tenants {
-		picker.list.Title = "  " + header.row(width, "Tenant", "Tenant ID", "Domain")
+		picker.list.Title = "  " + header.row(width, "Tenant", "Tenant ID", "Domain", false)
 	}
 }
 
@@ -254,21 +254,26 @@ func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, 
 		return
 	}
 	subscription := row.subscription
-	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription))
+	selected := index == model.Index()
+	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription), selected)
 	prefix := "  "
 	style := lipgloss.NewStyle()
-	if index == model.Index() {
+	if selected {
 		prefix = "▸ "
 		if delegate.color {
 			style = style.Bold(true)
 		}
 	}
-	_, _ = fmt.Fprint(writer, style.Render(prefix+line))
+	_, _ = fmt.Fprint(writer, style.Render(prefix)+line)
 }
 
-func (delegate subscriptionDelegate) row(width int, name, id, tenant string) string {
+func (delegate subscriptionDelegate) row(width int, name, id, tenant string, selected bool) string {
 	name, id, tenant = DisplayText(name), DisplayText(id), DisplayText(tenant)
-	nameStyle, idStyle, tenantStyle := lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle()
+	style := lipgloss.NewStyle()
+	if delegate.color && selected {
+		style = style.Bold(true)
+	}
+	nameStyle, idStyle, tenantStyle := style, style, style
 	if delegate.color {
 		nameStyle = nameStyle.Foreground(lipgloss.Color("2"))
 		idStyle = idStyle.Foreground(lipgloss.Color("6"))
@@ -276,9 +281,9 @@ func (delegate subscriptionDelegate) row(width int, name, id, tenant string) str
 	}
 	if delegate.tenants {
 		nameWidth := min(delegate.nameWidth, max(1, width-2-3-36))
-		line := nameStyle.Render(singleLineCell(name, nameWidth)) + " | " + idStyle.Render(id)
+		line := nameStyle.Render(singleLineCell(name, nameWidth)) + style.Render(" | ") + idStyle.Render(id)
 		if width >= 2+nameWidth+3+36+3+delegate.tenantWidth {
-			line += " | " + tenantStyle.Render(tenant)
+			line += style.Render(" | ") + tenantStyle.Render(tenant)
 		}
 		return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 	}
@@ -287,9 +292,9 @@ func (delegate subscriptionDelegate) row(width int, name, id, tenant string) str
 	tenantWidth := delegate.tenantWidth
 	switch {
 	case width >= 2+nameWidth+3+36+3+tenantWidth:
-		line += " | " + idStyle.Render(singleLineCell(id, 36)) + " | " + tenantStyle.Render(tenant)
+		line += style.Render(" | ") + idStyle.Render(singleLineCell(id, 36)) + style.Render(" | ") + tenantStyle.Render(tenant)
 	case width >= 2+nameWidth+3+tenantWidth:
-		line += " | " + tenantStyle.Render(tenant)
+		line += style.Render(" | ") + tenantStyle.Render(tenant)
 	}
 	return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 }

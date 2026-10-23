@@ -360,9 +360,10 @@ func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies
 		if config.Contains(cfg.Protected, subscription) {
 			marker = " [protected]"
 		}
-		log.Success("Switched to %s (%s) in tenant %s (%s)%s",
-			ui.DisplayText(subscription.Name), ui.DisplayText(subscription.Id),
-			ui.DisplayText(subscription.TenantLabel()), ui.DisplayText(subscription.Tenant), marker)
+		log.SuccessParts("Switched to ", log.Identity(ui.DisplayText(subscription.Name)),
+			" (", log.Identity(ui.DisplayText(subscription.Id)),
+			") in tenant ", log.Identity(ui.DisplayText(subscription.TenantLabel())),
+			" (", log.Identity(ui.DisplayText(subscription.Tenant)), ")", marker)
 	}
 	return nil
 }

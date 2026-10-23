@@ -125,6 +125,11 @@ quoted strings do not end a field, including across streamed writes.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
 
+Log messages and attributes are redacted as plain text before terminal styling.
+Explicit identity fields have separate display boundaries, so a subscription or
+tenant named `Token` or `Password` does not hide adjacent GUIDs. Secret labels
+in diagnostic prose remain effective.
+
 **Azure CLI stdout is a raw data stream. Explicit exec children keep all their
 streams unchanged**, even under JSON output. Device-code instructions remain
 visible; protect them like authentication material. Doctor omits profile

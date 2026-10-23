@@ -140,6 +140,9 @@ func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
 		var styled strings.Builder
 		for column, cell := range []string{subscription.Name, subscription.ID, subscription.TenantName} {
 			cell = ui.DisplayText(cell)
+			if cell == "" {
+				continue
+			}
 			offset := strings.Index(line, cell)
 			styled.WriteString(line[:offset])
 			styled.WriteString([]func(...string) string{name.Render, id.Render, tenant.Render}[column](cell))
