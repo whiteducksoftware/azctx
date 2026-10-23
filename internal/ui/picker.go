@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sahilm/fuzzy"
 	"golang.org/x/term"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
@@ -27,7 +28,9 @@ type subscriptionItem struct {
 	index        int
 }
 
-func (item subscriptionItem) FilterValue() string { return item.subscription.Name }
+func (item subscriptionItem) FilterValue() string {
+	return strings.Join([]string{item.subscription.Name, tenantLabel(item.subscription), item.subscription.Id}, "\x00")
+}
 
 // Picker is the subscription list's Bubble Tea model.
 type Picker struct {
@@ -39,11 +42,12 @@ type Picker struct {
 
 // NewPicker sorts subscriptions in place; Selection indexes this sorted slice.
 func NewPicker(subscriptions []profile.Subscription, width, height int) Picker {
-	slices.SortStableFunc(subscriptions, func(a, b profile.Subscription) int {
-		if strings.EqualFold(a.TenantName, b.TenantName) {
-			return cmp.Compare(a.Name, b.Name)
-		}
-		return cmp.Compare(a.TenantName, b.TenantName)
+	slices.SortFunc(subscriptions, func(a, b profile.Subscription) int {
+		return cmp.Or(
+			strings.Compare(strings.ToLower(tenantLabel(a)), strings.ToLower(tenantLabel(b))),
+			strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+			strings.Compare(strings.ToLower(a.Id), strings.ToLower(b.Id)),
+		)
 	})
 	delegate := subscriptionDelegate{nameWidth: len("Name"), tenantWidth: len("Tenant")}
 	items := make([]list.Item, len(subscriptions))
@@ -54,12 +58,36 @@ func NewPicker(subscriptions []profile.Subscription, width, height int) Picker {
 	}
 	picker := Picker{delegate: delegate, selected: -1, err: ErrCanceled}
 	picker.list = list.New(items, delegate, max(1, width), max(1, height))
+	picker.list.Filter = filterSubscriptions
 	picker.list.DisableQuitKeybindings()
 	picker.list.SetShowStatusBar(false)
 	picker.list.Styles.Title = lipgloss.NewStyle().Bold(true)
 	picker.list.Styles.TitleBar = lipgloss.NewStyle().PaddingBottom(1)
 	picker.resize(width, height)
 	return picker
+}
+
+// Rank each field independently so a query cannot accidentally span a name,
+// tenant and ID, then keep each subscription's highest-ranked match.
+func filterSubscriptions(query string, targets []string) []list.Rank {
+	var fields []string
+	var owners []int
+	for index, target := range targets {
+		for _, field := range strings.Split(target, "\x00") {
+			fields = append(fields, field)
+			owners = append(owners, index)
+		}
+	}
+	var ranks []list.Rank
+	seen := make(map[int]bool)
+	for _, match := range fuzzy.Find(query, fields) {
+		index := owners[match.Index]
+		if !seen[index] {
+			ranks = append(ranks, list.Rank{Index: index})
+			seen[index] = true
+		}
+	}
+	return ranks
 }
 
 func (picker Picker) Init() tea.Cmd { return nil }

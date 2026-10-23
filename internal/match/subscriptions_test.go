@@ -8,17 +8,22 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/profile"
 )
 
-func TestFindPreservesLegacyMatching(t *testing.T) {
+func TestFindUsesSubscriptionIdentity(t *testing.T) {
 	const firstID = "one"
+	const secondID = "two"
 	subscriptions := []profile.Subscription{
-		{Id: firstID, Name: "Production"}, {Id: "two", Name: "Production"}, {Id: "three", Name: "Development"},
+		{Id: firstID, Name: "Production", TenantName: "Acme"},
+		{Id: secondID, Name: "Production", TenantName: "Contoso"},
+		{Id: "three", Name: "Development", TenantName: "Acme"},
 	}
 	for _, tc := range []struct {
 		query string
 		ids   []string
 	}{
-		{query: "PRD", ids: []string{firstID, firstID}},
+		{query: "PRD", ids: []string{firstID, secondID}},
 		{query: "dev", ids: []string{"three"}},
+		{query: "Contoso", ids: []string{secondID}},
+		{query: "TWO", ids: []string{secondID}},
 		{query: "missing"},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
