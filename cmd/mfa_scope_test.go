@@ -63,7 +63,7 @@ func TestMFADefaultRestorationKeepsSignInFailures(t *testing.T) {
 		deps.FS, deps.Runner = files, &defaultChangingRunner{Runner: fake, files: files}
 		var stdout, stderr bytes.Buffer
 		code := cmd.Run([]string{loginCommand}, deps, strings.NewReader("yes\n"), &stdout, &stderr)
-		if code != 3 || len(fake.Calls) != 4 || strings.Contains(stderr.String(), "Successfully fetched") ||
+		if code != 3 || len(fake.Calls) != 4 || strings.Contains(stderr.String(), "✓ Signed in:") ||
 			!strings.Contains(strings.Join(fake.Calls[3].Args, " "), "account set --subscription "+productionID) {
 			t.Fatalf("code=%d calls=%+v stderr=%q", code, fake.Calls, stderr.String())
 		}

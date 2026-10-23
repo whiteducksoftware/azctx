@@ -23,12 +23,12 @@ func configureHelp(root *cobra.Command) {
 	help := map[string]commandHelp{
 		"azctx": {
 			"Switch Azure CLI subscriptions with an identity-aware fuzzy picker",
-			"Choose a subscription by name, alias, GUID or exact tenant/subscription query. Use - for the previous subscription and -- before a name that equals a command.\n\nWith terminal input, the bare command opens a picker on stderr. Without input it lists subscriptions on stdout. Successful switches are quiet; protected targets need confirmation or --yes. Use -c for current context and -o json for structured data/errors.",
+			"Choose a subscription by name, alias, GUID or exact tenant/subscription query. Use - for the previous subscription and -- before a name that equals a command.\n\nWith terminal input, the bare command opens a picker on stderr. Without input it lists subscriptions on stdout. Successful switches print a check-mark confirmation on stderr (suppressed with -o json), including [protected] for protected targets. Protected targets need confirmation or --yes. Use -c for current context and -o json for structured data/errors. Colors require a TTY on the target stream and absent NO_COLOR.",
 			"azctx\nazctx contoso/prod\nazctx -",
 		},
 		"azctx list": {
 			"List cached subscriptions without switching",
-			"Read the Azure CLI profile in profile order. Default table output hides configured hidden, disabled, tenant-level and other-cloud accounts. --all includes them for inspection, not switching. Supports table and schema-1 JSON output; no Azure subprocess or network request is made.",
+			"Read the Azure CLI profile in profile order. Default table output hides configured hidden, disabled, tenant-level and other-cloud accounts. --all includes them for inspection, not switching. Supports table and schema-1 JSON output; no Azure subprocess or network request is made. TTY tables use a bold header, green names, cyan IDs and faint tenants; NO_COLOR or redirected stdout keeps them plain.",
 			"azctx list\nazctx list --all -o json",
 		},
 		"azctx tenant": {
@@ -82,8 +82,8 @@ func configureHelp(root *cobra.Command) {
 			"azctx alias list\nazctx alias list -o text",
 		},
 		"azctx login": {
-			"Sign in through Azure CLI with attached streams",
-			"Require Azure CLI >=2.61.0 and wrap az login. Device-code instructions stay visible. --tenant accepts a GUID or one profile tenant name/domain. Other Azure CLI arguments go after --; never put secrets in command lines.\n\nOrdinary user login offers one confirmation to retry only reported MFA failures. --all-tenants explicitly discovers tenants for individual sign-ins. Workload-identity passthrough skips orchestration. --no-input gates azctx prompts only, not Azure CLI authentication. Supports default/text output; unresolved sign-ins exit 3.",
+			"Sign in through Azure CLI with live stderr and quiet stdout",
+			"Require Azure CLI >=2.61.0 and wrap az login. Stdin stays attached; device codes and browser notices stay live on stderr. Login stdout is discarded unless -o, --output or --query is passed after --, including during tenant sign-ins and MFA retries. --tenant accepts a GUID or one profile tenant name/domain. Other Azure CLI arguments go after --; never put secrets in command lines.\n\nOrdinary user login offers one confirmation to retry only reported MFA failures. --all-tenants explicitly discovers tenants for individual sign-ins. Workload-identity passthrough skips orchestration. Success reports signed-in profile counts and the active subscription on stderr. --no-input gates azctx prompts only, not Azure CLI authentication. Supports default/text output; unresolved sign-ins exit 3.",
 			"azctx login\nazctx login --use-device-code --tenant aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\nazctx login -- --identity",
 		},
 		"azctx auth": {
@@ -108,7 +108,7 @@ func configureHelp(root *cobra.Command) {
 		},
 		"azctx version": {
 			"Print azctx version and build information",
-			"Print version, build date, commit and Go version in text (default) or JSON. Missing metadata is unknown. No profile, Azure CLI or update check is needed; version JSON is separate from subscription schema-1 output.",
+			"Print version, build date, commit and Go version in text (default) or JSON. Missing metadata is unknown. No profile or Azure CLI is needed; version JSON is separate from subscription schema-1 output and stays offline.\n\nText output makes a fresh stable-release lookup without reading the cache (two-second network deadline), and writes the result to the private cache for offline doctor status. A newer release produces a yellow stderr notice; failures are debug-only and do not fail version output. Skipped with updateCheck: false, AZCTX_NO_UPDATE_CHECK=1, CI present or non-TTY stdout. Switching never checks for updates.",
 			"azctx version\nazctx version -o json",
 		},
 		"azctx help": {

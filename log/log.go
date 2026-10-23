@@ -1,4 +1,4 @@
-// Package log presents plain diagnostics through slog on stderr.
+// Package log presents stream-aware diagnostics through slog on stderr.
 package log
 
 import (
@@ -23,9 +23,7 @@ var (
 )
 
 func newLogger(output io.Writer) *slog.Logger {
-	file, terminal := output.(interface{ Fd() uintptr })
-	_, noColor := os.LookupEnv("NO_COLOR")
-	color := terminal && term.IsTerminal(int(file.Fd())) && !noColor
+	color := ColorEnabled(output)
 	if color {
 		output = colorprofile.NewWriter(output, os.Environ())
 	}
@@ -40,10 +38,56 @@ func SetVerbose(verbose bool) {
 	}
 }
 
-func Debug(format string, values ...any) { logger.Debug(fmt.Sprintf(format, values...)) }
-func Info(format string, values ...any)  { logger.Info(fmt.Sprintf(format, values...)) }
-func Warn(format string, values ...any)  { logger.Warn(fmt.Sprintf(format, values...)) }
-func Error(format string, values ...any) { logger.Error(fmt.Sprintf(format, values...)) }
+func Debug(format string, values ...any)   { logger.Debug(fmt.Sprintf(format, values...)) }
+func Info(format string, values ...any)    { status(slog.LevelInfo, format, values...) }
+func Success(format string, values ...any) { status(successLevel, format, values...) }
+func Warn(format string, values ...any)    { logger.Warn(fmt.Sprintf(format, values...)) }
+func Error(format string, values ...any)   { logger.Error(fmt.Sprintf(format, values...)) }
+
+const successLevel = slog.LevelInfo + 1
+
+func status(recordLevel slog.Level, format string, values ...any) {
+	if h, ok := logger.Handler().(*handler); ok && h.color {
+		values = append([]any(nil), values...)
+		for i, value := range values {
+			if text, ok := value.(string); ok {
+				values[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(text)
+			}
+		}
+	}
+	logger.Log(context.Background(), recordLevel, fmt.Sprintf(format, values...))
+}
+
+// ColorEnabled is the shared per-stream policy. Forced colors never bypass it.
+func ColorEnabled(output io.Writer) bool {
+	file, terminal := output.(interface{ Fd() uintptr })
+	_, noColor := os.LookupEnv("NO_COLOR")
+	return terminal && term.IsTerminal(int(file.Fd())) && !noColor
+}
+
+// Styles returns presentation styles for this stream, not the process stdout.
+func Styles(output io.Writer) (name, id, tenant, header lipgloss.Style) {
+	name, id, tenant, header = lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle()
+	if ColorEnabled(output) {
+		name = name.Foreground(lipgloss.Color("2"))
+		id = id.Foreground(lipgloss.Color("6"))
+		tenant = tenant.Faint(true)
+		header = header.Bold(true)
+	}
+	return
+}
+
+// Yellow accents a notice without changing its plain text or adding a prefix.
+func Yellow(output io.Writer, text string) string {
+	if ColorEnabled(output) {
+		lines := strings.Split(text, "\n")
+		for index, line := range lines {
+			lines[index] = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(line)
+		}
+		return strings.Join(lines, "\n")
+	}
+	return text
+}
 
 type handler struct {
 	output io.Writer
@@ -65,12 +109,18 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 		prefix, color = "Error: ", lipgloss.Color("1")
 	case record.Level >= slog.LevelWarn:
 		prefix = "Warning: "
+	case record.Level == successLevel:
+		prefix, color = "✓ ", lipgloss.Color("2")
 	}
-	if h.color {
+	if h.color && prefix != "" {
 		prefix = lipgloss.NewStyle().Foreground(color).Render(prefix)
 	}
 	line.WriteString(prefix)
-	line.WriteString(record.Message)
+	message := record.Message
+	if h.color && record.Level == slog.LevelWarn {
+		message = lipgloss.NewStyle().Foreground(color).Render(message)
+	}
+	line.WriteString(message)
 	writeAttr := func(attr slog.Attr) bool {
 		_, _ = fmt.Fprintf(&line, " %s%s=%s", h.group, attr.Key, attr.Value.Resolve())
 		return true

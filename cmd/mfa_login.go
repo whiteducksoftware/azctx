@@ -28,7 +28,7 @@ func loginWithMFA(command *cobra.Command, cli azcli.CLI, args []string, deps Dep
 		if err != nil {
 			return signInFailed("Azure CLI sign-in failed; see its attached output", err)
 		}
-		return finishLogin(cli, nil)
+		return finishLogin(command, cli, nil)
 	}
 	if err != nil && len(result.Failures) == 0 {
 		return signInFailed("Azure CLI sign-in failed; see its attached output", err)
@@ -42,7 +42,7 @@ func loginUserTenants(command *cobra.Command, cli azcli.CLI, args []string, deps
 			return err
 		}
 		if !inputIsTerminal(command, deps) {
-			return finishLogin(cli, failures)
+			return finishLogin(command, cli, failures)
 		}
 	}
 	allTenants, _ := command.Flags().GetBool("all-tenants")
@@ -69,7 +69,7 @@ func loginUserTenants(command *cobra.Command, cli azcli.CLI, args []string, deps
 			return err
 		}
 	}
-	return finishLogin(cli, failures)
+	return finishLogin(command, cli, failures)
 }
 
 func confirmAndRetryTenants(command *cobra.Command, cli azcli.CLI, args []string, failures []azcli.TenantFailure) ([]azcli.TenantFailure, error) {
@@ -234,7 +234,7 @@ func printTenantFailures(output io.Writer, failures []azcli.TenantFailure) error
 	return table.Flush()
 }
 
-func finishLogin(cli azcli.CLI, failures []azcli.TenantFailure) error {
+func finishLogin(command *cobra.Command, cli azcli.CLI, failures []azcli.TenantFailure) error {
 	if err := cli.Reload(); err != nil {
 		if len(failures) != 0 {
 			return signInFailed("tenant sign-in incomplete; could not reload the Azure profile", err)
@@ -242,14 +242,18 @@ func finishLogin(cli azcli.CLI, failures []azcli.TenantFailure) error {
 		return err
 	}
 	if len(failures) != 0 {
-		log.Info("Fetched %d tenants and %d subscriptions; sign-in incomplete.", cli.TenantCount(), len(cli.Subscriptions()))
+		log.Warn("Fetched %d tenants and %d subscriptions; sign-in incomplete.", cli.TenantCount(), len(cli.Subscriptions()))
 		ids := make(map[string]bool)
 		for _, failure := range failures {
 			ids[strings.ToLower(failure.ID)] = true
 		}
 		return signInFailed(fmt.Sprintf("sign-in failed for %d tenants", len(ids)), nil)
 	}
-	log.Info("Successfully fetched %d tenants and %d subscriptions.", cli.TenantCount(), len(cli.Subscriptions()))
+	log.Success("Signed in: %d tenants, %d subscriptions", cli.TenantCount(), len(cli.Subscriptions()))
+	if active, err := cli.ActiveSubscription(); err == nil {
+		_, err := fmt.Fprintln(command.ErrOrStderr(), activeSubscriptionText(command.ErrOrStderr(), active, false))
+		return err
+	}
 	return nil
 }
 
