@@ -28,10 +28,11 @@ func newVersionCommand(deps Dependencies) *cobra.Command {
 			switch format {
 			case "text":
 				_, err := fmt.Fprintf(command.OutOrStdout(), "azctx version %s (commit %s, built %s, %s)\n", info.Version, info.Commit, info.BuildDate, info.GoVersion)
-				if err == nil {
-					checkForUpdates(command, deps)
+				if err != nil {
+					return err
 				}
-				return err
+				checkForUpdates(command, deps)
+				return command.Context().Err()
 			case "json":
 				return json.NewEncoder(command.OutOrStdout()).Encode(info)
 			default:

@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -14,6 +15,106 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 	"github.com/whiteducksoftware/azctx/internal/version"
 )
+
+func TestVersionUpdateCancellationReachesExitBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		hookErr error
+	}{
+		{name: "successful lookup"},
+		{name: "failed lookup", hookErr: errors.New("synthetic lookup failure")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &testutil.FakeRunner{}
+			deps := commandDependencies(t, fake)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var stdout, stderr bytes.Buffer
+			checks := 0
+			deps.CheckUpdates = func(string, string) error {
+				checks++
+				if !strings.HasPrefix(stdout.String(), "azctx version ") || !strings.HasSuffix(stdout.String(), "\n") {
+					t.Errorf("lookup ran before version output: %q", &stdout)
+				}
+				cancel()
+				return tc.hookErr
+			}
+			root := cmd.NewRootCommand(deps)
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs([]string{versionCommand})
+			err := root.ExecuteContext(ctx)
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("version cancellation = %v, want context.Canceled", err)
+			}
+			if code := cmd.ExitCode(err); code != 130 {
+				t.Errorf("version cancellation exit code = %d, want 130", code)
+			}
+			if checks != 1 || len(fake.Calls) != 0 || stderr.Len() != 0 {
+				t.Fatalf("checks=%d az calls=%+v stderr=%q", checks, fake.Calls, &stderr)
+			}
+		})
+	}
+}
+
+func TestVersionUpdateFailureIsDebugOnly(t *testing.T) {
+	for _, verbose := range []bool{false, true} {
+		fake := &testutil.FakeRunner{}
+		deps := commandDependencies(t, fake)
+		checks := 0
+		deps.CheckUpdates = func(string, string) error {
+			checks++
+			return errors.New("synthetic lookup failure")
+		}
+		args := []string{versionCommand}
+		if verbose {
+			args = append(args, verboseFlag)
+		}
+		var stdout, stderr bytes.Buffer
+		code := cmd.Run(args, deps, strings.NewReader(""), &stdout, &stderr)
+		if code != 0 || checks != 1 || len(fake.Calls) != 0 ||
+			!strings.HasPrefix(stdout.String(), "azctx version ") ||
+			strings.Contains(stderr.String(), "synthetic lookup failure") != verbose {
+			t.Fatalf("verbose=%t code=%d checks=%d az calls=%+v stdout=%q stderr=%q", verbose, code, checks, fake.Calls, &stdout, &stderr)
+		}
+	}
+}
+
+type versionFailedWriter struct {
+	cancel context.CancelFunc
+	err    error
+}
+
+func (writer versionFailedWriter) Write([]byte) (int, error) {
+	writer.cancel()
+	return 0, writer.err
+}
+
+func TestVersionOutputFailurePrecedesCancellation(t *testing.T) {
+	for _, format := range []string{textFormat, jsonFormat} {
+		t.Run(format, func(t *testing.T) {
+			fake := &testutil.FakeRunner{}
+			deps := commandDependencies(t, fake)
+			deps.CheckUpdates = func(string, string) error {
+				t.Error("failed output triggered update lookup")
+				return nil
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			failure := errors.New("synthetic version output failure")
+			var stderr bytes.Buffer
+			root := cmd.NewRootCommand(deps)
+			root.SetOut(versionFailedWriter{cancel: cancel, err: failure})
+			root.SetErr(&stderr)
+			root.SetArgs([]string{versionCommand, outputFlag, format})
+			err := root.ExecuteContext(ctx)
+			if !errors.Is(ctx.Err(), context.Canceled) || !errors.Is(err, failure) || cmd.ExitCode(err) != 1 ||
+				len(fake.Calls) != 0 || stderr.Len() != 0 {
+				t.Fatalf("context=%v error=%v code=%d az calls=%+v stderr=%q", ctx.Err(), err, cmd.ExitCode(err), fake.Calls, &stderr)
+			}
+		})
+	}
+}
 
 type updateTransport func(*http.Request) (*http.Response, error)
 
