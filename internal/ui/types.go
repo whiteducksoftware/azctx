@@ -1,4 +1,4 @@
-package prompt
+package ui
 
 // promptTemplate represents the json template for the prompt (see templates/*.json)
 type promptTemplate struct {
