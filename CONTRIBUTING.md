@@ -110,11 +110,15 @@ into a central test tree; add new tests beside the package they cover.
 
 Dependabot proposes weekly Go module and GitHub Actions updates: minor/patch
 updates grouped per ecosystem and major updates as individual PRs. Review them
-like any other change. Tool versions embedded in workflows and the preferred
-Go toolchain are listed in `.github/tool-pins.json`; edit the inventory and
-every listed source together. `make ci-check` verifies their consistency
-offline. Maintainers can report newer stable versions without changing
-anything:
+like any other change. Tool versions embedded in workflows, the contributor
+install command and the preferred Go toolchain are listed in
+`.github/tool-pins.json`; edit the inventory and every listed source together,
+then update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
+the inventory cannot select (such as "Go 1.27.3"). `make ci-check` verifies
+the listed sources offline. When an update changes rendering or fonts (Charm
+modules, `golang.org/x/image`), regenerate and review goldens and the demo GIF
+(`go run ./tools/demogif`) along with the docs. Maintainers can report newer
+stable versions without changing anything:
 
 ```sh
 python3 -B .github/scripts/check_tool_pins.py --online
@@ -129,7 +133,8 @@ untagged module exceptions, compatibility floors and platform-managed tools.
 ### Trying a pull request's binary
 
 CI uploads a native `azctx-validation-<os>-<arch>-<sha>` artifact for each
-Linux, macOS and Windows test job, kept for 14 days. For pull requests the SHA
+Linux, macOS and Windows test job, kept for 14 days unless repository policy
+is shorter. For pull requests the SHA
 is GitHub's tested merge commit, not the PR head. Download it with
 `gh run download`, extract the tar, check `SHA256SUMS` and compare
 `./azctx version -o json` with `metadata.json`, following

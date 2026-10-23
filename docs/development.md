@@ -41,7 +41,10 @@ to 10 open pull requests each:
 Minor and patch updates are grouped per ecosystem; each major update arrives as
 its own pull request for review. There is no cooldown, ignore rule or
 major-version exclusion. Review updates like any other change with `make check`;
-regenerate goldens or docs only for intentional output changes.
+regenerate goldens, docs or the demo GIF (`go run ./tools/demogif`) only for
+intentional output changes. Review the GIF whenever a Charm module or
+`golang.org/x/image` update changes picker rendering or fonts; its committed
+asset test fails until it is regenerated.
 
 The terminal UI uses the `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`
 and `charm.land/lipgloss/v2` modules. Two Charm modules have no release tags,
@@ -54,13 +57,20 @@ Dependabot cannot update tool versions embedded in workflow inputs
 (`with: version`, `syft-version`), `go install ...@version` commands or the
 preferred Go `toolchain`. [The tool-pin inventory](../.github/tool-pins.json)
 lists those seven pins (golangci-lint, actionlint, govulncheck, zizmor,
-GoReleaser, Syft and Go) with every source occurrence. When upgrading one, edit
-the inventory and all of its listed sources in the same change:
+GoReleaser, Syft and Go) with every source occurrence, including the
+contributor `go install` command and exact version literals in CONTRIBUTING
+and the docs. When upgrading one:
 
-```sh
-python3 -B .github/scripts/check_tool_pins.py
-python3 -B .github/scripts/check_tool_pins.py --online
-```
+1. Edit the inventory and all of its listed sources in the same change.
+2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
+   are spelled differently and so are not selectors, such as "Go 1.27.3" or
+   "GoReleaser 2.19.0". Leave released upgrade-guide history unchanged.
+3. Run the checks:
+
+   ```sh
+   python3 -B .github/scripts/check_tool_pins.py
+   python3 -B .github/scripts/check_tool_pins.py --online
+   ```
 
 The first command is the offline consistency check that `make ci-check` runs:
 it fails on changed, missing, extra or prerelease source pins. The `--online`
@@ -226,11 +236,15 @@ creates a real `ui.NewPicker` with ten synthetic subscriptions in three tenants
 `View().Content` frame at 92 by 16 cells. The generator parses only printable
 text and SGR styling, rejecting anything else, and renders the frames with the
 embedded Go Mono fonts from `golang.org/x/image`. Glyphs are rasterized with
-integer arithmetic so every platform produces identical bytes. A caption bar
+integer arithmetic, a design intended to give identical bytes on every
+platform; native Linux, macOS and Windows CI runs the committed-GIF test to
+verify that. A caption bar
 names each key; the window title labels the demo as synthetic. Nothing calls
 Azure CLI or reads a profile.
 
-Regenerate after picker changes, from the repository root:
+Regenerate after picker changes or rendering/font dependency updates. Run from
+the repository root: the default output `assets/img/azctx-demo.gif` and any
+`-o` path are relative to the current directory.
 
 ```sh
 go run ./tools/demogif

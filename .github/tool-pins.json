@@ -6,6 +6,7 @@
     "The Go minimum 1.26.0 and Azure CLI minimum 2.61.0 are compatibility floors, not freshness targets. Keep the manual minimum-versus-latest Azure matrix and its minimum image digest unchanged.",
     "mcr.microsoft.com/azure-cli:latest is intentionally rolling and is resolved from locally pre-pulled images only by the opted-in manual live test. No Azure/container invocation belongs in dependency automation.",
     "GoReleaser owns generated package/winget schema versions. check_winget.ps1 fetches Microsoft's schema matching each generated ManifestVersion; there is no independent pinned schema package.",
+    "Sources include contributor install commands and exact version literals in docs. Prose spelled differently (for example Go 1.27.3 or GoReleaser 2.19.0) is not a source: update current README, AGENTS, CONTRIBUTING and docs mentions in the same change, leaving released upgrade-guide history unchanged.",
     "Runner-provided Python/Ruby/PowerShell/Homebrew/Chocolatey/Docker and hosted *-latest runner images are not pinned here. Review native package/schema checks with tool upgrades; no npm/pip/container build manifest exists."
   ],
   "tools": [
@@ -18,7 +19,11 @@
       "version": "v2.15.0",
       "sources": [
         {"path": ".github/workflows/ci.yaml", "template": "version: {version}\n          args: --issues-exit-code=1", "count": 1},
-        {"path": ".github/workflows/copilot-setup-steps.yml", "template": "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{version}", "count": 1}
+        {"path": ".github/workflows/copilot-setup-steps.yml", "template": "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{version}", "count": 1},
+        {"path": "CONTRIBUTING.md", "template": "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{version}", "count": 1},
+        {"path": "CONTRIBUTING.md", "template": "Install golangci-lint {version} on your", "count": 1},
+        {"path": "docs/development.md", "template": "Use golangci-lint {version} and Python", "count": 1},
+        {"path": "docs/development.md", "template": "and golangci-lint {version}.", "count": 1}
       ]
     },
     {
@@ -59,7 +64,8 @@
         {"path": ".github/workflows/ci.yaml", "template": "distribution: goreleaser\n          version: {version}", "count": 2},
         {"path": ".github/workflows/release-check.yaml", "template": "distribution: goreleaser\n          version: {version}", "count": 1},
         {"path": ".github/workflows/goreleaser.yaml", "template": "distribution: goreleaser\n          version: {version}", "count": 2},
-        {"path": ".github/scripts/test_release_config.rb", "template": "%w[goreleaser {version}]", "count": 1}
+        {"path": ".github/scripts/test_release_config.rb", "template": "%w[goreleaser {version}]", "count": 1},
+        {"path": "docs/releasing.md", "template": "goreleaser/goreleaser/blob/{version}/internal/pipe/chocolatey/chocolatey.go", "count": 1}
       ]
     },
     {

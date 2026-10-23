@@ -291,7 +291,8 @@ maintainer may run `make live-test` locally against a dedicated test tenant.
 CI never runs it, and offline or fake runs are not live acceptance; see
 [integration tests](docs/integration-tests.md#manual-live-azure-test).
 Pull-request CI uploads native validation binaries for manual testing. They
-contain unreviewed code, expire after 14 days and are not releases; see
+contain unreviewed code, expire after 14 days (or the repository's shorter
+retention limit) and are not releases; see
 [PR validation binaries](docs/development.md#pr-validation-binaries).
 
 Report vulnerabilities privately through [SECURITY](SECURITY.md). Read

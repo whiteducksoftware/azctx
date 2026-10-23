@@ -16,7 +16,7 @@ const defaultOutput = "assets/img/azctx-demo.gif"
 
 func main() {
 	check := flag.Bool("check", false, "Check the GIF without changing files")
-	output := flag.String("o", defaultOutput, "GIF path, relative to the repository root")
+	output := flag.String("o", defaultOutput, "GIF path, relative to the current directory (run from the repository root)")
 	flag.Parse()
 	if err := writeOrCheck(*output, *check); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -29,6 +29,10 @@ func writeOrCheck(path string, check bool) error {
 	if err != nil {
 		return err
 	}
+	return writeOrCheckData(path, data, check)
+}
+
+func writeOrCheckData(path string, data []byte, check bool) error {
 	if !check {
 		return os.WriteFile(path, data, 0o644) //nolint:gosec // A committed README image must be world-readable.
 	}
