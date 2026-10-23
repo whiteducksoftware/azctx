@@ -8,20 +8,18 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
 func main() {
-	lipgloss.SetColorProfile(termenv.Ascii)
 	rows := []profile.Subscription{
 		{Id: "11111111-1111-1111-1111-111111111111", Name: "Production", TenantName: "Example Production", Tenant: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
 		{Id: "22222222-2222-2222-2222-222222222222", Name: "Development", TenantName: "Example Engineering", Tenant: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"},
 	}
-	view := ui.NewPicker(rows, 160, 15).View()
+	view := ansi.Strip(ui.NewPicker(rows, 160, 15).View().Content)
 	var svg bytes.Buffer
 	svg.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="360" viewBox="0 0 1480 360" role="img" aria-labelledby="title desc">
 <title id="title">azctx built-in subscription picker</title>
