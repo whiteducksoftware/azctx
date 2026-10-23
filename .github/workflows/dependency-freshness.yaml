@@ -1,0 +1,31 @@
+name: dependency freshness
+
+on:
+  schedule:
+    - cron: '31 7 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tool-pins:
+    name: embedded tool pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Report newer stable tool tags
+        run: python3 -B .github/scripts/check_tool_pins.py --online
+        env:
+          GH_TOKEN: ${{ github.token }}

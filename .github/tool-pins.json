@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "maintenance": [
+    "This is a source-pin inventory, not a package manager manifest. Dependabot maintains root gomod (direct and indirect) and github-actions references.",
+    "Update each tool version and every listed source together. Offline CI rejects source drift; the scheduled/manual read-only check reports newer stable upstream tags without editing files or creating/merging PRs.",
+    "The Go minimum 1.26.0 and Azure CLI minimum 2.61.0 are compatibility floors, not freshness targets. Keep the manual minimum-versus-latest Azure matrix and its minimum image digest unchanged.",
+    "mcr.microsoft.com/azure-cli:latest is intentionally rolling and is resolved from locally pre-pulled images only by the opted-in manual live test. No Azure/container invocation belongs in dependency automation.",
+    "GoReleaser owns generated package/winget schema versions. check_winget.ps1 fetches Microsoft's schema matching each generated ManifestVersion; there is no independent pinned schema package.",
+    "Runner-provided Python/Ruby/PowerShell/Homebrew/Chocolatey/Docker and hosted *-latest runner images are not pinned here. Review native package/schema checks with tool upgrades; no npm/pip/container build manifest exists."
+  ],
+  "tools": [
+    {
+      "name": "golangci-lint",
+      "repository": "golangci/golangci-lint",
+      "action": "golangci/golangci-lint-action",
+      "input": "version",
+      "go-install": "github.com/golangci/golangci-lint/v2/cmd/golangci-lint",
+      "version": "v2.15.0",
+      "sources": [
+        {"path": ".github/workflows/ci.yaml", "template": "version: {version}\n          args: --issues-exit-code=1", "count": 1},
+        {"path": ".github/workflows/copilot-setup-steps.yml", "template": "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{version}", "count": 1}
+      ]
+    },
+    {
+      "name": "actionlint",
+      "repository": "rhysd/actionlint",
+      "go-install": "github.com/rhysd/actionlint/cmd/actionlint",
+      "version": "v1.7.12",
+      "sources": [
+        {"path": ".github/workflows/ci.yaml", "template": "go install github.com/rhysd/actionlint/cmd/actionlint@{version}", "count": 1}
+      ]
+    },
+    {
+      "name": "govulncheck",
+      "repository": "golang/vuln",
+      "go-install": "golang.org/x/vuln/cmd/govulncheck",
+      "version": "v1.9.0",
+      "sources": [
+        {"path": ".github/workflows/ci.yaml", "template": "go install golang.org/x/vuln/cmd/govulncheck@{version}", "count": 1}
+      ]
+    },
+    {
+      "name": "zizmor",
+      "repository": "zizmorcore/zizmor",
+      "action": "zizmorcore/zizmor-action",
+      "input": "version",
+      "version": "v1.31.1",
+      "sources": [
+        {"path": ".github/workflows/ci.yaml", "template": "version: {version}\n          inputs: .github/workflows", "count": 1}
+      ]
+    },
+    {
+      "name": "goreleaser",
+      "repository": "goreleaser/goreleaser",
+      "action": "goreleaser/goreleaser-action",
+      "input": "version",
+      "version": "v2.19.0",
+      "sources": [
+        {"path": ".github/workflows/ci.yaml", "template": "distribution: goreleaser\n          version: {version}", "count": 2},
+        {"path": ".github/workflows/release-check.yaml", "template": "distribution: goreleaser\n          version: {version}", "count": 1},
+        {"path": ".github/workflows/goreleaser.yaml", "template": "distribution: goreleaser\n          version: {version}", "count": 2},
+        {"path": ".github/scripts/test_release_config.rb", "template": "%w[goreleaser {version}]", "count": 1}
+      ]
+    },
+    {
+      "name": "syft",
+      "repository": "anchore/syft",
+      "action": "anchore/sbom-action/download-syft",
+      "input": "syft-version",
+      "version": "v1.55.0",
+      "sources": [
+        {"path": ".github/workflows/release-check.yaml", "template": "syft-version: {version}", "count": 1},
+        {"path": ".github/workflows/goreleaser.yaml", "template": "syft-version: {version}", "count": 2}
+      ]
+    },
+    {
+      "name": "go",
+      "release_feed": "https://go.dev/dl/?mode=json",
+      "version": "go1.27.3",
+      "sources": [
+        {"path": "go.mod", "template": "toolchain {version}", "count": 1}
+      ]
+    }
+  ]
+}

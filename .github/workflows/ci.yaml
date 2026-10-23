@@ -45,7 +45,7 @@ jobs:
         run: make docs-check
 
       - name: Lint Go
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0
           args: --issues-exit-code=1 --config=.golangci.yml
@@ -60,7 +60,7 @@ jobs:
         run: actionlint
 
       - name: Audit workflow security
-        uses: zizmorcore/zizmor-action@e639db99335bc9038abc0e066dfcd72e23d26fb4 # v0.3.0
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
         with:
           version: v1.31.1
           inputs: .github/workflows
@@ -196,7 +196,7 @@ jobs:
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: v2.18.3
+          version: v2.19.0
           args: release --snapshot --skip publish,announce,archive,sbom,homebrew,chocolatey,winget --clean --config .goreleaser.yaml
 
   ci-windows:
@@ -234,5 +234,5 @@ jobs:
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: v2.18.3
+          version: v2.19.0
           args: release --snapshot --skip publish,announce,archive,sbom,homebrew,chocolatey,winget --clean --config .goreleaser-windows.yaml
