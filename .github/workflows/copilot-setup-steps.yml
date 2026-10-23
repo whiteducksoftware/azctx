@@ -1,0 +1,58 @@
+name: Copilot setup steps
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+      - go.mod
+      - go.sum
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Check active Go toolchain
+        shell: bash
+        env:
+          GOTOOLCHAIN: auto
+        run: |
+          # setup-go exports local; restore automatic selection for the agent.
+          echo 'GOTOOLCHAIN=auto' >> "$GITHUB_ENV"
+          go version
+          go env GOTOOLCHAIN
+          grep -E '^(go|toolchain) ' go.mod
+
+      - name: Install golangci-lint
+        shell: bash
+        run: |
+          GOBIN="$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify contributor tools on PATH
+        shell: bash
+        run: |
+          go version
+          go env GOTOOLCHAIN
+          golangci-lint version
