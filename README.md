@@ -18,8 +18,8 @@ stays in Azure CLI; azctx never handles credentials or MSAL token caches.
 
 ![Animated azctx picker filtering and selecting synthetic subscriptions in three tenants](assets/img/azctx-demo.gif)
 
-*Synthetic demo.* The [demo generator](docs/development.md#demo-gif) drives the
-real built-in picker with key presses and renders its actual terminal output.
+*Synthetic demo.* This [static image](docs/development.md#demo-gif) was
+rendered from the real built-in picker's terminal output, driven by key presses.
 Subscription names, tenants and GUIDs are invented; it is not a recording of a
 live Azure account.
 

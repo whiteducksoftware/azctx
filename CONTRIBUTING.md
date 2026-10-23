@@ -26,7 +26,7 @@ make golden # Update picker screen goldens; review and commit intentional change
 make agent-check # Offline Python hook tests (also included in test/check)
 make fuzz   # Profile, config and project parsers, 60 seconds each (also in CI)
 make e2e    # Existing real-binary/fake-az suite, portable across all three OSes
-make ci-check # Offline tool-pin consistency plus CI, security and schema policy checks
+make ci-check # Offline CI, security and schema policy checks
 make completion-perf # Native 500-subscription completion, every call under 50 ms
 make docs   # Generate the deterministic Cobra CLI reference
 make docs-check # Reject missing, changed or extra CLI reference files
@@ -87,9 +87,9 @@ and confirmation matrix and the still-unverified live acceptance checklist.
 Picker tests run real Bubble Tea v2 programs through teatest v2 with bounded
 waits and synthetic key events at 60, 100 and 160 columns; they do not need an
 interactive terminal. After `make golden`, run `make check` and confirm a second
-`make golden` leaves the reviewed golden files unchanged. When picker output
-changes, also regenerate the README demo with `go run ./tools/demogif` and
-review it; see [demo GIF](docs/development.md#demo-gif).
+`make golden` leaves the reviewed golden files unchanged. The README demo is a
+static GIF that is not regenerated or checked; see
+[demo GIF](docs/development.md#demo-gif).
 
 JSON contract fixtures in `cmd/testdata/contract/` are compared byte-for-byte,
 including their single trailing LF. `.gitattributes` preserves LF on Windows
@@ -110,25 +110,15 @@ into a central test tree; add new tests beside the package they cover.
 
 Dependabot proposes weekly Go module and GitHub Actions updates: minor/patch
 updates grouped per ecosystem and major updates as individual PRs. Review them
-like any other change. Tool versions embedded in workflows, the contributor
-install command and the preferred Go toolchain are listed in
-`.github/tool-pins.json`; edit the inventory and every listed source together,
-then update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
-the inventory cannot select (such as "Go 1.27.3"). `make ci-check` verifies
-the listed sources offline. When an update changes rendering or fonts (Charm
-modules, `golang.org/x/image`), regenerate and review goldens and the demo GIF
-(`go run ./tools/demogif`) along with the docs. Maintainers can report newer
-stable versions without changing anything:
-
-```sh
-python3 -B .github/scripts/check_tool_pins.py --online
-```
-
-It needs the GitHub CLI with API access and exits 0 when everything is
-current, 1 when updates are available and 2 for configuration or upstream
-errors. It never edits pins. See
+like any other change. Dependabot cannot update tool versions embedded in
+workflows, the contributor install command or the preferred Go toolchain;
+update those manually, changing every occurrence together, then update version
+mentions in README, AGENTS, CONTRIBUTING and `docs/` (such as "Go 1.27.3").
+When an update changes picker rendering (Charm modules), regenerate and review
+goldens along with the docs. See
 [dependency maintenance](docs/development.md#dependency-maintenance) for
-untagged module exceptions, compatibility floors and platform-managed tools.
+the tool list, untagged module exceptions, compatibility floors and
+platform-managed tools.
 
 ### Trying a pull request's binary
 
