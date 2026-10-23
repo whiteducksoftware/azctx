@@ -1,4 +1,5 @@
 require 'yaml'
+require 'json'
 
 ROOT = File.expand_path('../..', __dir__)
 Dir.chdir(ROOT)
@@ -13,7 +14,90 @@ documents = Dir.glob('.github/**/*.{yaml,yml}').to_h do |path|
   [path, document]
 end
 
+dependabot = documents.fetch('.github/dependabot.yaml')
+assert(dependabot.fetch('version') == 2, 'Dependabot must use the supported configuration schema')
+updates = dependabot.fetch('updates')
+assert(updates.map { |update| update.fetch('package-ecosystem') }.sort == %w[github-actions gomod],
+       'Dependabot must cover the real Go module and workflow manifests, not invented ecosystems')
+updates.each do |update|
+  ecosystem = update.fetch('package-ecosystem')
+  assert(update.fetch('directory') == '/' && update.fetch('schedule').fetch('interval') == 'weekly',
+         "#{ecosystem} must maintain the root manifests weekly")
+  assert(update.fetch('allow') == [{ 'dependency-type' => 'all' }],
+         "#{ecosystem} must explicitly include direct and indirect dependencies")
+  assert(update.fetch('open-pull-requests-limit') >= 10 && !update.key?('cooldown') &&
+         !update.key?('ignore') && !update.key?('exclude-paths'),
+         "#{ecosystem} must not starve updates or exclude major releases")
+  groups = update.fetch('groups').values
+  assert(groups.length == 1 && groups.first.fetch('patterns') == ['*'] &&
+         groups.first.fetch('update-types').sort == %w[minor patch],
+         "#{ecosystem} must group minor/patch updates and leave majors individually reviewable")
+end
+
+action_pins = {}
+tools = JSON.parse(File.read('.github/tool-pins.json')).fetch('tools')
+go_pin = tools.find { |tool| tool['name'] == 'go' }
+assert(go_pin && go_pin.fetch('version') == File.read('go.mod')[/^toolchain (go\S+)$/, 1] &&
+       go_pin.fetch('release_feed') == 'https://go.dev/dl/?mode=json' &&
+       go_pin.fetch('sources').any? { |source| source['path'] == 'go.mod' },
+       'the preferred Go runtime must be covered separately from the historical minimum')
+tool_actions = tools.select { |tool| tool.key?('action') }.to_h { |tool| [tool.fetch('action'), tool] }
+tool_installs = tools.select { |tool| tool.key?('go-install') }.to_h { |tool| [tool.fetch('go-install'), tool] }
+documents.select { |path, _| path.start_with?('.github/workflows/') }.each do |path, workflow|
+  source = File.read(path)
+  workflow.fetch('jobs').each_value do |job|
+    job.fetch('steps').each do |step|
+      step.fetch('run', '').scan(/\bgo install ([^\s@]+)@([^\s]+)/).each do |package, version|
+        tool = tool_installs.fetch(package)
+        assert(tool.fetch('version') == version && tool.fetch('sources').any? { |entry| entry['path'] == path },
+               "#{path}: installed #{package} must be covered by the real pin inventory")
+      end
+      next unless step.key?('uses')
+
+      action, sha = step.fetch('uses').split('@', 2)
+      comment = source.match(/^\s*uses: #{Regexp.escape(step.fetch('uses'))} # (v\d+\.\d+\.\d+)\s*$/)
+      assert(sha&.match?(/\A[0-9a-f]{40}\z/) && comment,
+             "#{path}: #{action} needs an immutable SHA and exact stable release tag")
+      pin = [sha, comment[1]]
+      assert(!action_pins.key?(action) || action_pins[action] == pin,
+             "#{action} SHA/tag pins must agree across every workflow")
+      action_pins[action] = pin
+      step.fetch('with', {}).each do |input, version|
+        next unless input == 'version' || input.end_with?('-version')
+
+        tool = tool_actions.fetch(action)
+        assert(tool.fetch('input') == input && tool.fetch('version') == version &&
+               tool.fetch('sources').any? { |entry| entry['path'] == path },
+               "#{path}: #{action} #{input} must be covered by the real pin inventory")
+      end
+    end
+  end
+end
+
 ci = documents.fetch('.github/workflows/ci.yaml')
+freshness = documents.fetch('.github/workflows/dependency-freshness.yaml')
+triggers = freshness.fetch('on') { freshness.fetch(true) }
+assert(triggers.keys.sort == %w[schedule workflow_dispatch] &&
+       triggers.fetch('schedule') == [{ 'cron' => '31 7 * * 1' }],
+       'online freshness must be scheduled weekly or manually invoked, never an online PR gate')
+assert(freshness.fetch('permissions') == {} && freshness.fetch('jobs').keys == ['tool-pins'],
+       'freshness must deny workflow permissions and have only the read-only tool check')
+freshness_job = freshness.fetch('jobs').fetch('tool-pins')
+assert(freshness_job.fetch('permissions') == { 'contents' => 'read' } &&
+       freshness_job.fetch('timeout-minutes') <= 15 && !freshness_job.key?('continue-on-error'),
+       'freshness needs only bounded read access and must fail on errors or available updates')
+freshness_steps = freshness_job.fetch('steps')
+assert(freshness_steps.length == 3 &&
+       freshness_steps[0].fetch('uses').start_with?('step-security/harden-runner@') &&
+       freshness_steps[0].fetch('with') == { 'egress-policy' => 'audit' } &&
+       freshness_steps[1].fetch('uses').start_with?('actions/checkout@') &&
+       freshness_steps[1].fetch('with') == { 'persist-credentials' => false } &&
+       freshness_steps[2].fetch('run') == 'python3 -B .github/scripts/check_tool_pins.py --online' &&
+       freshness_steps[2].fetch('env') == { 'GH_TOKEN' => '${{ github.token }}' } &&
+       freshness_steps.none? { |step| step.key?('if') || step.key?('continue-on-error') },
+       'freshness must only harden, check out without credentials and report upstream tool updates')
+assert(File.read('Makefile').include?("\tpython3 -B .github/scripts/check_tool_pins.py\n"),
+       'ordinary CI must check inventory source consistency offline')
 release = documents.fetch('.github/workflows/goreleaser.yaml')
 rules = documents.fetch('.github/zizmor.yml').fetch('rules')
 
@@ -162,4 +246,4 @@ assert(ci.fetch('jobs').fetch('test').fetch('strategy').fetch('matrix').fetch('o
        ci.fetch('jobs').fetch('test').fetch('steps').any? { |step| step['run'] == 'make test' },
        'all three native platforms must run correctness and completion performance acceptance')
 
-puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness, weighted coverage and native completion acceptance'
+puts 'PASS: YAML; Dependabot coverage/groups; all-workflow SHA/exact-tag pins; embedded tool inventory; read-only freshness workflow; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness, weighted coverage and native completion acceptance'
