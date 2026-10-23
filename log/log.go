@@ -38,24 +38,60 @@ func SetVerbose(verbose bool) {
 	}
 }
 
-func Debug(format string, values ...any)   { logger.Debug(fmt.Sprintf(format, values...)) }
-func Info(format string, values ...any)    { status(slog.LevelInfo, format, values...) }
-func Success(format string, values ...any) { status(successLevel, format, values...) }
-func Warn(format string, values ...any)    { logger.Warn(fmt.Sprintf(format, values...)) }
-func Error(format string, values ...any)   { logger.Error(fmt.Sprintf(format, values...)) }
+func Debug(format string, values ...any) { logger.Debug(fmt.Sprintf(format, values...)) }
+func Info(format string, values ...any)  { logger.Info(fmt.Sprintf(format, values...)) }
+func Success(format string, values ...any) {
+	logger.Log(context.Background(), successLevel, fmt.Sprintf(format, values...))
+}
+func Warn(format string, values ...any)  { logger.Warn(fmt.Sprintf(format, values...)) }
+func Error(format string, values ...any) { logger.Error(fmt.Sprintf(format, values...)) }
 
 const successLevel = slog.LevelInfo + 1
 
-func status(recordLevel slog.Level, format string, values ...any) {
-	if h, ok := logger.Handler().(*handler); ok && h.color {
-		values = append([]any(nil), values...)
-		for i, value := range values {
-			if text, ok := value.(string); ok {
-				values[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(text)
-			}
+// Identity is a display value with its own redaction boundary and cyan accent.
+type Identity string
+
+// InfoParts joins prose and explicit Identity values without printf formatting.
+func InfoParts(parts ...any) { status(slog.LevelInfo, parts) }
+
+// SuccessParts adds the success marker to prose and explicit Identity values.
+func SuccessParts(parts ...any) { status(successLevel, parts) }
+
+const statusKey = "azctx.display"
+
+type displayParts []any
+
+func status(recordLevel slog.Level, parts displayParts) {
+	logger.LogAttrs(context.Background(), recordLevel, "", slog.Any(statusKey, parts))
+}
+
+func (parts displayParts) render(color bool) string {
+	var output, prose strings.Builder
+	for _, part := range parts {
+		if identity, ok := part.(Identity); ok {
+			output.WriteString(renderIdentity(prose.String(), identity, color))
+			prose.Reset()
+		} else {
+			_, _ = fmt.Fprint(&prose, part)
 		}
 	}
-	logger.Log(context.Background(), recordLevel, fmt.Sprintf(format, values...))
+	output.WriteString(redact.Text(prose.String()))
+	return output.String()
+}
+
+func renderIdentity(prose string, identity Identity, color bool) string {
+	prefix := redact.Text(prose)
+	safe := redact.Text(prose + string(identity))
+	// Keep leading secret labels effective, but end their context after this
+	// complete display value so a name like Token cannot consume the next ID.
+	value, ok := strings.CutPrefix(safe, prefix)
+	if !ok {
+		return safe
+	}
+	if color && value != "" {
+		value = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render(value)
+	}
+	return prefix + value
 }
 
 // ColorEnabled is the shared per-stream policy. Forced colors never bypass it.
@@ -103,6 +139,7 @@ func (*handler) Enabled(_ context.Context, recordLevel slog.Level) bool {
 
 func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	var line strings.Builder
+	var display displayParts
 	prefix, color := "", lipgloss.Color("3")
 	switch {
 	case record.Level >= slog.LevelError:
@@ -112,16 +149,12 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	case record.Level == successLevel:
 		prefix, color = "✓ ", lipgloss.Color("2")
 	}
-	if h.color && prefix != "" {
-		prefix = lipgloss.NewStyle().Foreground(color).Render(prefix)
-	}
-	line.WriteString(prefix)
-	message := record.Message
-	if h.color && record.Level == slog.LevelWarn {
-		message = lipgloss.NewStyle().Foreground(color).Render(message)
-	}
-	line.WriteString(message)
+	line.WriteString(record.Message)
 	writeAttr := func(attr slog.Attr) bool {
+		if parts, ok := attr.Value.Any().(displayParts); attr.Key == statusKey && ok {
+			display = parts
+			return true
+		}
 		_, _ = fmt.Fprintf(&line, " %s%s=%s", h.group, attr.Key, attr.Value.Resolve())
 		return true
 	}
@@ -129,9 +162,19 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 		writeAttr(attr)
 	}
 	record.Attrs(writeAttr)
+	message := redact.Text(line.String())
+	if display != nil {
+		message = display.render(h.color) + message
+	}
+	if h.color && prefix != "" {
+		prefix = lipgloss.NewStyle().Foreground(color).Render(prefix)
+	}
+	if h.color && record.Level == slog.LevelWarn {
+		message = lipgloss.NewStyle().Foreground(color).Render(message)
+	}
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
-	_, err := fmt.Fprintln(h.output, redact.Text(line.String()))
+	_, err := fmt.Fprintln(h.output, prefix+message)
 	return err
 }
 
