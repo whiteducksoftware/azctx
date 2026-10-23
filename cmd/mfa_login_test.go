@@ -73,7 +73,7 @@ func TestMFALoginPartialFailuresUseExitThree(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			code := cmd.Run(append([]string{loginCommand}, tc.args...), deps, strings.NewReader(tc.input), &stdout, &stderr)
-			if code != 3 || len(fake.Calls) != 2 || stdout.Len() != 0 || strings.Contains(stderr.String(), "Successfully fetched") {
+			if code != 3 || len(fake.Calls) != 2 || stdout.Len() != 0 || strings.Contains(stderr.String(), "✓ Signed in:") {
 				t.Fatalf("code=%d calls=%+v stdout=%q stderr=%q", code, fake.Calls, stdout.String(), stderr.String())
 			}
 			if tc.name != "user declined" && strings.Contains(stderr.String(), "[Y/n]") {
@@ -126,7 +126,7 @@ func TestMFALoginRetriesOnlyFailedTenantsWithOneConfirmation(t *testing.T) {
 		got = append(got, call.Args)
 	}
 	if code != 0 || !reflect.DeepEqual(got, want) || strings.Count(stderr.String(), "Sign in to these 2 tenants now? [Y/n]") != 1 ||
-		!strings.Contains(stderr.String(), "Successfully fetched 3 tenants and 3 subscriptions.") || stdout.Len() != 0 {
+		!strings.Contains(stderr.String(), "✓ Signed in: 3 tenants, 3 subscriptions\n") || stdout.Len() != 0 {
 		t.Fatalf("code=%d calls=%+v stdout=%q stderr=%q", code, fake.Calls, stdout.String(), stderr.String())
 	}
 	for _, call := range fake.Calls[1:] {

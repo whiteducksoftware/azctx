@@ -69,7 +69,7 @@ func TestMissingFZFFallbackAndInputGates(t *testing.T) {
 				t.Fatalf("status=%d messages=%q", status, &messages)
 			}
 			if len(args) == 0 {
-				if !selected || messages.String() != "fzf is not on PATH; using the built-in picker.\n" || out.Len() != 0 {
+				if !selected || messages.String() != "fzf is not on PATH; using the built-in picker.\n"+switchFeedback(productionName, productionID, tenantID, tenantID) || out.Len() != 0 {
 					t.Fatalf("fallback selected=%t stdout=%q stderr=%q", selected, &out, &messages)
 				}
 			} else if selected || messages.Len() != 0 {
@@ -95,7 +95,7 @@ func TestTenantMissingFZFNoticesOnce(t *testing.T) {
 	}
 	var out, messages bytes.Buffer
 	code := cmd.Run([]string{tenantSubcommand}, deps, strings.NewReader(""), &out, &messages)
-	if code != 0 || stages != 2 || len(fake.Calls) != 1 || messages.String() != "fzf is not on PATH; using the built-in picker.\n" {
+	if code != 0 || stages != 2 || len(fake.Calls) != 1 || messages.String() != "fzf is not on PATH; using the built-in picker.\n"+switchFeedback(developmentName, developmentID, customerTenant, secondTenantID) {
 		t.Fatalf("code=%d stages=%d calls=%+v messages=%q", code, stages, fake.Calls, &messages)
 	}
 }

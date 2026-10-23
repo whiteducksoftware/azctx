@@ -16,7 +16,7 @@ func TestBinaryContractCommandNamesAndDelimiter(t *testing.T) {
 			data := strings.ReplaceAll(fixtureProfile, productionName, name)
 			writeFixture(t, filepath.Join(config, profileFile), data)
 			code, stdout, stderr := runContractBinary(t, binary, []string{argumentDelimiter, name}, "")
-			if code != 0 || stdout != "" || stderr != "" {
+			if code != 0 || stdout != "" || stderr != switchFeedback(name, productionID, tenantID, tenantID) {
 				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 			}
 			after, err := os.ReadFile(filepath.Join(config, profileFile))

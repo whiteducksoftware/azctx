@@ -92,7 +92,7 @@ func (cli CLI) Login(extraArgs []string) (LoginResult, error) {
 	log.Info("Logging in... %s", prompt)
 
 	// Execute the az login command
-	result, err := cli.execLogin(extraArgs)
+	result, err := cli.execLogin(extraArgs, false)
 	if err != nil {
 		return result, fmt.Errorf("failed to login: %w", err)
 	}

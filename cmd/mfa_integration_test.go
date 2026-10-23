@@ -80,7 +80,7 @@ func TestMFAFakeAZConfirmationPreservesAttachedInputAndStreams(t *testing.T) {
 	const deviceInstructions = "Use the device code SYNTHETIC at https://microsoft.com/devicelogin\n"
 	fixtures := []map[string]any{
 		{fixtureArgs: want[0], fixtureStdout: brokerVersionJSON},
-		{fixtureArgs: want[1], fixtureStdout: deviceInstructions, fixtureStderr: mfaFixture(t, "50076") + mfaFixture(t, "50079")},
+		{fixtureArgs: want[1], fixtureStdout: loginSubscriptionJSON, fixtureStderr: deviceInstructions + mfaFixture(t, "50076") + mfaFixture(t, "50079")},
 		{fixtureArgs: want[2], fixtureStdout: "first retry stdout\n"},
 		{fixtureArgs: want[3], fixtureStderr: "last retry stderr\n", "waitForInput": true},
 	}
@@ -100,7 +100,8 @@ func TestMFAFakeAZConfirmationPreservesAttachedInputAndStreams(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := cmd.Run([]string{loginCommand, deviceCodeFlag}, deps, attachedMFAInput(t), &stdout, &stderr)
 	calls, err := os.ReadFile(record)
-	if code != 0 || err != nil || stdout.String() != deviceInstructions+"first retry stdout\n" ||
+	assertQuietLoginStreams(t, stdout.String(), stderr.String(), deviceInstructions)
+	if code != 0 || err != nil ||
 		strings.Count(string(calls), "\n") != 4 || strings.Count(stderr.String(), "[Y/n]") != 1 ||
 		!strings.Contains(stderr.String(), "last retry stderr") || !strings.Contains(stderr.String(), "MFA registration required") {
 		t.Fatalf("code=%d error=%v calls=%s stdout=%q stderr=%q", code, err, calls, stdout.String(), stderr.String())
@@ -117,6 +118,13 @@ func TestMFAFakeAZConfirmationPreservesAttachedInputAndStreams(t *testing.T) {
 		if !reflect.DeepEqual(call.Args, want[index]) || !reflect.DeepEqual(call.Env, []string{env}) {
 			t.Fatalf("call %d=%+v", index, call)
 		}
+	}
+}
+
+func assertQuietLoginStreams(t *testing.T, stdout, stderr, instructions string) {
+	t.Helper()
+	if stdout != "" || !strings.Contains(stderr, instructions) {
+		t.Fatalf("login streams: stdout=%q stderr=%q", stdout, stderr)
 	}
 }
 

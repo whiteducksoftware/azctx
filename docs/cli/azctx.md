@@ -6,7 +6,7 @@ Switch Azure CLI subscriptions with an identity-aware fuzzy picker
 
 Choose a subscription by name, alias, GUID or exact tenant/subscription query. Use - for the previous subscription and -- before a name that equals a command.
 
-With terminal input, the bare command opens a picker on stderr. Without input it lists subscriptions on stdout. Successful switches are quiet; protected targets need confirmation or --yes. Use -c for current context and -o json for structured data/errors.
+With terminal input, the bare command opens a picker on stderr. Without input it lists subscriptions on stdout. Successful switches print a check-mark confirmation on stderr (suppressed with -o json), including [protected] for protected targets. Protected targets need confirmation or --yes. Use -c for current context and -o json for structured data/errors. Colors require a TTY on the target stream and absent NO_COLOR.
 
 ```
 azctx [query | -] [flags]
@@ -44,6 +44,6 @@ azctx [query | -] [flags]
 * [azctx guard](azctx_guard.md)	: Check the active context against reviewed expectations
 * [azctx history](azctx_history.md)	: Show the last 100 completed subscription switches
 * [azctx list](azctx_list.md)	: List cached subscriptions without switching
-* [azctx login](azctx_login.md)	: Sign in through Azure CLI with attached streams
+* [azctx login](azctx_login.md)	: Sign in through Azure CLI with live stderr and quiet stdout
 * [azctx tenant](azctx_tenant.md)	: Choose a tenant, then a subscription
 * [azctx version](azctx_version.md)	: Print azctx version and build information

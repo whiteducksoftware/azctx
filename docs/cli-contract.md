@@ -14,7 +14,7 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | Invocation | Behavior and output |
 | --- | --- |
 | `azctx` | Open the subscription picker when input is interactive; otherwise print the same table as `azctx list`. |
-| `azctx <query> [--all] [--yes]` | Switch by subscription name, alias, subscription ID or `tenant/subscription`. Successful switches are quiet. Protected targets require confirmation or `--yes`. |
+| `azctx <query> [--all] [--yes]` | Switch by subscription name, alias, subscription ID or `tenant/subscription`. Success prints one sanitized stderr confirmation, suppressed for JSON. Protected targets require confirmation or `--yes`. |
 | `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `tenant`, `history`, `env`, `exec`, `guard`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
 | `azctx -` | Switch to the previous subscription using private state, rolling it back if Azure CLI switching fails. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
@@ -24,8 +24,8 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | `azctx env [query] [--shell bash\|zsh\|fish\|powershell] [--format github\|azure-devops]` | Export exactly four subscription/tenant context variables without switching. Default: current context, bash. Shell and pipeline format flags are mutually exclusive. GitHub appends to existing `GITHUB_ENV`; DevOps prints logging commands. Default/text output only. |
 | `azctx exec <query> -- <cmd> [args]` | Resolve one command once, without a shell; attach streams and override only the four child context variables. Preserve child status/signals without extra diagnostics. Default/text/JSON affect azctx preflight errors only; child output is untouched. |
 | `azctx guard [--subscription <q>] [--tenant <q>] [-o text\|json]` | Check the actual active context against supplied dimensions or, with neither flag, the nearest strict `.azctx.yaml`. Silent on match; mismatch 4 (`context_mismatch`), no project/malformed project 1, unresolved/ambiguous query 2. No mutation or prompts. |
-| `azctx version [-o text\|json]` | Print version information, without loading the Azure profile or checking for updates. Its existing version JSON is unchanged. |
-| `azctx login [--use-device-code] [--tenant <name\|id> \| --all-tenants] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, attach login streams including live stderr capture, then offer one confirmation for failed MFA tenants. `--all-tenants` explicitly discovers tenant GUIDs and signs in individually. Disable Azure CLI's subscription picker only in login children. Supports default/text output, not subscription JSON. |
+| `azctx version [-o text\|json]` | Print version information without loading the Azure profile. Eligible text output performs a fresh stable-release check; failures are debug-only. JSON is unchanged and offline. |
+| `azctx login [--use-device-code] [--tenant <name\|id> \| --all-tenants] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, attach stdin/live stderr and discard login stdout unless `-o`, `--output` or `--query` follows `--`, then offer one confirmation for failed MFA tenants. `--all-tenants` explicitly discovers tenant GUIDs and signs in individually. Disable Azure CLI's subscription picker only in login children. Supports default/text output, not subscription JSON. |
 | `azctx auth broker status` | Read effective platform broker settings and check Azure CLI availability, without a profile or mutations. Default/text output only. |
 | `azctx auth broker enable\|disable [--yes]` | Require a supported platform/version and explicit confirmation, then `az account clear`, `az config set` for the platform broker key, attached `az login`. Default/text output only; stops on the first failure. |
 | `azctx doctor [-o text\|json]` | Offline, profile-independent diagnostics, including cached update status. Default: text. Missing dependencies/broken configuration are report findings, not fatal command errors. |
@@ -179,7 +179,7 @@ Human lists, current text and pickers emit one line suggesting `az login` only
 when a displayed record lacks both usable modern tenant fields. Current output
 checks only the current record; narrowed pickers check only their candidates.
 `list --all` checks every displayed entry, including hidden/foreign records.
-JSON, plain-field current formats and quiet direct switches do not emit the hint.
+JSON, plain-field current formats and direct switches do not emit the hint.
 
 Login initialization permits a missing Azure directory/profile; only Azure CLI
 creates them. Existing malformed settings remain errors. After a supported,
@@ -201,6 +201,9 @@ subject to heuristic redaction.
 Without azctx interactive input, initial failures are listed on stderr and exit
 3 without retries/discovery. Partial or declined sign-ins also exit 3, not
 success; completed attempts strictly reload the profile for the count summary.
+Success prints `✓ Signed in: N tenants, M subscriptions`, followed by the
+active-subscription text line when a current subscription is available, on
+stderr. Partial-failure summaries are yellow warnings, not success messages.
 `--all-tenants` uses `az account tenant list -o json`, validates/deduplicates
 GUIDs, and does not repeat known non-retryable failures. Explicit non-user
 `--identity`/`-i` and `--service-principal` passthrough skip all tenant discovery
@@ -227,24 +230,37 @@ schema and safety boundaries are in [authentication](authentication.md).
   forwards arguments after `--`. Azure CLI owns its authentication interaction;
   `--no-input` does not introduce an Azure CLI unattended-authentication mode.
 - Data goes to stdout; diagnostics and picker rendering go to stderr.
-  Login retains the streams emitted by Azure CLI, including device codes.
+  A successful picker/query/previous switch prints
+  `✓ Switched to <sub> (<subId>) in tenant <tenant> (<tenantId>)`, plus
+  ` [protected]` for protected targets, on stderr only. Profile labels use
+  display sanitizing; JSON switches suppress this line without a success payload.
+  Login discards child stdout unless an output/query selector follows `--`
+  (including `--output=…`, `--query=…` and attached `-o…` forms).
+  Stdin stays attached and stderr stays live, including device codes, browser
+  notices and MFA classification. Broker-change login output is unchanged.
 - Colors are disabled on non-TTY output and whenever `NO_COLOR` is present
   (including an empty value), even if `FORCE_COLOR`/`CLICOLOR_FORCE` request color.
-  Tables and plain-field output contain no terminal styling.
+  Each stream is checked independently. Built-in subscription/tenant pickers,
+  current text and `list` tables color names green, IDs cyan and tenant labels
+  faint; selected picker rows are bold with `▸`, and list headers are bold.
+  Log info has no level prefix and accents names/IDs cyan; success keeps a
+  green `✓` (also retained without color), warnings yellow and errors red.
+  fzf, other tables, doctor, JSON and plain-field output remain plain.
 - `--verbose` enables stderr debug diagnostics. JSON mode suppresses ordinary
   diagnostics, including verbose messages, so failures have exactly one JSON
   error object on stderr and no error text on stdout.
 - History recovery/write warnings are explicit one-line stderr notices, including
   on otherwise quiet successful JSON switches; they never contaminate stdout or
   turn a completed switch into a failed command.
-- Optional update checks run only after successful switches, with stdout a TTY,
+- Optional update checks run only for text `version`, with stdout a TTY,
   `CI` absent, `AZCTX_NO_UPDATE_CHECK` not `1` and config `updateCheck: true`.
-  JSON mode also suppresses them.
-  The inherited daily cache and two-second deadline remain; a check failure
-  cannot fail a successful switch. Listing/current/version never check updates.
-  A future cache `checkedAt` is expired (including cached failed attempts), so
-  clock rollback cannot suppress the next eligible check. Offline cached status
-  marks the same future timestamp stale; a refreshed attempt uses the current clock.
+  Every eligible invocation makes a fresh lookup without reading the cache,
+  with a two-second network deadline. Newer stable releases produce one yellow
+  stderr notice; lookup/config/cache failures are debug-only and do not fail
+  version output. The attempt/result is written under the existing private
+  update-cache lock. Switching never checks or notices cached releases;
+  listing/current and JSON version never check either. Cached status becomes
+  stale after 24 hours or for a future timestamp; it is not an online claim.
   Doctor only reads an existing private update cache; it never checks the
   network, creates cache files or acquires update locks.
 

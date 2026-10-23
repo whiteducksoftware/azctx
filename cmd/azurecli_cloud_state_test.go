@@ -33,7 +33,11 @@ func testCloudDefaultRecordsPrevious(t *testing.T, cloud string) {
 	}
 	for _, args := range [][]string{{currentFlag, outputFlag, idFormat}, {listCommand, outputFlag, jsonFormat}, {developmentID}} {
 		var stdout, stderr bytes.Buffer
-		if code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr); code != 0 || stderr.Len() != 0 {
+		wantMessages := ""
+		if args[0] == developmentID {
+			wantMessages = switchFeedback("Delegated", developmentID, metadataTenantName, tenantID)
+		}
+		if code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr); code != 0 || stderr.String() != wantMessages {
 			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
 		}
 		switch args[0] {
@@ -66,7 +70,7 @@ func assertCloudPreviousSwitch(t *testing.T, deps cmd.Dependencies, fake *testut
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	if code := cmd.Run([]string{"-"}, deps, bytes.NewReader(nil), &stdout, &stderr); code != 0 ||
-		stdout.Len() != 0 || stderr.Len() != 0 || len(fake.Calls) != 2 || fake.Calls[1].Args[3] != productionID {
+		stdout.Len() != 0 || stderr.String() != switchFeedback(productionName, productionID, metadataTenantName, tenantID) || len(fake.Calls) != 2 || fake.Calls[1].Args[3] != productionID {
 		t.Fatalf("previous switch: code=%d stdout=%q stderr=%q calls=%+v", code, stdout.String(), stderr.String(), fake.Calls)
 	}
 }
