@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -163,5 +164,25 @@ func TestBinaryDeviceCodeVisibleBeforeAZExits(t *testing.T) {
 	}
 	if err := command.Wait(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBinaryLoginRejectsUndelimitedArguments(t *testing.T) {
+	binary, _, record := fakeBinary(t, `[
+		{"args":["version","-o","json"],"stdout":"{\"azure-cli\":\"2.61.0\"}"},
+		{"args":["login","unexpected","--use-device-code"]}
+	]`)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	process := exec.CommandContext(ctx, binary, loginCommand, "unexpected", argumentDelimiter, deviceCodeFlag)
+	var stdout, stderr bytes.Buffer
+	process.Stdout, process.Stderr = &stdout, &stderr
+	err := process.Run()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 || stdout.Len() != 0 || stderr.Len() == 0 {
+		t.Errorf("exit=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if calls, err := os.ReadFile(record); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("unexpected Azure calls=%s error=%v", calls, err)
 	}
 }

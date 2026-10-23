@@ -6,6 +6,7 @@ import (
 	"testing/fstest"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/selection"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
 
@@ -56,7 +57,7 @@ func TestCloudVisibilityAndPerCloudDefault(t *testing.T) {
 	if len(fake.Calls) != 0 {
 		t.Fatalf("foreign-cloud az invocation: %+v", fake.Calls)
 	}
-	if _, err := cli.TryFindSubscription("Public"); err == nil {
+	if _, err := (selection.Catalog{Subscriptions: subscriptions}).Find("Public", true); err == nil {
 		t.Fatal("--all must not make a foreign cloud selectable")
 	}
 }

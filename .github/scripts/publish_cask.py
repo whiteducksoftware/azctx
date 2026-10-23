@@ -16,13 +16,14 @@ NORMALIZED = Path(".release-check/cask/azctx.rb")
 RELEASES = "https://github.com/whiteducksoftware/azctx/releases/download/#{version}"
 # The only Ruby syntax that current GoReleaser casks and `brew style --fix` emit:
 # whole-line comments, double-quoted strings whose only interpolation is
-# #{version}, `label:` keywords, bare words and [ ] , punctuation. Anything else
-# (comments after code, other quoting or interpolation, symbols, modifiers,
-# calls, semicolons, parentheses) is rejected rather than skipped.
+# #{version}, `label:` keywords, bare words, the exact :macos platform and [ ] ,
+# punctuation. Comments after code, other quoting/interpolation, other symbols,
+# modifiers, calls, semicolons and parentheses are rejected rather than skipped.
 SYNTAX = re.compile(
     r"""(?P<newline>\n)|(?P<space>[ \t]+)|(?P<comment>\#[^\n]*)"""
     r"""|(?P<string>"(?:[^"\\\#\n]|\#\{version\})*")"""
     r"""|(?P<label>[a-z_][a-z0-9_]*:)(?![:a-z0-9_])"""
+    r"""|(?P<platform>:macos)(?![A-Za-z0-9_:])"""
     r"""|(?P<word>[a-z_][a-z0-9_]*)(?![a-z0-9_:])|(?P<punctuation>[\[\],])"""
 )
 # The known azctx cask template: every block and stanza must occur exactly once.
@@ -47,6 +48,7 @@ TEMPLATE = sorted(
     [(path, "do", block) for path, blocks in BLOCKS.items() for block in blocks]
     + [(path, stanza) for path, stanzas in STANZAS.items() for stanza in stanzas]
 )
+MACOS_TEMPLATE = sorted(TEMPLATE + [(("cask",), "depends_on_macos")])
 
 
 def statements(cask):
@@ -135,6 +137,10 @@ def cask_semantics(cask):
                 raise ValueError(f"unexpected cask block on line {line}")
             result.append((path, "do", stanza))
             path += (stanza,)
+        elif path == ("cask",) and words == ["depends_on", ":macos"]:
+            # GoReleaser 2.19 marks macOS-only casks explicitly; retain this
+            # constraint in the comparison without accepting general Ruby symbols.
+            result.append((path, "depends_on_macos", ()))
         else:
             signature = STANZAS.get(path, {}).get(stanza)
             values = arguments(tokens[1:], line)
@@ -157,7 +163,8 @@ def cask_semantics(cask):
             result.append((path, stanza, values))
     if path:
         raise ValueError("unbalanced cask block")
-    if sorted(entry if entry[1] == "do" else entry[:2] for entry in result) != TEMPLATE:
+    shape = sorted(entry if entry[1] == "do" else entry[:2] for entry in result)
+    if shape not in (TEMPLATE, MACOS_TEMPLATE):
         raise ValueError("cask does not contain exactly the known azctx template stanzas")
     return sorted(result)
 

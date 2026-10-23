@@ -27,6 +27,25 @@ class Response(io.BytesIO):
 
 
 class PublishCaskTest(unittest.TestCase):
+    def test_goreleaser_2_19_macos_only_cask_preserves_exact_native_semantics(self):
+        # Exact publisher-disabled GoReleaser 2.19.0 output and Homebrew 7.0.10 normalization.
+        original = (TESTDATA / "goreleaser-2.19-azctx.rb").read_text(encoding="utf-8")
+        normalized = (TESTDATA / "brew-style-2.19-azctx.rb").read_text(encoding="utf-8")
+        publish_cask.verify_normalized(original, normalized)
+        self.assertEqual(normalized, base64.b64decode(
+            publish_cask.payload(normalized, "2026.11.0", None)["content"]).decode())
+        self.assertEqual([], self.invoke([], casks=(original, normalized), argv=("--check",)))
+        with self.assertRaises(ValueError):
+            publish_cask.verify_normalized(original, normalized.replace("  depends_on :macos\n", ""))
+        with self.assertRaises(ValueError):
+            publish_cask.verify_normalized(ORIGINAL, normalized)
+        for replacement in ("depends_on :linux", "depends_on :macosx", "depends_on :macos_foo",
+                            "depends_on formula: :macos", "depends_on :macos if false",
+                            "depends_on :macos\n  depends_on :macos"):
+            changed = normalized.replace("depends_on :macos", replacement)
+            with self.subTest(replacement=replacement), self.assertRaises(ValueError):
+                publish_cask.verify_normalized(changed, changed)
+
     def test_payload_preserves_content_and_compare_and_swap(self):
         result = publish_cask.payload(CASK, "v2026.11.0", {"sha": "previous-sha"})
         self.assertEqual("main", result["branch"])

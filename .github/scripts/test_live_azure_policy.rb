@@ -58,7 +58,10 @@ class LiveAzurePolicyTest < Minitest::Test
     ci = @workflows.fetch('ci.yaml')
     test = ci.fetch('jobs').fetch('test')
     assert_equal %w[ubuntu-latest macos-latest windows-latest], test.fetch('strategy').fetch('matrix').fetch('os')
-    assert(steps(test).any? { |step| step['run'] == 'make e2e' }, 'native E2E must run on all three OSes')
+    assert_equal 1, steps(test).count { |step| step['run'] == 'make test' },
+                 'native correctness and binary E2E must run together on all three OSes'
+    refute(steps(test).any? { |step| step.fetch('run', '').match?(/\bmake\s+e2e\b/) },
+           'do not rerun the binary E2E tests already included in make test')
     assert(steps(test).any? { |step| step.fetch('uses', '').start_with?('actions/upload-artifact@') &&
                                      step.fetch('with')['path'] == 'coverage.out' }, 'publish coverage per OS')
     lint = ci.fetch('jobs').fetch('lint')

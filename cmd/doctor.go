@@ -73,7 +73,7 @@ const (
 func newDoctorCommand(resolve runnerFactory, deps Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use: "doctor", Short: "Show safe, offline Azure CLI diagnostics", Args: cobra.NoArgs,
-		RunE: commandHandler(func(command *cobra.Command, _ []string) error {
+		RunE: func(command *cobra.Command, _ []string) error {
 			if err := validateOutput(outputFormat(command), "doctor", formatText, formatJSON); err != nil {
 				return err
 			}
@@ -85,7 +85,7 @@ func newDoctorCommand(resolve runnerFactory, deps Dependencies) *cobra.Command {
 				return json.NewEncoder(command.OutOrStdout()).Encode(report)
 			}
 			return writeDoctorText(command.OutOrStdout(), report)
-		}),
+		},
 	}
 }
 

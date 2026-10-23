@@ -42,11 +42,11 @@ func TestREADMEParserRejectsBrokenInvocation(t *testing.T) {
 func readmeQuickstartInvocations(t *testing.T, markdown string) []string {
 	t.Helper()
 	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
-	_, section, ok := strings.Cut(markdown, "## 5. Quickstart\n")
+	_, section, ok := strings.Cut(markdown, "## 3. Quickstart\n")
 	if !ok {
 		t.Fatal("README quickstart missing")
 	}
-	section, _, _ = strings.Cut(section, "## 6.")
+	section, _, _ = strings.Cut(section, "## 4.")
 	snippets := agentCommandSnippets(section)
 	var invocations []string
 	for _, snippet := range snippets {

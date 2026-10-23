@@ -17,9 +17,9 @@ import (
 func newTenantCommand(newCLI func() (azcli.CLI, error), deps Dependencies) *cobra.Command {
 	command := &cobra.Command{
 		Use: "tenant [query]", Short: "Choose a tenant, then a subscription", Args: cobra.MaximumNArgs(1),
-		RunE: commandHandler(func(command *cobra.Command, args []string) error {
+		RunE: func(command *cobra.Command, args []string) error {
 			return tenantRunE(command, args, newCLI, deps)
-		}),
+		},
 	}
 	command.Flags().Bool("yes", false, "Confirm switching to a protected subscription without prompting")
 	return command
