@@ -7,6 +7,9 @@
 # MFA stderr fixtures are exact LF lines; parser tests construct CRLF explicitly.
 /internal/azcli/testdata/mfa/*.stderr.golden text eol=lf
 
+# Generated CLI reference freshness compares exact bytes on every checkout.
+/docs/cli/*.md text eol=lf
+
 # Keep portable skill frontmatter and its cached plugin copy byte-identical.
 /skills/**/SKILL.md text eol=lf
 /plugins/**/SKILL.md text eol=lf

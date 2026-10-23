@@ -9,9 +9,11 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 - `make check` runs lint and tests; pass it before a PR leaves draft.
 - `make test` runs race-enabled tests with coverage; `make build` builds azctx.
 - `make golden` updates the picker screens at 60, 100 and 160 columns; review the diff.
+- `make docs` regenerates `docs/cli/` with Cobra; `make docs-check` checks exact
+  contents and file set without rewriting them. Run both after help changes.
 - `make agent-check` runs offline Python 3.10+ hook tests; `make test` and
   `make check` include them and Go command/documentation/manifest acceptance.
-- [AI agent guidance](docs/ai-agents.md) is a draft. Keep `skills/azctx/SKILL.md`
+- Read [AI agent guidance](docs/ai-agents.md). Keep `skills/azctx/SKILL.md`
   byte-identical to the plugin copy in `plugins/azctx/skills/azctx/`.
 
 ## Running Azure tools as an agent
