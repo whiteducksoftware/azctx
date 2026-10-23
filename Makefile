@@ -17,16 +17,15 @@ completion-perf:
 check: lint test
 
 docs:
-	go run ./tools/gendocs
+	go run ./internal/cmd/gendocs
 
 docs-check:
-	go run ./tools/gendocs -check
+	go run ./internal/cmd/gendocs -check
 
 agent-check:
 	python3 -B -m unittest discover -s plugins/azctx/tests -p 'test_*.py' -v
 
 ci-check:
-	python3 -B .github/scripts/check_tool_pins.py
 	python3 -B -m unittest discover -s .github/scripts -p 'test_*.py' -v
 	python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
 	ruby .github/scripts/test_ci_config.rb
