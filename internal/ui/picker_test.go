@@ -328,26 +328,69 @@ func pickerSubscriptions() []profile.Subscription {
 	}
 }
 
+type pickerSnapshotMsg chan string
+
+func pickerSnapshot(t *testing.T, model *teatest.TestModel) string {
+	t.Helper()
+	snapshot := make(pickerSnapshotMsg, 1)
+	go model.Send(snapshot)
+	select {
+	case view := <-snapshot:
+		return view
+	case <-time.After(3 * time.Second):
+		t.Fatal("picker did not respond to the view request")
+		return ""
+	}
+}
+
 func TestPickerFuzzyFilterAndInterrupt(t *testing.T) {
-	model := teatest.NewTestModel(t, ui.NewPicker(pickerSubscriptions(), 100, 15), teatest.WithInitialTermSize(100, 15))
-	teatest.WaitFor(t, model.Output(), func(output []byte) bool {
-		return bytes.Contains(output, []byte("Development Engineering Platform"))
-	}, teatest.WithDuration(3*time.Second))
-	model.Type("/PRD")
-	teatest.WaitFor(t, model.Output(), func(output []byte) bool {
-		return bytes.Contains(output, []byte("PRD")) && bytes.Contains(output, []byte("Production Engineering Platform"))
-	}, teatest.WithDuration(3*time.Second))
-	model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
-	model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
-	final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
-	index, err := final.Selection()
-	if err != nil || index != 1 || strings.Contains(pickerView(final), "Development Engineering Platform") {
-		t.Fatalf("fuzzy selection = %d, %v; view=%s", index, err, pickerView(final))
+	for _, splitFrames := range []bool{false, true} {
+		t.Run(fmt.Sprintf("split-frames=%t", splitFrames), func(t *testing.T) {
+			model := teatest.NewTestModel(t, ui.NewPicker(pickerSubscriptions(), 100, 15),
+				teatest.WithInitialTermSize(100, 15),
+				teatest.WithProgramOptions(tea.WithFilter(func(model tea.Model, message tea.Msg) tea.Msg {
+					// Observe View on the event loop, after all preceding keys.
+					if snapshot, ok := message.(pickerSnapshotMsg); ok {
+						snapshot <- pickerView(model)
+						return nil
+					}
+					return message
+				})))
+			t.Cleanup(model.GetProgram().Kill)
+			teatest.WaitFor(t, model.Output(), func(output []byte) bool {
+				return bytes.Contains(output, []byte("Development Engineering Platform"))
+			}, teatest.WithDuration(3*time.Second))
+			if splitFrames {
+				model.Type("/")
+				for _, letter := range "PRD" {
+					model.Type(string(letter))
+					teatest.WaitFor(t, model.Output(), func(output []byte) bool {
+						return strings.Contains(ansi.Strip(string(output)), string(letter)+" ")
+					}, teatest.WithDuration(3*time.Second))
+				}
+			} else {
+				model.Type("/PRD")
+			}
+			// Output contains terminal cell diffs, not complete screen snapshots.
+			view := pickerSnapshot(t, model)
+			if !strings.Contains(view, "Filter: PRD") ||
+				!strings.Contains(view, "Production Engineering Platform") ||
+				strings.Contains(view, "Development Engineering Platform") {
+				t.Fatalf("fuzzy filtering did not update the current view:\n%s", view)
+			}
+			model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+			model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+			final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
+			index, err := final.Selection()
+			if err != nil || index != 1 || strings.Contains(pickerView(final), "Development Engineering Platform") {
+				t.Fatalf("fuzzy selection = %d, %v; view=%s", index, err, pickerView(final))
+			}
+		})
 	}
 
 	interrupted := teatest.NewTestModel(t, ui.NewPicker(nil, 60, 10), teatest.WithInitialTermSize(60, 10))
 	interrupted.Send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
-	final = requirePicker(t, interrupted.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
+	final := requirePicker(t, interrupted.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 	if index, err := final.Selection(); index != -1 || !errors.Is(err, ui.ErrInterrupted) {
 		t.Fatalf("interrupted selection = %d, %v", index, err)
 	}
