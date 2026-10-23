@@ -56,8 +56,10 @@ preferred Go `toolchain`. Update these seven pins (golangci-lint, actionlint,
 govulncheck, zizmor, GoReleaser, Syft and Go) manually. When upgrading one:
 
 1. Change every occurrence in the same change: the workflows under
-   `.github/workflows/`, the `toolchain` line in `go.mod` and the contributor
-   `go install` command and exact version literals in CONTRIBUTING and the docs.
+   `.github/workflows/`, the `toolchain` line in `go.mod`, the contributor
+   `go install` command, the GoReleaser version literal in
+   `.github/scripts/test_release_config.rb` and exact version literals in
+   CONTRIBUTING and the docs.
 2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
    are spelled differently, such as "Go 1.27.3" or "GoReleaser 2.19.0". Leave
    released upgrade-guide history unchanged.
