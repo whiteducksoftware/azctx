@@ -257,7 +257,10 @@ schema and safety boundaries are in [authentication](authentication.md).
   Every eligible invocation makes a fresh lookup without reading the cache,
   with a two-second network deadline. Newer stable releases produce one yellow
   stderr notice; lookup/config/cache failures are debug-only and do not fail
-  version output. The attempt/result is written under the existing private
+  version output. If the command context is canceled during the lookup, text
+  `version` returns cancellation (exit 130) after the lookup returns, even if the
+  lookup itself fails. Stdout-write errors take precedence and skip the lookup.
+  The attempt/result is written under the existing private
   update-cache lock. Switching never checks or notices cached releases;
   listing/current and JSON version never check either. Cached status becomes
   stale after 24 hours or for a future timestamp; it is not an online claim.
