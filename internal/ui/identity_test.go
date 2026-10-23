@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/ui"
@@ -19,12 +19,12 @@ func TestPickerFiltersTenantAndSubscriptionID(t *testing.T) {
 		subscriptions := pickerSubscriptions()
 		model := teatest.NewTestModel(t, ui.NewPicker(subscriptions, 100, 15), teatest.WithInitialTermSize(100, 15))
 		model.Type("/" + query)
-		model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-		model.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+		model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 		final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 		index, err := final.Selection()
-		if err != nil || index != 0 || strings.Contains(final.View(), "Production Engineering Platform") {
-			t.Fatalf("query=%q selection=%d, %v; view=%s", query, index, err, final.View())
+		if err != nil || index != 0 || strings.Contains(pickerView(final), "Production Engineering Platform") {
+			t.Fatalf("query=%q selection=%d, %v; view=%s", query, index, err, pickerView(final))
 		}
 	}
 }

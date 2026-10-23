@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/ui"
@@ -30,11 +30,11 @@ func TestPickerFlattensDisplayControlsWithoutChangingValues(t *testing.T) {
 				newPicker = ui.NewTenantPicker
 			}
 			picker := newPicker(subs, 160, 12)
-			want := newPicker([]profile.Subscription{clean}, 160, 12).View()
-			if got := picker.View(); got != want {
+			want := newPicker([]profile.Subscription{clean}, 160, 12).View().Content
+			if got := picker.View().Content; got != want {
 				t.Errorf("tenant=%t domainFallback=%t: control-bearing view=%q, want %q", tenantPicker, domainFallback, got, want)
 			}
-			model, _ := picker.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			model, _ := picker.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 			index, err := requirePicker(t, model).Selection()
 			if err != nil || index != 0 || !reflect.DeepEqual(subs, []profile.Subscription{sub}) {
 				t.Fatalf("display changed selection data: index=%d err=%v subscriptions=%+v", index, err, subs)
