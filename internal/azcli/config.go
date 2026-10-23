@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/spf13/afero"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/log"
@@ -19,8 +18,7 @@ const (
 	tenantsJSON  = "azctxTenants.json"
 )
 
-func (cli CLI) ensureConfigDir() (string, error) {
-	configDir := cli.configDir
+func resolveConfigDir(configDir string) (string, error) {
 	if configDir == "" {
 		configDir = os.Getenv(configDirEnv)
 	}
@@ -32,23 +30,18 @@ func (cli CLI) ensureConfigDir() (string, error) {
 		}
 		configDir = filepath.Join(home, ".azure")
 	}
-	if _, err := cli.fs.Stat(configDir); os.IsNotExist(err) {
+	if _, err := os.Stat(configDir); os.IsNotExist(err) { //nolint:gosec // AZURE_CONFIG_DIR intentionally selects the read-only profile directory.
 		return "", fmt.Errorf("%s (%s) is not a valid directory. Please run `az configure` and try again.", configDirEnv, configDir)
 	}
 	return configDir, nil
 }
 
 func (cli *CLI) readProfile() error {
-	configDir, err := cli.ensureConfigDir()
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(configDir, profileJSON)
-	if _, err := cli.fs.Stat(path); os.IsNotExist(err) {
+	path := filepath.Join(cli.configDir, profileJSON)
+	if _, err := fs.Stat(cli.fs, profileJSON); os.IsNotExist(err) {
 		return fmt.Errorf("%s is not a valid file. Please run `az configure` and try again.", path)
 	}
-	files := afero.NewIOFS(afero.NewBasePathFs(cli.fs, configDir))
-	parsed, err := profile.Read(files, profileJSON)
+	parsed, err := profile.Read(cli.fs, profileJSON)
 	if err != nil {
 		return err
 	}
@@ -57,15 +50,11 @@ func (cli *CLI) readProfile() error {
 }
 
 func (cli *CLI) readTenants() error {
-	configDir, err := cli.ensureConfigDir()
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(configDir, tenantsJSON)
-	if _, err := cli.fs.Stat(path); os.IsNotExist(err) {
+	path := filepath.Join(cli.configDir, tenantsJSON)
+	if _, err := fs.Stat(cli.fs, tenantsJSON); os.IsNotExist(err) {
 		return nil
 	}
-	data, err := afero.ReadFile(cli.fs, path)
+	data, err := fs.ReadFile(cli.fs, tenantsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %s", path, err.Error())
 	}
@@ -78,12 +67,11 @@ func (cli *CLI) readTenants() error {
 // writeTenants preserves the existing legacy cache behavior until layer 08.
 // No profile or credential files are written.
 func (cli CLI) writeTenants() error {
-	configDir, err := cli.ensureConfigDir()
-	if err != nil {
-		return err
+	if !cli.diskConfig {
+		return fs.ErrPermission
 	}
-	path := filepath.Join(configDir, tenantsJSON)
-	file, err := cli.fs.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o644)
+	path := filepath.Join(cli.configDir, tenantsJSON)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("%s is not a valid file: %s", path, err.Error())
 	}

@@ -1,15 +1,7 @@
-"""Enforce reachable findings, with the exact x/text baseline pending #86."""
+"""Fail every reachable finding and invalid govulncheck scan."""
 
 import json
 import sys
-
-
-# Remove with the dependency upgrade in #86 (layer 05). New advisories, other
-# modules and other versions must never inherit this temporary exception.
-TEMPORARY_FINDINGS = {
-    ("GO-2026-5970", "golang.org/x/text", "v0.21.0"),
-    ("GO-2026-6629", "golang.org/x/text", "v0.21.0"),
-}
 
 
 def messages(data):
@@ -34,7 +26,6 @@ def check(data, output):
         raise ValueError("expected a govulncheck v1 symbol-level source scan")
 
     blocked = set()
-    allowed = set()
     for message in stream:
         kind, value = next(iter(message.items()))
         if kind in {"progress", "osv", "SBOM"}:
@@ -52,28 +43,15 @@ def check(data, output):
         if not frame.get("function"):
             continue  # Match govulncheck's default reachable-symbol exit policy.
         finding = (advisory, module, frame.get("version", ""))
-        if finding in TEMPORARY_FINDINGS:
-            allowed.add(finding)
-        else:
-            blocked.add(finding)
+        blocked.add(finding)
 
-    for advisory, module, version in sorted(allowed):
-        print(
-            f"::warning title=Temporary exception pending #86::"
-            f"{advisory} in {module}@{version} is reachable; upgrade in layer 05.",
-            file=output,
-        )
     for advisory, module, version in sorted(blocked):
         print(
             f"::error title=Reachable vulnerability::"
             f"{advisory} in {module}@{version}",
             file=output,
         )
-    print(
-        f"Reachable vulnerabilities: {len(blocked)} blocking, "
-        f"{len(allowed)} temporary exceptions.",
-        file=output,
-    )
+    print(f"Reachable vulnerabilities: {len(blocked)} blocking.", file=output)
     return int(bool(blocked))
 
 
