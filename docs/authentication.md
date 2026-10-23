@@ -1,7 +1,7 @@
 # Authentication and diagnostics (draft)
 
-This layer-09 guide covers broker-aware sign-in and offline diagnostics. The
-multi-tenant MFA redesign is not included; layer 18 finalizes this guide.
+This guide covers broker-aware sign-in, multi-tenant MFA and offline diagnostics.
+Layer 18 finalizes the release guide.
 
 ## Sign in
 
@@ -22,7 +22,7 @@ case-insensitive fuzzy profile tenant display names/default domains and IDs,
 deduplicated by tenant ID within the active cloud. Tenant-level accounts are
 included. Unknown or ambiguous selectors fail without signing in; use a GUID
 when there is no profile, or to disambiguate. Names are never sent to a tenant
-API. Do not combine the friendly `--tenant` with `--force-mfa` or a second
+API. Do not combine the friendly `--tenant` with `--all-tenants` or a second
 passthrough tenant flag. Other Azure CLI arguments still go after `--`.
 
 Login progress describes the effective setting, including `AZURE_CORE_*`
@@ -45,6 +45,73 @@ Sign-in remains attached to stdin/stdout/stderr. `--no-input`, `AZCTX_NO_INPUT=1
 redirected stdin and `CI` suppress **azctx-owned** prompts, not Azure CLI's
 authentication interaction. `AZURE_CORE_LOGIN_EXPERIENCE_V2=off` applies only to
 the login child, never the caller or the persisted configuration.
+
+## Multi-tenant MFA
+
+Ordinary login starts **one** attached `az login`, then parses documented
+`Authentication failed against tenant <id> '<name>': AADSTS<code>` stderr lines,
+even if that process exits unsuccessfully. A table on **stderr** lists every
+reported tenant, code and explanation:
+
+| Code | Meaning and action |
+| --- | --- |
+| `50076` | MFA required; eligible for one targeted sign-in. |
+| `50079` | MFA registration required; eligible for one targeted sign-in. |
+| `53003` | Conditional Access blocked token issuance; retry will not help. Contact the tenant administrator. |
+| Other | The original diagnostic is shown verbatim; no automatic retry. |
+
+On a TTY azctx asks **once**, for example,
+`Sign in to these 2 tenants now? [Y/n]`. Empty input, `y` or `yes`
+(case-insensitive) accepts; any other answer leaves failures unresolved.
+Confirmation reads only that line, without buffering away subsequent Azure
+login input or replacing the attached terminal. Each retry uses
+`az login --tenant <GUID>`, preserves device-code/other passthrough options,
+and replaces any previous tenant selector. Tenants that succeeded are not
+retried. Duplicate warnings share one sign-in, case-insensitively by tenant ID;
+a known non-retryable failure takes precedence. New policy blocks discovered
+during retries are explained and not attempted again. There is no retry loop.
+Azure CLI merges the subscriptions from individual logins.
+
+Without a TTY, with `CI` present, `--no-input` or `AZCTX_NO_INPUT=1`, azctx lists
+initial failures and returns **3** without prompting, retrying or discovering
+more tenants. Declined confirmation, unreadable confirmation, failed sign-in
+processes and any unresolved/partial tenant failures also return 3.
+Ctrl+C/context cancellation remains **130**, including during retries.
+Invalid flags, unsupported Azure CLI versions, discovery errors before tenant
+failures, and profile reload errors after otherwise successful login remain 1.
+
+After completed sign-in attempts azctx strictly reloads Azure CLI's profile and
+summarizes the active-cloud tenant count and visible subscription count on
+stderr, including for partial failures. These are **profile totals**, not a
+claim that every cached tenant authenticated during this run. If a partial
+failure leaves no readable profile, sign-in still returns 3 rather than hiding
+it behind a profile error. A successful sign-in still requires a valid profile.
+
+```sh
+azctx login --all-tenants --use-device-code
+azctx login -- --identity
+azctx login -- --service-principal --username <application-id> --tenant <tenant-guid> ...
+```
+
+`--all-tenants` is explicit opt-in to individual sign-ins after the first login.
+It discovers GUIDs with captured `az account tenant list -o json`, not the
+profile or an azctx tenant cache. The command must already be available in your
+Azure CLI installation (some versions supply it through the account extension);
+azctx does not install extensions. Discovery validates the entire array before
+any per-tenant login, deduplicates GUIDs, and attempts each discovered tenant
+once, except already known non-retryable failures. It does not ask a second
+azctx confirmation. Do not combine it with a tenant selector.
+If initial login has failures and azctx input is disabled, the above exit-3
+rule takes precedence over discovery. With no initial failures the explicit
+option may run in no-input mode; Azure CLI still owns its sign-in interaction.
+
+`--force-mfa` is **removed**, not deprecated. Use ordinary login for targeted
+MFA recovery, or `--all-tenants` to enumerate all available tenants. Non-user
+passthrough (`--identity`/`-i` or `--service-principal`) runs one unchanged Azure
+login and **skips both MFA orchestration and tenant discovery**, even with
+`--all-tenants`. azctx does not log passthrough argument values or authenticate
+itself. Existing version checks, attached streams and the login-only picker
+environment override remain in effect for every account type.
 
 ## Inspect or change the broker
 
@@ -147,10 +214,21 @@ tests are not proof of live broker support. A maintainer must manually verify:
 - macOS enrolled-device broker preview on **and** off, account picker/browser
   wording and persistence on subsequent Azure CLI invocations.
 - Device-code sign-in over SSH with immediately visible instructions.
+- Three-tenant sign-in with two MFA failures: one confirmation, only those
+  two tenant sign-ins, Azure CLI subscription merging and final counts.
+- MFA registration, Conditional Access blocking, non-interactive exit 3,
+  explicit all-tenant discovery and workload-identity bypass.
+
+The four cross-tenant stderr fixtures are synthetic examples constructed from
+Microsoft's documented message format, not captured live diagnostics. Offline
+parser/fake-Azure tests do not verify real-tenant acceptance.
 
 ## References
 
 - [Azure CLI interactive sign-in, WAM, macOS preview and cache clearing](https://learn.microsoft.com/cli/azure/authenticate-azure-cli-interactively)
 - [Azure CLI core 2.91.0 history](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli-core/HISTORY.rst)
 - [MSAL Python macOS broker](https://learn.microsoft.com/entra/msal/python/advanced/macos-broker)
+- [Azure CLI MFA cross-tenant warning](https://learn.microsoft.com/cli/azure/authenticate-azure-cli-mfa)
+- [Entra authentication error codes](https://learn.microsoft.com/entra/identity-platform/reference-error-codes)
+- [Azure CLI account tenant list](https://learn.microsoft.com/cli/azure/account/tenant)
 - [Microsoft Enterprise SSO plug-in](https://learn.microsoft.com/entra/identity-platform/apple-sso-plugin)

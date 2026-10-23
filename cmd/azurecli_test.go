@@ -151,7 +151,7 @@ func TestAzureCLICommandsNeverTouchLegacyCacheOrAzureFiles(t *testing.T) {
 		{developmentID},
 		{"-"},
 		{loginCommand},
-		{loginCommand, "--force-mfa"},
+		{loginCommand, allTenantsFlag},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := &testutil.FakeRunner{}
@@ -173,7 +173,11 @@ func TestAzureCLICommandsNeverTouchLegacyCacheOrAzureFiles(t *testing.T) {
 				fake.Responses = []testutil.Response{{Result: azcli.Result{Stdout: `{"azure-cli":"2.61.0"}`}}, {}}
 				expected = [][]string{{versionCommand, outputFlag, jsonFormat}, {loginCommand}}
 				if len(args) > 1 {
-					expected[1] = []string{loginCommand, tenantFlag, tenantID}
+					fake.Responses = append(fake.Responses,
+						testutil.Response{Result: azcli.Result{Stdout: `[{"tenantId":"` + tenantID + `"}]`}},
+						testutil.Response{})
+					expected = append(expected, []string{accountCommand, tenantSubcommand, listCommand, outputFlag, jsonFormat},
+						[]string{loginCommand, tenantFlag, tenantID})
 				}
 			case developmentID, "-":
 				if args[0] == "-" {

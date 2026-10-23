@@ -63,7 +63,7 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		{args: []string{versionCommand}, text: "azctx version ", data: true},
 		{args: []string{versionCommand, outputFlag, jsonFormat}, text: `"goVersion":"go`, data: true},
 		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 1 tenants and 2 subscriptions."},
-		{args: []string{loginCommand}, code: 1, text: "failed to login: denied"},
+		{args: []string{loginCommand}, code: 3, text: "Azure CLI sign-in failed; see its attached output"},
 		{args: []string{productionName}},
 		{args: []string{"-"}, code: 1, text: "no previous subscription found"},
 		// A Ctrl+C byte in a pipe is data, not an interactive cancellation.
