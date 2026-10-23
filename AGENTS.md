@@ -9,10 +9,9 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 - `make check` runs lint and tests; pass it before a PR leaves draft.
 - `make test` runs race-enabled tests with coverage; `make build` builds azctx.
 - `make golden` updates the picker screens at 60, 100 and 160 columns; review the diff.
-  After picker output changes, `go run ./tools/demogif` regenerates the synthetic README GIF.
 - Keep Go tests in `*_test.go` files beside the package they cover; do not move tests wholesale.
-- `make ci-check` includes the offline `.github/tool-pins.json` consistency check; see
-  [dependency maintenance](docs/development.md#dependency-maintenance) before changing pins.
+- Read [dependency maintenance](docs/development.md#dependency-maintenance) before changing
+  tool or toolchain pins; Dependabot does not update them.
 - `make docs` regenerates `docs/cli/` with Cobra; `make docs-check` checks exact
   contents and file set without rewriting them. Run both after help changes.
 - `make agent-check` runs offline Python 3.10+ hook tests; `make test` and
