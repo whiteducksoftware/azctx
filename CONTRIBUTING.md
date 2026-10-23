@@ -29,6 +29,13 @@ The [Makefile](Makefile) is the source of truth for available targets.
 Tests use injected dependencies and a portable fake `az`; no Azure CLI
 installation, Azure login, real tenant or credentials are needed for checks.
 Keep fixtures synthetic and follow the boundaries in [AGENTS.md](AGENTS.md).
+The broker-change flow is the narrow, explicitly confirmed configuration-write
+exception: test it only with injected runners or the portable fake `az`, never
+against real Azure accounts. Its clear/config/login sequence must stop at the
+first failure. Doctor must remain useful without a profile or installed Azure
+CLI and must never print identities, secrets or raw subprocess diagnostics.
+See the draft [authentication guide](docs/authentication.md) for the capability
+and confirmation matrix and the still-unverified live acceptance checklist.
 Picker tests run real Bubble Tea programs with bounded waits and synthetic key
 events at 60, 100 and 160 columns; they do not need an interactive terminal.
 After `make golden`, run `make check` and confirm a second `make golden` leaves

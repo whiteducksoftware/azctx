@@ -47,6 +47,12 @@ func commandDependencies(t *testing.T, fake *testutil.FakeRunner) cmd.Dependenci
 	t.Setenv("AZCTX_NO_INPUT", "")
 	t.Setenv("AZCTX_NO_UPDATE_CHECK", "")
 	t.Setenv("AZURE_CLOUD_NAME", azureCloudName)
+	for _, key := range []string{"AZURE_CORE_ENABLE_BROKER_ON_WINDOWS", "AZURE_CORE_ENABLE_BROKER_ON_MAC", "AZURE_CORE_LOGIN_EXPERIENCE_V2"} {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
 	files := fstest.MapFS{
 		profileFile: &fstest.MapFile{Data: []byte(fixtureProfile)},
 	}
