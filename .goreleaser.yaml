@@ -7,6 +7,9 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
       - linux
       - darwin
@@ -17,7 +20,7 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/whiteducksoftware/azctx/internal/version.Version={{.Version}}
-      - -X github.com/whiteducksoftware/azctx/internal/version.BuildDate={{.Date}}
+      - -X github.com/whiteducksoftware/azctx/internal/version.BuildDate={{.CommitDate}}
       - -X github.com/whiteducksoftware/azctx/internal/version.Commit={{.FullCommit}}
 
 changelog:

@@ -131,6 +131,9 @@ jobs:
       - name: Verify modules
         run: go mod verify
 
+      - name: Fuzz parsers (60 seconds each)
+        run: make fuzz
+
       - name: Test vulnerability policy
         run: python3 -B -m unittest discover -s .github/scripts -p 'test_*.py' -v
 

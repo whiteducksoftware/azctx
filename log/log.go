@@ -12,6 +12,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
+
+	"github.com/whiteducksoftware/azctx/internal/redact"
 )
 
 var (
@@ -76,7 +78,7 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	record.Attrs(writeAttr)
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
-	_, err := fmt.Fprintln(h.output, line.String())
+	_, err := fmt.Fprintln(h.output, redact.Text(line.String()))
 	return err
 }
 

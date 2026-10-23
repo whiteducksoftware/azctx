@@ -15,7 +15,10 @@ func TestContractTenantSubscriptionQuery(t *testing.T) {
 		t.Run(query, func(t *testing.T) {
 			fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 			deps := commandDependencies(t, fake)
-			files := deps.FS.(fstest.MapFS)
+			files, ok := deps.FS.(fstest.MapFS)
+			if !ok {
+				t.Fatal("fixture is not a MapFS")
+			}
 			files[profileFile] = &fstest.MapFile{Data: []byte(strings.ReplaceAll(fixtureProfile, `"tenantDisplayName":"`+tenantID+`"`, `"tenantDisplayName":"Acme"`))}
 			root := cmd.NewRootCommand(deps)
 			root.SetArgs([]string{query})

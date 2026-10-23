@@ -40,6 +40,7 @@ func loginRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, erro
 	}
 	cli.Terminal = &azcli.Terminal{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()}
 	cli.Context, cli.Platform = cmd.Context(), deps.Platform
+	cli.LoginPassthrough = cmd.ArgsLenAtDash() == 0
 	allTenants, _ := cmd.Flags().GetBool("all-tenants")
 	if allTenants && !azcli.UsesWorkloadIdentity(args) && (cmd.Flags().Changed("tenant") || hasPassthroughTenant(args)) {
 		return errors.New("--all-tenants cannot be combined with a tenant selector")
