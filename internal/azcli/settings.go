@@ -108,8 +108,9 @@ func parseINI(data []byte, name string) (map[string]map[string]string, error) {
 			continue
 		}
 		if strings.HasPrefix(line, "[") {
-			end := strings.IndexByte(line, ']')
-			if end > 1 && strings.TrimSpace(line[end+1:]) == "" {
+			// ConfigParser matches greedily through the last closing bracket.
+			end := strings.LastIndexByte(line, ']')
+			if end > 1 {
 				section = line[1:end]
 				if _, exists := sections[section]; !exists {
 					sections[section] = make(map[string]string)

@@ -14,14 +14,6 @@ for one process and check a project's expected context before work.
 Authentication always stays in Azure CLI; azctx never handles credentials or
 MSAL token caches.
 
-**This branch documents the unreleased 2026.11 contract.** It does not mean
-2026.11 packages are published or installable. Release readiness is blocked on
-supported native Windows/macOS egress enforcement. The release workflow fails
-closed before publishing. See [release status](docs/releasing.md).
-Badges describe public default-branch services, not acceptance of this branch.
-The Scorecard workflow keeps results in GitHub; its public badge may have no
-score until public results exist.
-
 ![Static capture of the new built-in picker with synthetic subscriptions](assets/img/picker-2026.11.svg)
 
 The [static capture](docs/development.md#picker-capture) uses the real picker
@@ -55,23 +47,21 @@ applicable. macOS broker preview requires Azure CLI **2.91.0+** and enrollment.
 Linux binaries support amd64, arm64 and armv6; macOS and Windows support amd64
 and arm64. The old 32-bit Windows ARM build is gone.
 
-**After a stable 2026.11 release and package acceptance**, the intended commands
-are:
+Install with your platform's package manager:
 
 ```sh
 # macOS, fully qualified cask
 brew install --cask whiteducksoftware/tap/azctx
 # Windows, Chocolatey
 choco install azctx --version=2026.11.0
-# Windows, winget, after its manual upstream PR is accepted
+# Windows, winget
 winget install --exact --id whiteducksoftware.azctx --version 2026.11.0
 ```
 
-These are post-publication instructions, not evidence of current availability.
 Homebrew Linux publication is discontinued. For Linux, download a matching
 archive and checksum file from an explicitly reviewed
-[GitHub release](https://github.com/whiteducksoftware/azctx/releases); never
-assume `latest` is 2026.11. Example for a future stable Linux amd64 release:
+[GitHub release](https://github.com/whiteducksoftware/azctx/releases).
+For example, to install version 2026.11.0 on Linux amd64:
 
 ```sh
 set -eu
@@ -91,24 +81,22 @@ See [security](docs/security.md#verify-a-release) for macOS/Windows checks,
 provenance limits and unsigned macOS binaries. A checksum alone is not an
 independent proof of origin.
 
-To evaluate **this source branch** instead, use Go as declared in `go.mod`
-(minimum 1.26, preferred 1.27.3), review the source and run `make build`.
-This builds `./azctx` locally; it does not install or publish a package.
-Run `./azctx` from the checkout or copy it onto PATH.
+To build from source, use Go as declared in `go.mod` (minimum 1.26, preferred
+1.27.3), review the source and run `make build`. Run the resulting `./azctx`
+(`./azctx.exe` on Windows) from the checkout or copy it onto PATH.
 
 ## 4. Upgrading from earlier versions
 
 Read [every breaking change and package migration](docs/upgrade.md) before
-upgrading. The post-publication Homebrew migration is explicit:
+upgrading. Migrate from the Homebrew formula to the cask explicitly:
 
 ```sh
 brew uninstall --formula azctx
 brew install --cask whiteducksoftware/tap/azctx
 ```
 
-Do not uninstall a working version in anticipation of an unpublished cask.
-The [upgrade guide](docs/upgrade.md#package-manager-commands-after-publication)
-also gives Chocolatey, winget and release-binary steps.
+The [upgrade guide](docs/upgrade.md) also gives Chocolatey, winget and
+release-binary steps.
 
 ## 5. Quickstart
 
@@ -155,8 +143,8 @@ Broker enable/disable is the sole **explicitly confirmed configuration-write
 exception**, delegated to `az account clear`, platform `az config set`, then
 `az login`. azctx never directly writes Azure files. Windows needs 2.61.0+;
 macOS needs 2.91.0+, Company Portal and Enterprise SSO enrollment, and is preview.
-Linux has no broker control. Read [authentication](docs/authentication.md),
-including the confirmation matrix and unverified live acceptance checklist.
+Linux has no broker control. Read [authentication](docs/authentication.md)
+for the confirmation matrix and platform requirements.
 
 ## 7. Many tenants and MFA
 
@@ -223,9 +211,17 @@ legacy files, ambiguous selections and macOS quarantine.
 
 ## 11. CI/CD
 
+For GitHub Actions:
+
 ```sh
-azctx guard --no-input -o json
+azctx guard --no-input -o json &&
 azctx env --format github
+```
+
+For Azure DevOps:
+
+```sh
+azctx guard --no-input -o json &&
 azctx env --format azure-devops
 ```
 
@@ -235,7 +231,6 @@ GitHub exports apply to subsequent steps; DevOps logging commands apply to
 later tasks, not the current shell. Stop on every failed guard, including
 mismatch exit 4; never auto-switch to satisfy an untrusted project file.
 See [CI/CD](docs/ci-cd.md) for examples and authentication prerequisites.
-Those examples have offline coverage, not live OIDC/deployment acceptance.
 
 ## 12. AI agents
 
@@ -256,7 +251,7 @@ The hook does not see `azctx exec <query> -- <cmd>`; agents run the
 [two-guard exec preflight](docs/ai-agents.md#exec-preflight) before each exec.
 Read [AI agents](docs/ai-agents.md) for installation and hook limitations,
 including notice-and-allow behavior when azctx or project expectations are
-absent. Marketplace activation still needs manual acceptance.
+absent.
 
 ## 13. Contributing and security
 

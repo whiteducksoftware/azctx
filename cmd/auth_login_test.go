@@ -76,7 +76,7 @@ func TestFriendlyLoginFlags(t *testing.T) {
 		}
 		want := []string{loginCommand, deviceCodeFlag, tenantFlag, tenantID}
 		if !reflect.DeepEqual(fake.Calls[1].Args, want) || !fake.Calls[1].Attached ||
-			!reflect.DeepEqual(fake.Calls[1].Env, []string{childPickerOff}) ||
+			!reflect.DeepEqual(fake.Calls[1].Env, []string{childPickerOff, childConfigDirPrefix + deps.ConfigDir}) ||
 			!strings.Contains(stderr.String(), "device code") || strings.Contains(stderr.String(), "check your browser") {
 			t.Fatalf("login argv/messages: calls=%+v stderr=%q", fake.Calls, stderr.String())
 		}

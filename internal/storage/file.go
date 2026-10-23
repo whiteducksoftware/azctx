@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const openOp = "open"
+
 // ConfigPath resolves azctx-owned configuration and state, never Azure files.
 // AZCTX_CONFIG_DIR names the directory itself, not a parent of "azctx".
 func ConfigPath(azureDir, name string) (string, error) {
@@ -53,6 +55,12 @@ func validate(path, azureDir string) error {
 	if err != nil {
 		return err
 	}
+	parent, err := canonical(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	// Replacing or removing a symlink changes its entry, not its target.
+	entry := filepath.Join(parent, filepath.Base(path))
 	for _, protected := range []string{azureDir, os.Getenv("AZURE_CONFIG_DIR")} {
 		if protected == "" {
 			continue
@@ -61,14 +69,24 @@ func validate(path, azureDir string) error {
 		if err != nil {
 			return err
 		}
-		compareTarget := target
-		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-			azure, compareTarget = strings.ToLower(azure), strings.ToLower(target)
+		if err := validateOutsideAzure(path, azure, entry, target); err != nil {
+			return err
 		}
-		if !strings.EqualFold(filepath.VolumeName(azure), filepath.VolumeName(compareTarget)) {
+	}
+	return nil
+}
+
+func validateOutsideAzure(path, azure string, targets ...string) error {
+	for _, target := range targets {
+		compareTarget := target
+		compareAzure := azure
+		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+			compareAzure, compareTarget = strings.ToLower(azure), strings.ToLower(target)
+		}
+		if !strings.EqualFold(filepath.VolumeName(compareAzure), filepath.VolumeName(compareTarget)) {
 			continue
 		}
-		relative, err := filepath.Rel(azure, compareTarget)
+		relative, err := filepath.Rel(compareAzure, compareTarget)
 		if err != nil {
 			return err
 		}
@@ -101,9 +119,23 @@ func canonical(path string) (string, error) {
 	}
 }
 
+func privateFileInfo(path, azureDir string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if info != nil && !info.Mode().IsRegular() {
+		return nil, errors.New("azctx storage destination must be a regular file, not a symlink")
+	}
+	if err := validate(path, azureDir); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
 // Remove deletes only a validated azctx private-file destination.
 func Remove(path, azureDir string) error {
-	if err := validate(path, azureDir); err != nil {
+	if _, err := privateFileInfo(path, azureDir); err != nil {
 		return err
 	}
 	err := os.Remove(path)
@@ -115,7 +147,7 @@ func Remove(path, azureDir string) error {
 
 // Write atomically replaces a private file using a same-directory staging file.
 func Write(path, azureDir string, data []byte) error {
-	if err := validate(path, azureDir); err != nil {
+	if _, err := privateFileInfo(path, azureDir); err != nil {
 		return err
 	}
 	dir := filepath.Dir(path)
@@ -123,7 +155,7 @@ func Write(path, azureDir string, data []byte) error {
 		return fmt.Errorf("create azctx directory: %w", err)
 	}
 	// Check again after directory creation, before changing permissions or writing.
-	if err := validate(path, azureDir); err != nil {
+	if _, err := privateFileInfo(path, azureDir); err != nil {
 		return err
 	}
 	if err := os.Chmod(dir, 0o700); err != nil {
@@ -150,7 +182,7 @@ func replace(path, azureDir string, data []byte) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	if err := validate(path, azureDir); err != nil {
+	if _, err := privateFileInfo(path, azureDir); err != nil {
 		return err
 	}
 	if err := os.Rename(file.Name(), path); err != nil {

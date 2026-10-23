@@ -108,7 +108,8 @@ make live-test LIVE_TEST_ARGS='--opt-in-live-azure --tenant <tenant-guid> \
   --subscription <first-guid> --subscription <second-guid>'
 ```
 
-`make live-test` builds `./azctx`, then runs the script. `--opt-in-live-azure`,
+`make live-test` builds `./azctx` (`./azctx.exe` on Windows, as reported by
+`go env GOEXE`), then runs the script. `--opt-in-live-azure`,
 a nonzero tenant GUID and exactly two distinct subscription GUIDs are required;
 anything else is refused before a process starts. The script first reads the
 current context of every requested Azure CLI and refuses unless it is signed in

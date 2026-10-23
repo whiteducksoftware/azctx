@@ -84,16 +84,7 @@ func TestREADMEQuickstartLineEndings(t *testing.T) {
 }
 
 func TestREADMEQuickstartOnCRLFCheckout(t *testing.T) {
-	directory := testutil.WorkDir(t)
-	args := []string{
-		"-c", "core.autocrlf=true", "-c", "core.eol=crlf",
-		"checkout-index", "--prefix=" + filepath.ToSlash(directory) + "/", "--", "README.md",
-	}
-	command := exec.Command("git", args...)
-	command.Dir = ".."
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("Git CRLF checkout failed: %v\n%s", err, output)
-	}
+	directory := testutil.CRLFCheckout(t, "..", "README.md")
 	data := readAgentFile(t, filepath.Join(directory, "README.md"))
 	if !bytes.Contains(data, []byte("\r\n")) || bytes.Count(data, []byte("\r\n")) != bytes.Count(data, []byte("\n")) {
 		t.Fatal("ordinary README Markdown must exercise Git's CRLF conversion, not an LF attribute pin")

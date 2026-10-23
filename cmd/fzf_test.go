@@ -18,13 +18,14 @@ func TestConfiguredFZFPreservesRankingAndProtection(t *testing.T) {
 	dir := testutil.WorkDir(t)
 	testutil.Build(t, filepath.Join(dir, testutil.ExecutableName("fzf")), "github.com/whiteducksoftware/azctx/internal/testutil/fakefzf")
 	for _, tc := range []struct {
-		name, exit, input string
-		code, switches    int
+		name, exit, output, input string
+		code, switches            int
 	}{
-		{"ranked", "", "y\n", 0, 1},
-		{"decline protected", "", selectionDecline, 1, 0},
-		{"cancel", "1", "", 1, 0},
-		{"Ctrl+C", "130", "", 130, 0},
+		{"ranked", "", "", "y\n", 0, 1},
+		{"decline protected", "", "", selectionDecline, 1, 0},
+		{"Escape", "", "esc\n", "", 1, 0},
+		{"empty result", "1", "", "", 1, 0},
+		{"Ctrl+C", "130", "", "", 130, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
@@ -33,6 +34,9 @@ func TestConfiguredFZFPreservesRankingAndProtection(t *testing.T) {
 			t.Setenv("FAKEFZF_RECORD", filepath.Join(testutil.WorkDir(t), "record.json"))
 			t.Setenv("FAKEFZF_EXIT", tc.exit)
 			t.Setenv("FAKEFZF_INDEX", "0")
+			if tc.output != "" {
+				t.Setenv("FAKEFZF_OUTPUT", tc.output)
+			}
 			writeSelectionConfig(t, "picker: fzf\npinned: ["+developmentID+"]\nprotected: ["+developmentID+"]\n")
 			deps.Select = func([]profile.Subscription) (int, error) {
 				t.Fatal("configured fzf must execute the binary")
