@@ -18,7 +18,6 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/selection"
 	"github.com/whiteducksoftware/azctx/internal/state"
 	"github.com/whiteducksoftware/azctx/internal/ui"
-	"github.com/whiteducksoftware/azctx/internal/update"
 	"github.com/whiteducksoftware/azctx/log"
 )
 
@@ -93,7 +92,7 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 			return rootRunE(cmd, args, loadCLI, deps)
 		},
 	}
-	rootCmd.AddCommand(newVersionCommand())
+	rootCmd.AddCommand(newVersionCommand(deps))
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug diagnostics")
 	rootCmd.PersistentFlags().Bool("no-input", false, "Never open a picker or prompt (also AZCTX_NO_INPUT=1)")
 	rootCmd.PersistentFlags().StringP("output", "o", "", "Output format (depends on command)")
@@ -282,31 +281,7 @@ func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg 
 	if err := cmd.Context().Err(); err != nil {
 		return err
 	}
-	if err := switchSubscription(cmd, cli, deps, target, fromPrevious); err != nil {
-		return err
-	}
-
-	if cfg.UpdateCheck {
-		checkForUpdates(cmd, deps, cli.ConfigDir())
-	}
-	return nil
-}
-
-func checkForUpdates(cmd *cobra.Command, deps Dependencies, azureDir string) {
-	_, ci := os.LookupEnv("CI")
-	if !outputIsTerminal(cmd, deps) || ci || os.Getenv("AZCTX_NO_UPDATE_CHECK") == "1" || outputFormat(cmd) == formatJSON {
-		return
-	}
-	check := deps.CheckUpdates
-	if check == nil {
-		check = (update.Checker{
-			AzureDir: azureDir, Output: cmd.ErrOrStderr(),
-			IsTerminal: func() bool { return outputIsTerminal(cmd, deps) },
-		}).Check
-	}
-	if err := check(owner, repo); err != nil {
-		log.Debug("Update check failed: %v", err)
-	}
+	return switchSubscription(cmd, cli, deps, cfg, target, fromPrevious)
 }
 
 func streamIsTerminal(stream any) bool {
@@ -343,7 +318,7 @@ func stdinIsTerminal(command *cobra.Command, deps Dependencies) bool {
 // for the lock honors cancellation; history.lock is only ever taken inside it.
 // The local Azure profile is re-read under the lock (no az call), so previous in
 // state and history is the context a preceding switch actually left active.
-func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies, subscription profile.Subscription, fromPrevious bool) error {
+func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies, cfg config.Config, subscription profile.Subscription, fromPrevious bool) error {
 	if err := profile.ValidateGUID(subscription.Id); err != nil {
 		return err
 	}
@@ -380,6 +355,16 @@ func switchSubscription(command *cobra.Command, cli azcli.CLI, deps Dependencies
 		return err
 	}
 	recordHistory(command, cli, deps, subscription)
+	if outputFormat(command) != formatJSON {
+		marker := ""
+		if config.Contains(cfg.Protected, subscription) {
+			marker = " [protected]"
+		}
+		log.SuccessParts("Switched to ", log.Identity(ui.DisplayText(subscription.Name)),
+			" (", log.Identity(ui.DisplayText(subscription.Id)),
+			") in tenant ", log.Identity(ui.DisplayText(subscription.TenantLabel())),
+			" (", log.Identity(ui.DisplayText(subscription.Tenant)), ")", marker)
+	}
 	return nil
 }
 

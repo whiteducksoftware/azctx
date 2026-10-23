@@ -28,7 +28,7 @@ func TestAzureChildInterruptionStopsMFALogin(t *testing.T) {
 			deps := commandDependencies(t, fake)
 			var stdout, stderr bytes.Buffer
 			if code := cmd.Run(args, deps, strings.NewReader("y\n"), &stdout, &stderr); code != 130 ||
-				len(fake.Calls) != len(responses) || strings.Contains(stderr.String(), "Successfully fetched") {
+				len(fake.Calls) != len(responses) || strings.Contains(stderr.String(), "✓ Signed in:") {
 				t.Fatalf("code=%d calls=%+v stdout=%q stderr=%q", code, fake.Calls, stdout.String(), stderr.String())
 			}
 		})

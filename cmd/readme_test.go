@@ -17,6 +17,7 @@ import (
 const (
 	currentJSONInvocation = "azctx -c -o json"
 	productionInvocation  = "azctx prod"
+	previousInvocation    = "azctx -"
 )
 
 func TestREADMEParserRejectsBrokenInvocation(t *testing.T) {
@@ -54,7 +55,7 @@ func readmeQuickstartInvocations(t *testing.T, markdown string) []string {
 			invocations = append(invocations, snippet.text)
 		}
 	}
-	want := []string{"azctx login", "azctx", productionInvocation, "azctx -", currentJSONInvocation, "azctx list --all -o json", "azctx help"}
+	want := []string{"azctx login", "azctx", productionInvocation, previousInvocation, currentJSONInvocation, "azctx list --all -o json", "azctx help"}
 	if !slices.Equal(invocations, want) {
 		t.Fatalf("review quickstart execution coverage: %q", invocations)
 	}
@@ -113,9 +114,13 @@ func TestBinaryREADMEQuickstart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v\n%s", invocation, err, output)
 		}
-		if invocation == productionInvocation || invocation == "azctx -" {
-			if len(output) != 0 {
-				t.Fatalf("%s should stay quiet: %s", invocation, output)
+		if invocation == productionInvocation || invocation == previousInvocation {
+			name, id := productionName, productionID
+			if invocation == previousInvocation {
+				name, id = developmentName, developmentID
+			}
+			if string(output) != switchFeedback(name, id, tenantID, tenantID) {
+				t.Fatalf("%s lost switch feedback: %s", invocation, output)
 			}
 			if invocation == productionInvocation {
 				// The fixture simulates Azure CLI's profile refresh, never azctx.

@@ -18,6 +18,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
 var (
@@ -127,7 +128,9 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		picker.resize(message.Width, message.Height)
 	case tea.ColorProfileMsg:
-		if message.Profile >= colorprofile.ANSI {
+		picker.setColorProfile(message.Profile)
+		picker.list.SetDelegate(picker.delegate)
+		if picker.delegate.color {
 			// ST avoids a BEL byte, including on terminals without OSC support.
 			return picker, tea.Raw("\x1b]11;?\x1b\\")
 		}
@@ -167,11 +170,18 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return picker, command
 }
 
+func (picker *Picker) setColorProfile(profile colorprofile.Profile) {
+	_, noColor := os.LookupEnv("NO_COLOR")
+	picker.delegate.color = profile >= colorprofile.ANSI && !noColor
+}
+
 func (picker *Picker) resize(width, height int) {
 	picker.list.SetSize(max(1, width), max(1, height))
-	picker.list.Title = "  " + picker.delegate.row(width, "Name", "Subscription ID", "Tenant")
+	header := picker.delegate
+	header.color = false
+	picker.list.Title = "  " + header.row(width, "Name", "Subscription ID", "Tenant", false)
 	if picker.delegate.tenants {
-		picker.list.Title = "  " + picker.delegate.row(width, "Tenant", "Tenant ID", "Domain")
+		picker.list.Title = "  " + header.row(width, "Tenant", "Tenant ID", "Domain", false)
 	}
 }
 
@@ -197,8 +207,7 @@ func SelectTenantsOrdered(tenants []profile.Subscription) (int, error) {
 
 func selectOrdered(subscriptions []profile.Subscription, tenants bool) (int, error) {
 	options := []tea.ProgramOption{tea.WithOutput(os.Stderr)}
-	_, noColor := os.LookupEnv("NO_COLOR")
-	if noColor || !term.IsTerminal(int(os.Stderr.Fd())) {
+	if !log.ColorEnabled(os.Stderr) {
 		options = append(options, tea.WithColorProfile(colorprofile.NoTTY))
 	}
 	width, height, err := term.GetSize(int(os.Stderr.Fd()))
@@ -233,6 +242,7 @@ type subscriptionDelegate struct {
 	nameWidth   int
 	tenantWidth int
 	tenants     bool
+	color       bool
 }
 
 func (subscriptionDelegate) Height() int                         { return 1 }
@@ -244,34 +254,47 @@ func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, 
 		return
 	}
 	subscription := row.subscription
-	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription))
+	selected := index == model.Index()
+	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription), selected)
 	prefix := "  "
 	style := lipgloss.NewStyle()
-	if index == model.Index() {
+	if selected {
 		prefix = "▸ "
-		style = style.Bold(true).Foreground(lipgloss.Color("2"))
+		if delegate.color {
+			style = style.Bold(true)
+		}
 	}
-	_, _ = fmt.Fprint(writer, style.Render(prefix+line))
+	_, _ = fmt.Fprint(writer, style.Render(prefix)+line)
 }
 
-func (delegate subscriptionDelegate) row(width int, name, id, tenant string) string {
+func (delegate subscriptionDelegate) row(width int, name, id, tenant string, selected bool) string {
 	name, id, tenant = DisplayText(name), DisplayText(id), DisplayText(tenant)
+	style := lipgloss.NewStyle()
+	if delegate.color && selected {
+		style = style.Bold(true)
+	}
+	nameStyle, idStyle, tenantStyle := style, style, style
+	if delegate.color {
+		nameStyle = nameStyle.Foreground(lipgloss.Color("2"))
+		idStyle = idStyle.Foreground(lipgloss.Color("6"))
+		tenantStyle = tenantStyle.Faint(true)
+	}
 	if delegate.tenants {
 		nameWidth := min(delegate.nameWidth, max(1, width-2-3-36))
-		line := singleLineCell(name, nameWidth) + " | " + id
+		line := nameStyle.Render(singleLineCell(name, nameWidth)) + style.Render(" | ") + idStyle.Render(id)
 		if width >= 2+nameWidth+3+36+3+delegate.tenantWidth {
-			line += " | " + tenant
+			line += style.Render(" | ") + tenantStyle.Render(tenant)
 		}
 		return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 	}
 	nameWidth := min(delegate.nameWidth, max(1, width-2))
-	line := singleLineCell(name, nameWidth)
+	line := nameStyle.Render(singleLineCell(name, nameWidth))
 	tenantWidth := delegate.tenantWidth
 	switch {
 	case width >= 2+nameWidth+3+36+3+tenantWidth:
-		line += " | " + singleLineCell(id, 36) + " | " + tenant
+		line += style.Render(" | ") + idStyle.Render(singleLineCell(id, 36)) + style.Render(" | ") + tenantStyle.Render(tenant)
 	case width >= 2+nameWidth+3+tenantWidth:
-		line += " | " + tenant
+		line += style.Render(" | ") + tenantStyle.Render(tenant)
 	}
 	return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 }
