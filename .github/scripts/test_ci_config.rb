@@ -73,6 +73,15 @@ documents.select { |path, _| path.start_with?('.github/workflows/') }.each do |p
     end
   end
 end
+markdown = IO.popen(%w[git ls-files -z -- *.md], &:read).split("\0")
+assert($?.success? && markdown.include?('CONTRIBUTING.md'), 'tracked Markdown must be listed for pin coverage')
+markdown.each do |path|
+  File.read(path).scan(%r{\bgo install ((?:[\w.-]+/)+[\w.-]+)@([\w.+-]+)}).each do |package, version|
+    tool = tool_installs.fetch(package) { raise "#{path}: documented go install #{package} has no pin inventory entry" }
+    assert(tool.fetch('version') == version && tool.fetch('sources').any? { |entry| entry['path'] == path },
+           "#{path}: documented go install #{package} must be covered by the real pin inventory")
+  end
+end
 
 ci = documents.fetch('.github/workflows/ci.yaml')
 freshness = documents.fetch('.github/workflows/dependency-freshness.yaml')

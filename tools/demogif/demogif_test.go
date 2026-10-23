@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/gif"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -108,10 +111,7 @@ func containsTenants(rows []string, tenants ...string) bool {
 }
 
 func TestDemoGIFIsReadableLoopingAnimation(t *testing.T) {
-	data, err := generate()
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := demoGIF(t)
 	if len(data) > 700_000 {
 		t.Fatalf("demo GIF is too large: %d bytes", len(data))
 	}
@@ -180,41 +180,60 @@ func hasColor(img *image.Paletted, want color.RGBA) bool {
 	return false
 }
 
+// generatedDemo runs the real generator once for the tests that only inspect its output.
+var generatedDemo = sync.OnceValues(generate)
+
+// demoGIF returns a private copy so no test can alter another test's bytes.
+func demoGIF(t *testing.T) []byte {
+	t.Helper()
+	data, err := generatedDemo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slices.Clone(data)
+}
+
 func TestDemoGenerationIsByteForByteRepeatable(t *testing.T) {
-	first, err := generate()
-	if err != nil {
+	path := filepath.Join(testutil.WorkDir(t), "demo.gif")
+	if err := writeOrCheckData(path, demoGIF(t), false); err != nil {
 		t.Fatal(err)
 	}
-	second, err := generate()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(first, second) {
-		t.Fatal("regeneration changed the GIF bytes")
+	// Check mode runs a second, independent generation and compares the bytes.
+	if err := writeOrCheck(path, true); err != nil {
+		t.Fatalf("regeneration changed the GIF bytes: %v", err)
 	}
 }
 
 func TestCommittedDemoMatchesGenerator(t *testing.T) {
-	if err := writeOrCheck(filepath.Join("..", "..", defaultOutput), true); err != nil {
+	if err := writeOrCheckData(filepath.Join("..", "..", defaultOutput), demoGIF(t), true); err != nil {
 		t.Fatalf("%v; run go run ./tools/demogif from the repository root", err)
 	}
 }
 
-func TestCheckModeRejectsStaleOutputWithoutRewriting(t *testing.T) {
-	path := filepath.Join(testutil.WorkDir(t), "demo.gif")
+func TestCheckModeRejectsStaleOrMissingOutputWithoutRewriting(t *testing.T) {
+	dir := testutil.WorkDir(t)
+	data := demoGIF(t)
+	missing := filepath.Join(dir, "missing.gif")
+	if err := writeOrCheckData(missing, data, true); err == nil {
+		t.Fatal("check accepted a missing GIF")
+	}
+	if _, err := os.Stat(missing); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("check created the missing GIF: %v", err)
+	}
+	path := filepath.Join(dir, "demo.gif")
 	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeOrCheck(path, true); err == nil {
+	if err := writeOrCheckData(path, data, true); err == nil {
 		t.Fatal("check accepted a stale GIF")
 	}
-	if data, err := os.ReadFile(path); err != nil || string(data) != "stale" {
-		t.Fatalf("check rewrote the file: %q, %v", data, err)
+	if current, err := os.ReadFile(path); err != nil || string(current) != "stale" {
+		t.Fatalf("check rewrote the file: %q, %v", current, err)
 	}
-	if err := writeOrCheck(path, false); err != nil {
+	if err := writeOrCheckData(path, data, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeOrCheck(path, true); err != nil {
+	if err := writeOrCheckData(path, data, true); err != nil {
 		t.Fatalf("freshly written GIF failed its check: %v", err)
 	}
 }
