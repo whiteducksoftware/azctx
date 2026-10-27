@@ -11,6 +11,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/paginator"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -40,6 +41,7 @@ func (item subscriptionItem) FilterValue() string {
 type Picker struct {
 	list     list.Model
 	delegate subscriptionDelegate
+	height   int
 	selected int
 	err      error
 }
@@ -82,7 +84,11 @@ func newOrderedPicker(subscriptions []profile.Subscription, width, height int) P
 	picker.list = list.New(items, delegate, max(1, width), max(1, height))
 	picker.list.Filter = filterSubscriptions
 	picker.list.DisableQuitKeybindings()
+	picker.list.SetShowTitle(false)
+	picker.list.SetShowFilter(false)
 	picker.list.SetShowStatusBar(false)
+	picker.list.SetShowPagination(false)
+	picker.list.SetShowHelp(false)
 	picker.setStyles(true)
 	picker.resize(width, height)
 	return picker
@@ -167,6 +173,7 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		picker.list.SetFilterState(state)
 		picker.list.FilterInput.SetCursor(cursor)
 	}
+	picker.fit()
 	return picker, command
 }
 
@@ -176,16 +183,63 @@ func (picker *Picker) setColorProfile(profile colorprofile.Profile) {
 }
 
 func (picker *Picker) resize(width, height int) {
-	picker.list.SetSize(max(1, width), max(1, height))
+	picker.height = max(1, height)
+	picker.list.SetWidth(max(1, width))
 	header := picker.delegate
 	header.color = false
 	picker.list.Title = "  " + header.row(width, "Name", "Subscription ID", "Tenant", false)
 	if picker.delegate.tenants {
 		picker.list.Title = "  " + header.row(width, "Tenant", "Tenant ID", "Domain", false)
 	}
+	picker.fit()
 }
 
-func (picker Picker) View() tea.View { return tea.NewView(picker.list.View()) }
+func (picker *Picker) fit() {
+	picker.list.SetHeight(max(1, min(10, len(picker.list.VisibleItems()))))
+	// A shorter body can add pages and expand the pagination/full-help footer.
+	for {
+		available := max(1, picker.height-lipgloss.Height(picker.headerView())-lipgloss.Height(picker.footerView()))
+		if picker.list.Height() <= available {
+			return
+		}
+		picker.list.SetHeight(available)
+	}
+}
+
+func (picker Picker) headerView() string {
+	header := picker.list.Styles.Title.Render(picker.list.Title)
+	if picker.list.FilterState() == list.Filtering {
+		header += "\n" + picker.list.FilterInput.View()
+	}
+	return picker.list.Styles.TitleBar.Render(header)
+}
+
+func (picker Picker) footerView() string {
+	footer := picker.list.Styles.HelpStyle.Render(picker.list.Help.View(picker.list))
+	if picker.list.Paginator.TotalPages > 1 {
+		pager := picker.list.Paginator
+		pagination := pager.View()
+		if lipgloss.Width(pagination) > picker.list.Width() {
+			pager.Type = paginator.Arabic
+			pagination = picker.list.Styles.ArabicPagination.Render(pager.View())
+		}
+		footer = picker.list.Styles.PaginationStyle.MarginTop(1).Render(pagination) + "\n" + footer
+	}
+	return footer
+}
+
+func (picker Picker) View() tea.View {
+	header := lipgloss.NewStyle().MaxHeight(max(1, picker.height-1)).Render(picker.headerView())
+	if picker.height == 1 {
+		return tea.NewView(header)
+	}
+	body := picker.list.View()
+	sections := []string{header, body}
+	if available := picker.height - lipgloss.Height(header) - lipgloss.Height(body); available > 0 {
+		sections = append(sections, lipgloss.NewStyle().MaxHeight(available).Render(picker.footerView()))
+	}
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, sections...))
+}
 
 // Selection reports the chosen sorted index, or cancellation/interruption.
 func (picker Picker) Selection() (int, error) { return picker.selected, picker.err }

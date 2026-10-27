@@ -321,6 +321,161 @@ func requirePickerRowsFit(t *testing.T, view string, width, height, index int) {
 	}
 }
 
+func compactPickerSubscriptions() []profile.Subscription {
+	subscriptions := make([]profile.Subscription, 25)
+	for index := range subscriptions {
+		subscriptions[index] = profile.Subscription{
+			Id:   fmt.Sprintf("%08d-1111-1111-1111-111111111111", index+1),
+			Name: fmt.Sprintf("Row%02d", index), TenantName: "Directory",
+		}
+	}
+	return subscriptions
+}
+
+func pickerRowCount(view string) int {
+	count := 0
+	for line := range strings.SplitSeq(view, "\n") {
+		if strings.HasPrefix(line, "  Row") || strings.HasPrefix(line, "▸ Row") {
+			count++
+		}
+	}
+	return count
+}
+
+func pickerHeader(view string) string {
+	header, _, _ := strings.Cut(view, "\n")
+	return strings.TrimRight(header, " ")
+}
+
+func TestPickerCompactPages(t *testing.T) {
+	for _, tenants := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tenants=%t", tenants), func(t *testing.T) {
+			subscriptions := compactPickerSubscriptions()
+			var model tea.Model = ui.NewPicker(subscriptions, 160, 50)
+			if tenants {
+				model = ui.NewTenantPicker(subscriptions, 160, 50)
+			}
+			header := pickerHeader(pickerView(model))
+			for index := range subscriptions {
+				view := pickerView(model)
+				if got := pickerRowCount(view); got != min(10, len(subscriptions)-index/10*10) {
+					t.Fatalf("row %d: visible rows = %d:\n%s", index, got, view)
+				}
+				if pickerHeader(view) != header || lipgloss.Height(view) > 16 || model.View().AltScreen {
+					t.Fatalf("row %d: picker lost its fixed header or compact inline layout:\n%s", index, view)
+				}
+				requirePickerRowsFit(t, view, 160, 16, index)
+				if index < len(subscriptions)-1 {
+					model, _ = model.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+				}
+			}
+			model, _ = model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			if index, err := requirePicker(t, model).Selection(); err != nil || index != 24 {
+				t.Fatalf("selection beyond the first page = %d, %v", index, err)
+			}
+		})
+	}
+}
+
+func TestPickerCompactFilteringAndResize(t *testing.T) {
+	for _, tenants := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tenants=%t", tenants), func(t *testing.T) {
+			var model tea.Model = ui.NewPicker(compactPickerSubscriptions(), 160, 50)
+			if tenants {
+				model = ui.NewTenantPicker(compactPickerSubscriptions(), 160, 50)
+			}
+			header := pickerHeader(pickerView(model))
+			for _, height := range []int{10, 50} {
+				model, _ = model.Update(tea.WindowSizeMsg{Width: 160, Height: height})
+				view := pickerView(model)
+				requirePickerRowsFit(t, view, 160, height, 0)
+				if count := pickerRowCount(view); count > 10 || (height == 50 && count != 10) {
+					t.Fatalf("resize to %d shows %d rows:\n%s", height, count, view)
+				}
+			}
+			model, _ = model.Update(tea.WindowSizeMsg{Width: 160, Height: 10})
+			model, _ = model.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+			requirePickerRowsFit(t, pickerView(model), 160, 10, 0)
+			model, _ = model.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+			for _, query := range []string{"Row24", "nonexistent"} {
+				model, _ = model.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+				model, _ = model.Update(tea.KeyPressMsg{Code: rune(query[0]), Text: query})
+				view := pickerView(model)
+				want := 1
+				if query == "nonexistent" {
+					want = 0
+				}
+				if pickerRowCount(view) != want || pickerHeader(view) != header || lipgloss.Height(view) > 8 {
+					t.Fatalf("query %q lost compact rows or the header:\n%s", query, view)
+				}
+				if want != 0 {
+					model, _ = model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+					if pickerHeader(pickerView(model)) != header {
+						t.Fatalf("applied filter lost the header:\n%s", pickerView(model))
+					}
+				}
+				model, _ = model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+				if pickerHeader(pickerView(model)) != header {
+					t.Fatalf("cleared filter lost the header:\n%s", pickerView(model))
+				}
+			}
+		})
+	}
+}
+
+func TestPickerCompactProgram(t *testing.T) {
+	for _, width := range []int{60, 100, 160} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			model := teatest.NewTestModel(t, ui.NewPicker(compactPickerSubscriptions(), width, 40),
+				teatest.WithInitialTermSize(width, 40),
+				teatest.WithProgramOptions(tea.WithFilter(func(model tea.Model, message tea.Msg) tea.Msg {
+					if snapshot, ok := message.(pickerSnapshotMsg); ok {
+						snapshot <- pickerView(model)
+						return nil
+					}
+					return message
+				})))
+			t.Cleanup(func() {
+				if err := model.Quit(); err != nil {
+					t.Error(err)
+				}
+				model.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+			})
+			teatest.WaitFor(t, model.Output(), func(output []byte) bool {
+				if bytes.Contains(output, []byte("\x1b[?1049h")) {
+					t.Error("picker entered the alternate screen")
+				}
+				return bytes.Contains(output, []byte("Row00"))
+			}, teatest.WithDuration(3*time.Second))
+			view := pickerSnapshot(t, model)
+			header := pickerHeader(view)
+			if pickerRowCount(view) != 10 || lipgloss.Height(view) > 16 {
+				t.Fatalf("program did not render a compact first page:\n%s", view)
+			}
+			for range 20 {
+				model.Send(tea.KeyPressMsg{Code: tea.KeyDown})
+			}
+			model.Send(tea.WindowSizeMsg{Width: width, Height: 10})
+			view = pickerSnapshot(t, model)
+			requirePickerRowsFit(t, view, width, 10, 20)
+			if pickerHeader(view) != header || !strings.Contains(view, "▸ Row20") {
+				t.Fatalf("program scrolling or resizing lost the header/selection:\n%s", view)
+			}
+			model.Type("/Row24")
+			view = pickerSnapshot(t, model)
+			if pickerRowCount(view) != 1 || pickerHeader(view) != header {
+				t.Fatalf("program filtering lost the header or compact rows:\n%s", view)
+			}
+			model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+			model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+			final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
+			if index, err := final.Selection(); err != nil || index != 24 {
+				t.Fatalf("filtered program selection = %d, %v", index, err)
+			}
+		})
+	}
+}
+
 func pickerSubscriptions() []profile.Subscription {
 	return []profile.Subscription{
 		{Id: productionID, Name: "Production Engineering Platform", TenantName: "White Duck Production Directory"},
