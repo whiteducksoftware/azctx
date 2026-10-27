@@ -18,7 +18,7 @@ func TestContractCommandNameQueriesRequireDelimiter(t *testing.T) {
 			deps.FS = fstest.MapFS{profileFile: &fstest.MapFile{Data: []byte(strings.ReplaceAll(fixtureProfile, productionName, name))}}
 			var stdout, stderr bytes.Buffer
 			code := cmd.Run([]string{argumentDelimiter, name}, deps, strings.NewReader(""), &stdout, &stderr)
-			if code != 0 || stdout.Len() != 0 || stderr.Len() != 0 || len(fake.Calls) != 1 || fake.Calls[0].Args[3] != productionID {
+			if code != 0 || stdout.Len() != 0 || stderr.String() != switchFeedback(name, productionID, tenantID, tenantID) || len(fake.Calls) != 1 || fake.Calls[0].Args[3] != productionID {
 				t.Fatalf("code=%d stdout=%q stderr=%q calls=%+v", code, stdout.String(), stderr.String(), fake.Calls)
 			}
 		})

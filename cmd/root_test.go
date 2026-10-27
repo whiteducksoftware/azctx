@@ -26,6 +26,10 @@ const (
 
 const argumentDelimiter = "--"
 
+func switchFeedback(name, id, tenant, tenantID string) string {
+	return "✓ Switched to " + name + " (" + id + ") in tenant " + tenant + " (" + tenantID + ")\n"
+}
+
 const productionName = "Production"
 
 const deviceCodeFlag = "--use-device-code"
@@ -117,7 +121,7 @@ func TestCurrentSubscription(t *testing.T) {
 	}
 }
 
-func TestSwitchIsQuietOnBothStreams(t *testing.T) {
+func TestSwitchConfirmsOnlyOnStderr(t *testing.T) {
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 	root := cmd.NewRootCommand(commandDependencies(t, fake))
 	var stdout, stderr bytes.Buffer
@@ -127,7 +131,7 @@ func TestSwitchIsQuietOnBothStreams(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if stdout.Len() != 0 || stderr.Len() != 0 {
+	if stdout.Len() != 0 || stderr.String() != "✓ Switched to Production ("+productionID+") in tenant "+tenantID+" ("+tenantID+")\n" {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -177,16 +181,18 @@ func TestLoginPassesThroughArguments(t *testing.T) {
 	}
 }
 
-func TestOfflineUpdateCannotFailSwitch(t *testing.T) {
-	failure := errors.New("offline")
+func TestSwitchNeverChecksUpdates(t *testing.T) {
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 	deps := commandDependencies(t, fake)
-	deps.CheckUpdates = func(string, string) error { return failure }
+	deps.CheckUpdates = func(string, string) error {
+		t.Fatal("switch must never check for updates")
+		return nil
+	}
 	root := cmd.NewRootCommand(deps)
 	root.SetArgs([]string{argumentDelimiter, productionName})
 	err := root.Execute()
 	if err != nil || len(fake.Calls) != 1 {
-		t.Fatalf("post-switch update error = %v, calls = %+v", err, fake.Calls)
+		t.Fatalf("switch error = %v, calls = %+v", err, fake.Calls)
 	}
 }
 

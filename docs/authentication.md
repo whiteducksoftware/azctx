@@ -36,7 +36,7 @@ environment overrides:
 | Windows | WAM account picker by default (`core.enable_broker_on_windows=true`). WAM requires Windows 10+/Server 2019+ and supports Windows Hello/FIDO/Conditional Access. Setting false uses browser sign-in. |
 | macOS | Browser by default (`core.enable_broker_on_mac=false`). Azure CLI 2.91.0+ offers an opt-in **preview** broker account picker. It requires an enrolled device, Company Portal and the Microsoft Enterprise SSO plug-in. Without a compatible installed broker, Azure CLI may fall back to the browser. |
 | Linux | Browser or device code; no platform broker setting. |
-| Explicit `--use-device-code` | Follow the device-code instructions that Azure CLI streams immediately, on either stdout or stderr. No promise of a local browser or account picker. |
+| Explicit `--use-device-code` | Follow the device-code instructions that Azure CLI streams immediately on stderr. No promise of a local browser or account picker. |
 
 A present `SSH_CONNECTION`, `CODESPACES` or `REMOTE_CONTAINERS`, or a Linux
 session with neither `DISPLAY` nor `WAYLAND_DISPLAY`, produces a
@@ -44,7 +44,14 @@ session with neither `DISPLAY` nor `WAYLAND_DISPLAY`, produces a
 silently change authentication mode. An explicitly requested device-code flow
 does not repeat the suggestion.
 
-Sign-in remains attached to stdin/stdout/stderr. `--no-input`, `AZCTX_NO_INPUT=1`,
+Sign-in keeps stdin attached and stderr live: device codes, browser notices,
+warnings and MFA classification are unchanged. Wrapped login stdout (Azure
+CLI's subscription JSON) is discarded, including tenant/all-tenant sign-ins and
+MFA retries. To retain stdout, pass `-o`, `--output` or `--query` **after `--`**,
+for example `azctx login -- --query id`. Separate, equals and attached short
+output forms are supported. azctx's own `-o text` is not this escape hatch.
+No spinner is shown. Broker-change login streams are unchanged.
+`--no-input`, `AZCTX_NO_INPUT=1`,
 redirected stdin and `CI` suppress **azctx-owned** prompts, not Azure CLI's
 authentication interaction. `AZURE_CORE_LOGIN_EXPERIENCE_V2=off` applies only to
 the login child, never the caller or the persisted configuration.
@@ -93,7 +100,11 @@ failures, and profile reload errors after otherwise successful login remain 1.
 
 After completed sign-in attempts azctx strictly reloads Azure CLI's profile and
 summarizes the active-cloud tenant count and visible subscription count on
-stderr, including for partial failures. These are **profile totals**, not a
+stderr, including for partial failures. Success prints
+`✓ Signed in: N tenants, M subscriptions`, followed by the active-subscription
+line when available. The check mark is green on a color-enabled stderr TTY;
+partial-failure summaries are yellow warnings. `NO_COLOR` or redirected stderr
+removes styling but keeps `✓`. These are **profile totals**, not a
 claim that every cached tenant authenticated during this run. If a partial
 failure leaves no readable profile, sign-in still returns 3 rather than hiding
 it behind a profile error. A successful sign-in still requires a valid profile.
@@ -118,10 +129,11 @@ option may run in no-input mode; Azure CLI still owns its sign-in interaction.
 
 Use ordinary login for targeted MFA recovery, or `--all-tenants` to enumerate
 all available tenants. See [the migration guide](upgrade.md) for removed flags. Non-user
-passthrough (`--identity`/`-i` or `--service-principal`) runs one unchanged Azure
+passthrough (`--identity`/`-i` or `--service-principal`) runs one Azure
 login and **skips both MFA orchestration and tenant discovery**, even with
 `--all-tenants`. azctx does not log passthrough argument values or authenticate
-itself. Existing version checks, attached streams and the login-only picker
+itself. Existing version checks, attached stdin/live stderr, quiet stdout with
+the selector escape hatch, and the login-only picker
 environment override remain in effect for every account type.
 
 ## Inspect or change the broker

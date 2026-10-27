@@ -34,8 +34,13 @@ are matched ignoring case. Duplicate keys and case-colliding aliases are errors.
 `pinned`, `hidden` and `protected` accept subscription **or token tenant** GUIDs.
 All three lists and aliases default to empty. `picker` defaults to `builtin`;
 `fzf` uses an optional executable on `PATH`, falling back to the built-in picker
-with one stderr notice if unavailable. `updateCheck` defaults to `true`; `false` skips all
-post-switch update work, including cache/lock/network work.
+with one stderr notice if unavailable. `updateCheck` defaults to `true`; `false`
+skips optional text `version` update work, including cache/lock/network work.
+Switching never checks or prints update notices. Eligible `version` text output
+makes a fresh lookup without reading the cache (two-second network deadline),
+then writes the attempt/result under the existing cache lock for offline
+`doctor` status. JSON version stays offline. Lookup or update-configuration
+failures are debug-only and do not fail version output.
 
 A missing file uses defaults without creating anything. Malformed YAML,
 unknown keys, wrong types, invalid GUIDs and extra YAML documents fail with the
@@ -67,7 +72,7 @@ identity-only data, not a compliance ledger. Treat both as private.
 | --- | --- |
 | `AZCTX_CONFIG_DIR` | Directory itself for config, state, history and its lock; no extra `azctx` suffix and no effect on update cache |
 | `AZCTX_NO_INPUT=1` | Disable azctx-owned prompts; other values do not activate this gate |
-| `AZCTX_NO_UPDATE_CHECK=1` | Skip optional post-switch update work |
+| `AZCTX_NO_UPDATE_CHECK=1` | Skip optional text `version` update work, including cache/lock/network access |
 | `CI` | Presence, even empty, disables input and update checks |
 | `NO_COLOR` | Presence, even empty, disables colors, including when force-color variables are set |
 | `AZURE_CONFIG_DIR` | Azure root, default `~/.azure`; azctx only reads its allowlisted files |

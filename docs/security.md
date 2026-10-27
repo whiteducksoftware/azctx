@@ -66,18 +66,20 @@ switch, so history is not an authoritative audit ledger.
 | Operation | Boundary |
 | --- | --- |
 | Switch | `az account set`; Azure CLI owns any behavior beyond the local runner |
-| Login | Attached `az login`; explicit all-tenant discovery uses `az account tenant list -o json` |
+| Login | `az login` with attached stdin/live stderr and discarded stdout unless an output/query selector follows `--`; explicit all-tenant discovery uses captured `az account tenant list -o json` |
 | Broker change | Confirmed clear/config/login sequence above |
 | Doctor | Only local `az version -o json`, never Azure or an update request |
-| Optional updates | After an eligible successful switch, an HTTPS request to GitHub's latest-release redirect, at most daily, two-second deadline |
+| Optional updates | Eligible text `version` makes a fresh HTTPS request to GitHub's stable latest-release redirect, two-second deadline; never switching |
 | fzf picker | Optional resolved local fzf with sanitized rows and `FZF_*` removed |
 | Exec | One explicitly requested executable with attached raw streams; its network/filesystem operations are its own |
 
 Update requests use Go's normal HTTP/TLS and redirect/proxy behavior. They are
 not an Azure endpoint allowlist or a sandbox. Disable them with
 `AZCTX_NO_UPDATE_CHECK=1` or `updateCheck: false`. They are also disabled with
-`CI` present, non-TTY stdout or JSON switches. Failed updates never fail a
-completed switch. Doctor reads cached status only.
+`CI` present, non-TTY stdout or JSON version. Failed updates are debug-only and
+never fail version output. The fresh lookup does not read the cache; it writes
+attempts/results under the existing private cache lock. Doctor reads cached
+status only.
 
 Derived tenant/subscription IDs must be GUIDs before becoming Azure arguments.
 Only the user's literal login arguments after `--` bypass that GUID rule so
@@ -122,6 +124,11 @@ hide the following `access_token` key instead of its value. Separators inside
 quoted strings do not end a field, including across streamed writes.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
+
+Log messages and attributes are redacted as plain text before terminal styling.
+Explicit identity fields have separate display boundaries, so a subscription or
+tenant named `Token` or `Password` does not hide adjacent GUIDs. Secret labels
+in diagnostic prose remain effective.
 
 **Azure CLI stdout is a raw data stream. Explicit exec children keep all their
 streams unchanged**, even under JSON output. Device-code instructions remain

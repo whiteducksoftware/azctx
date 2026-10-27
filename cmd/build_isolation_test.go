@@ -47,7 +47,7 @@ func TestBinaryFixtureCopiesAreIsolated(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			output, err := exec.CommandContext(ctx, binary, loginCommand, argumentDelimiter, deviceCodeFlag).CombinedOutput()
-			if err != nil || !strings.Contains(string(output), "Successfully fetched 1 tenants and 2 subscriptions.") {
+			if err != nil || !strings.Contains(string(output), "✓ Signed in: 1 tenants, 2 subscriptions\n") {
 				t.Fatalf("fixture mutation escaped its test: error=%v output=%q", err, output)
 			}
 			if calls, err := os.ReadFile(record); err != nil || strings.Count(string(calls), "\n") != 2 {

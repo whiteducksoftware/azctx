@@ -1,12 +1,12 @@
 ## azctx login
 
-Sign in through Azure CLI with attached streams
+Sign in through Azure CLI with live stderr and quiet stdout
 
 ### Synopsis
 
-Require Azure CLI >=2.61.0 and wrap az login. Device-code instructions stay visible. --tenant accepts a GUID or one profile tenant name/domain. Other Azure CLI arguments go after --; never put secrets in command lines.
+Require Azure CLI >=2.61.0 and wrap az login. Stdin stays attached; device codes and browser notices stay live on stderr. Login stdout is discarded unless -o, --output or --query is passed after --, including during tenant sign-ins and MFA retries. --tenant accepts a GUID or one profile tenant name/domain. Other Azure CLI arguments go after --; never put secrets in command lines.
 
-Ordinary user login offers one confirmation to retry only reported MFA failures. --all-tenants explicitly discovers tenants for individual sign-ins. Workload-identity passthrough skips orchestration. --no-input gates azctx prompts only, not Azure CLI authentication. Supports default/text output; unresolved sign-ins exit 3.
+Ordinary user login offers one confirmation to retry only reported MFA failures. --all-tenants explicitly discovers tenants for individual sign-ins. Workload-identity passthrough skips orchestration. Success reports signed-in profile counts and the active subscription on stderr. --no-input gates azctx prompts only, not Azure CLI authentication. Supports default/text output; unresolved sign-ins exit 3.
 
 ```
 azctx login [flags]

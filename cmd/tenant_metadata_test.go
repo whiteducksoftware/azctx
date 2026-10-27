@@ -85,6 +85,16 @@ func TestAzureCLITenantHintsUseDisplayedEntries(t *testing.T) {
 					if action.hint {
 						want = "Tenant metadata is missing; run `az login` once with Azure CLI 2.61.0 or newer.\n"
 					}
+					if action.picker {
+						label := metadata.name
+						if label == "" {
+							label = metadata.domain
+						}
+						if metadata.legacy {
+							label = tenantID
+						}
+						want += switchFeedback(productionName, developmentID, label, tenantID)
+					}
 					if stderr.String() != want || picked != action.picker {
 						t.Fatalf("stderr=%q want=%q picked=%t want=%t", stderr.String(), want, picked, action.picker)
 					}
@@ -102,13 +112,18 @@ func TestAzureCLITenantMetadataMachineModesStayQuiet(t *testing.T) {
 		{currentFlag, outputFlag, jsonFormat},
 		{listCommand, metadataAllFlag, outputFlag, jsonFormat},
 		{developmentID},
+		{developmentID, outputFlag, jsonFormat},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 			deps := commandDependencies(t, fake)
 			deps.FS = tenantMetadataProfile(t, "", "", "noncurrent")
 			var stdout, stderr bytes.Buffer
-			if code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr); code != 0 || stderr.Len() != 0 {
+			messages := ""
+			if len(args) == 1 && args[0] == developmentID {
+				messages = switchFeedback(productionName, developmentID, tenantID, tenantID)
+			}
+			if code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr); code != 0 || stderr.String() != messages {
 				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
 		})

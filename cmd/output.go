@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -14,6 +15,7 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/selection"
 	"github.com/whiteducksoftware/azctx/internal/ui"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
 const (
@@ -109,7 +111,8 @@ func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
 			Subscriptions []SubscriptionOutput `json:"subscriptions"`
 		}{SchemaVersion, subscriptions})
 	}
-	output := tabwriter.NewWriter(command.OutOrStdout(), 0, 4, 2, ' ', 0)
+	var table strings.Builder
+	output := tabwriter.NewWriter(&table, 0, 4, 2, ' ', 0)
 	if _, err := fmt.Fprintln(output, "NAME\tID\tTENANT\tSTATE\tDEFAULT\tACCOUNT\tCLOUD\tACCESS"); err != nil {
 		return err
 	}
@@ -127,6 +130,27 @@ func listSubscriptions(command *cobra.Command, cli azcli.CLI) error {
 		}
 	}
 	if err := output.Flush(); err != nil {
+		return err
+	}
+	name, id, tenant, header := log.Styles(command.OutOrStdout())
+	lines := strings.Split(strings.TrimSuffix(table.String(), "\n"), "\n")
+	lines[0] = header.Render(lines[0])
+	for index, subscription := range subscriptions {
+		line := lines[index+1]
+		var styled strings.Builder
+		for column, cell := range []string{subscription.Name, subscription.ID, subscription.TenantName} {
+			cell = ui.DisplayText(cell)
+			if cell == "" {
+				continue
+			}
+			offset := strings.Index(line, cell)
+			styled.WriteString(line[:offset])
+			styled.WriteString([]func(...string) string{name.Render, id.Render, tenant.Render}[column](cell))
+			line = line[offset+len(cell):]
+		}
+		lines[index+1] = styled.String() + line
+	}
+	if _, err := fmt.Fprintln(command.OutOrStdout(), strings.Join(lines, "\n")); err != nil {
 		return err
 	}
 	legacyProfileHint(command, visible)
@@ -156,13 +180,18 @@ func writeCurrent(command *cobra.Command, subscription profile.Subscription, pro
 		_, err := fmt.Fprintln(command.OutOrStdout(), subscription.Tenant)
 		return err
 	default:
-		marker := ""
-		if protected {
-			marker = " [protected]"
-		}
-		_, err := fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)%s\n",
-			ui.DisplayText(subscription.TenantLabel()), ui.DisplayText(subscription.DisplayName()),
-			ui.DisplayText(subscription.Tenant), ui.DisplayText(subscription.Id), marker)
+		_, err := fmt.Fprintln(command.OutOrStdout(), activeSubscriptionText(command.OutOrStdout(), subscription, protected))
 		return err
 	}
+}
+
+func activeSubscriptionText(output io.Writer, subscription profile.Subscription, protected bool) string {
+	marker := ""
+	if protected {
+		marker = " [protected]"
+	}
+	name, id, tenant, _ := log.Styles(output)
+	return fmt.Sprintf("Active subscription: %s/%s (%s/%s)%s",
+		tenant.Render(ui.DisplayText(subscription.TenantLabel())), name.Render(ui.DisplayText(subscription.DisplayName())),
+		id.Render(ui.DisplayText(subscription.Tenant)), id.Render(ui.DisplayText(subscription.Id)), marker)
 }
