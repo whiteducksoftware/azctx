@@ -103,6 +103,8 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	rootCmd.Flags().Bool("yes", false, "Confirm switching to a protected subscription without prompting")
 	rootCmd.ValidArgsFunction = completeSubscriptions(deps)
 	rootCmd.AddCommand(newListCommand(loadCLI))
+	rootCmd.AddCommand(newTenantCommand(loadCLI, deps))
+	rootCmd.AddCommand(newHistoryCommand(deps))
 	rootCmd.AddCommand(newConfigCommand(deps))
 	rootCmd.AddCommand(newAliasCommand(deps))
 	rootCmd.AddCommand(newLoginCommand(func() (azcli.CLI, error) { return newCLI(true) }, deps))
@@ -170,12 +172,37 @@ func rankedSelector(cmd *cobra.Command, deps Dependencies, catalog selection.Cat
 		legacyProfileHint(cmd, subscriptions)
 		if deps.Select == nil {
 			ui.SortSubscriptions(subscriptions)
-			catalog.Options().Rank(subscriptions)
-			return ui.SelectOrdered(subscriptions)
 		}
 		catalog.Options().Rank(subscriptions)
-		return deps.Select(subscriptions)
+		return configuredPicker(cmd, deps, catalog.Config, subscriptions, false)
 	}
+}
+
+func configuredPicker(command *cobra.Command, deps Dependencies, cfg config.Config, rows []profile.Subscription, tenants bool) (int, error) {
+	if err := command.Context().Err(); err != nil {
+		return -1, err
+	}
+	if cfg.Picker == "fzf" {
+		index, err := ui.SelectFZF(command.Context(), rows, command.ErrOrStderr())
+		if !errors.Is(err, ui.ErrFZFUnavailable) {
+			return index, err
+		}
+		const notice = "azctx.fzf.fallback"
+		if command.Annotations == nil {
+			command.Annotations = map[string]string{}
+		}
+		if command.Annotations[notice] == "" {
+			_, _ = fmt.Fprintln(command.ErrOrStderr(), "fzf is not on PATH; using the built-in picker.")
+			command.Annotations[notice] = "shown"
+		}
+	}
+	if deps.Select != nil {
+		return deps.Select(rows)
+	}
+	if tenants {
+		return ui.SelectTenantsOrdered(rows)
+	}
+	return ui.SelectOrdered(rows)
 }
 
 func switchCandidates(cmd *cobra.Command, args []string, cli azcli.CLI, deps Dependencies, catalog selection.Catalog, all bool) ([]profile.Subscription, error) {
@@ -246,6 +273,7 @@ func switchConfigured(cmd *cobra.Command, cli azcli.CLI, deps Dependencies, cfg 
 	if err := switchSubscription(cli, target); err != nil {
 		return err
 	}
+	recordHistory(cmd, cli, deps, target)
 
 	if cfg.UpdateCheck {
 		checkForUpdates(cmd, deps, cli.ConfigDir())
@@ -288,6 +316,10 @@ func inputIsTerminal(command *cobra.Command, deps Dependencies) bool {
 	if noInput || os.Getenv("AZCTX_NO_INPUT") == "1" || ci {
 		return false
 	}
+	return stdinIsTerminal(command, deps)
+}
+
+func stdinIsTerminal(command *cobra.Command, deps Dependencies) bool {
 	if deps.StdinTTY != nil {
 		return deps.StdinTTY()
 	}
