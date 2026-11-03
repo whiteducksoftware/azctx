@@ -60,7 +60,7 @@ Usage:
   azctx login [flags]
 
 Flags:
-      --force-mfa         force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)
+      --all-tenants       Discover Azure tenants and sign in to each separately
   -h, --help              help for login
       --tenant string     Tenant GUID or fuzzy profile tenant name/domain
       --use-device-code   Sign in using a device code
@@ -86,6 +86,12 @@ process, without changing your environment.
 Use `azctx login --use-device-code` over SSH or without a display, and
 `azctx login --tenant <GUID-or-profile-name>` to choose a tenant. Progress
 messages follow the effective browser, Windows WAM or macOS broker setting.
+Failed MFA/registration tenants are listed and offered one confirmation before
+targeted sign-ins; Conditional Access blocks are explained, not retried.
+Unresolved tenant failures exit 3, including in no-input/CI/piped runs.
+Use `azctx login --all-tenants` to discover tenant GUIDs through
+`az account tenant list` and sign in individually. Explicit managed-identity
+and service-principal passthrough logins skip tenant discovery and MFA retries.
 `azctx doctor [-o json]` diagnoses missing/old Azure CLI, missing or broken
 profiles, settings and leftover tenant files without signing in or contacting
 Azure. See the draft [authentication guide](docs/authentication.md).

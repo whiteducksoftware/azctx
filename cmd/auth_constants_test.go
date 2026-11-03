@@ -22,5 +22,4 @@ const (
 	browserPrompt     = "browser"
 	boolFalse         = "false"
 	fixtureArgs       = "args"
-	forceMFAFlag      = "--force-mfa"
 )
