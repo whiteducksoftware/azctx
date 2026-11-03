@@ -6,6 +6,7 @@ import (
 	"testing/fstest"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/selection"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
 
@@ -54,7 +55,7 @@ func TestCloudBlankOverrideNeverSelectsMissingEnvironment(t *testing.T) {
 				if len(all) != 7 || all[6].IsDefault {
 					t.Fatalf("unknown environment marked current: %+v", all)
 				}
-				if _, err := cli.TryFindSubscription(all[6].Id); err == nil {
+				if _, err := (selection.Catalog{Subscriptions: visible}).Find(all[6].Id, true); err == nil {
 					t.Fatal("--all made missing environment selectable")
 				}
 				if err := cli.SetSubscription(all[6]); err == nil || len(fake.Calls) != 0 {

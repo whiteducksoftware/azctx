@@ -42,7 +42,7 @@ func TestDocumentedGuardedExecutionFailClosed(t *testing.T) {
 	}{
 		{"../docs/integrations.md", "## Terraform\n", "## Azure Developer CLI\n", 2},
 		{readme, "For GitHub Actions:\n", "For Azure DevOps:\n", 2},
-		{readme, "For Azure DevOps:\n", "## 12. AI agents\n", 2},
+		{readme, "For Azure DevOps:\n", "## 5. AI agents\n", 2},
 	} {
 		t.Run(example.file+"/"+strings.TrimSpace(strings.TrimPrefix(example.section, "## ")), func(t *testing.T) {
 			document := strings.ReplaceAll(string(readAgentFile(t, example.file)), "\r\n", "\n")

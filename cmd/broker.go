@@ -33,9 +33,9 @@ func newAuthCommand(resolve runnerFactory, deps Dependencies) *cobra.Command {
 		}[action]
 		command := &cobra.Command{
 			Use: action, Short: short, Args: cobra.NoArgs,
-			RunE: commandHandler(func(cmd *cobra.Command, _ []string) error {
+			RunE: func(cmd *cobra.Command, _ []string) error {
 				return brokerRunE(cmd, action, resolve, deps)
-			}),
+			},
 		}
 		if action != brokerActionStatus {
 			command.Flags().Bool("yes", false, "Confirm account clear, persisted broker setting change and Azure sign-in")

@@ -63,12 +63,12 @@ func TestLoginChecksVersionAndScopesPickerEnvironment(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = cli.InteractiveLogin(nil)
+			result, err := cli.Login(nil)
 			if version == "2.60.0" {
-				if err == nil || len(fake.Calls) != 1 {
-					t.Fatalf("old CLI login: error=%v, calls=%+v", err, fake.Calls)
+				if err == nil || result.Attempted || len(fake.Calls) != 1 {
+					t.Fatalf("old CLI login: result=%+v error=%v, calls=%+v", result, err, fake.Calls)
 				}
-			} else if err != nil || len(fake.Calls) != 2 ||
+			} else if err != nil || !result.Attempted || len(fake.Calls) != 2 ||
 				!reflect.DeepEqual(fake.Calls[1].Env, []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"}) || !fake.Calls[1].Attached {
 				t.Fatalf("scoped login: error=%v, calls=%+v", err, fake.Calls)
 			}

@@ -121,18 +121,10 @@ func CRLFCheckout(t *testing.T, source string, paths ...string) string {
 	return checkout
 }
 
-// BuildFakeAZ builds the portable fixture process with the active Go toolchain.
+// BuildFakeAZ copies the shared portable fixture into a test-owned directory.
 func BuildFakeAZ(t *testing.T) string {
 	t.Helper()
 	dir := WorkDir(t)
 	Build(t, filepath.Join(dir, ExecutableName("az")), "github.com/whiteducksoftware/azctx/internal/testutil/fakeaz")
 	return dir
-}
-
-func Build(t *testing.T, output, pkg string) {
-	t.Helper()
-	command := exec.Command("go", "build", "-o", output, pkg)
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("build %s: %v\n%s", pkg, err, output)
-	}
 }

@@ -34,7 +34,7 @@ an environment variable or maintainer approval alone cannot bypass it.
   Chocolatey pipe. Snapshots never exercise a real publisher.
 - Conventional commit types form changelog groups, with breaking changes first.
   Mark breaking subjects with `!:` (for example `feat(auth)!: ...`):
-  GoReleaser 2.18.3 groups commit **subjects**, not `BREAKING CHANGE` body footers.
+  GoReleaser 2.19.0 groups commit **subjects**, not `BREAKING CHANGE` body footers.
   Static builds retain `CGO_ENABLED=0`, `-trimpath`, `.CommitTimestamp` and the
   commit-derived binary `BuildDate`.
 
@@ -81,7 +81,7 @@ hack, downloaded runner or alternative publishing platform is substituted.
 
 ### Why there is a separate native Homebrew job
 
-GoReleaser 2.18.3 supports `custom_block`, but places it before `version`. Its
+GoReleaser 2.19.0 supports `custom_block`, but places it before `version`. Its
 raw cask output is **not** Homebrew-style-clean. The Linux job therefore renders
 a derived configuration changing only cask `skip_upload` to `true`. It transfers
 only the generated cask, not metadata or environment files, to a stable-only
@@ -101,13 +101,19 @@ and the normalized cask from the same run, then runs
 a restricted grammar covering only the syntax and stanzas that the current
 GoReleaser template and `brew style --fix` emit, so unrecognized Ruby, such as
 other quoting, interpolation, modifiers, inline comments, calls, extra stanzas
-or blocks like `on_linux`, fails closed instead of being ignored. Every stanza
-must occur exactly once, each architecture's `url` must name its own release
-archive with a lowercase SHA-256, and `postflight_steps` must contain only the
-quarantine-removal `run`. All statements, including their architecture block,
-must then equal the original Linux artifact's; native style may only reorder or
-reformat them. A new GoReleaser or Homebrew output shape therefore needs a
-reviewed parser update. Only after that comparison does it mint the
+or blocks like `on_linux`, fails closed instead of being ignored. Every core
+stanza must occur exactly once, each architecture's `url` must name its own
+release archive with a lowercase SHA-256, and `postflight_steps` must contain
+only the quarantine-removal `run`. The only permitted Ruby symbol is the exact
+root-level `depends_on :macos` declaration that GoReleaser 2.19 emits for a
+macOS-only cask; it may appear at most once and is part of the compared
+statements, so native style can neither add nor remove it. Other symbols,
+platforms and contexts are still rejected. All statements, including their
+architecture block, must then equal the original Linux artifact's; native style
+may only reorder or reformat them. Tests cover both the historical GoReleaser
+2.18.3 fixtures and the current 2.19 output with its native-style normalization.
+A new GoReleaser or Homebrew output shape therefore needs a reviewed parser
+update. Only after that comparison does it mint the
 single-tap contents-write App token and run the Python standard-library
 publisher. Neither Homebrew nor a build tool runs alongside that token.
 The publisher validates the stable tag against the cask
@@ -117,7 +123,7 @@ publishing unverified output.
 
 ### Native Windows restriction and portable publishers
 
-The pinned [Chocolatey pipe](https://github.com/goreleaser/goreleaser/blob/v2.18.3/internal/pipe/chocolatey/chocolatey.go)
+The pinned [Chocolatey pipe](https://github.com/goreleaser/goreleaser/blob/v2.19.0/internal/pipe/chocolatey/chocolatey.go)
 executes `choco pack` during generation and `choco push` during publishing.
 These are native Windows tooling requirements, not requirements of winget's
 GitHub fork upload or GitHub release asset upload. The installed Community
@@ -153,12 +159,12 @@ It has contents-read only and downloads only the digest-checked same-run
 package. `verify_chocolatey.py` checks the package id/version against the tag
 and requires the package to contain only the nuspec, NuGet metadata and
 `tools/chocolateyinstall.ps1`; any other script, helper or binary is rejected.
-That script must match GoReleaser 2.18.3's rendered template exactly, apart
+That script must match GoReleaser 2.19.0's rendered template exactly, apart
 from this release's `azctx_Windows_x86_64.zip` URL and a SHA-256 checksum, so
 other assignments or commands fail closed. It then downloads that
 exact public URL and compares the checksum with the uploaded asset's bytes.
 Only its final `choco push` step receives `CHOCO_API_KEY`, and only after that
-comparison passes. GoReleaser 2.18.3's Chocolatey package embeds only
+comparison passes. GoReleaser 2.19.0's Chocolatey package embeds only
 amd64/386 archives, so the arm64 ZIP is not part of the package.
 
 The remaining unavoidable native `choco push` cannot satisfy #98 enforcement
@@ -172,7 +178,7 @@ workflow for future publishing. No latest promotion is automated; keep
 
 ## Publisher-disabled verification
 
-With the existing Go, GoReleaser 2.18.3, Ruby and Syft installed:
+With the existing Go, GoReleaser 2.19.0, Ruby and Syft installed:
 
 ```sh
 goreleaser check --config .goreleaser.yaml

@@ -1,8 +1,8 @@
 # Development
 
 Read [CONTRIBUTING](../CONTRIBUTING.md) and [AGENTS](../AGENTS.md) first.
-This branch is an unreleased stack layer. Do not merge, tag or publish as part
-of documentation validation. No credentials or real tenant are needed.
+Local checks need no credentials or real tenant, and validating a change never
+requires merging, tagging or publishing.
 
 ## Build and checks
 
@@ -26,9 +26,149 @@ statement-weighted `internal/` coverage >=70%, and the separate uncached native
 or disable scanner failures to make a change pass.
 CI also runs native Linux/macOS/Windows tests, strict actionlint/zizmor,
 module checks, vulnerability policy and fuzz campaigns.
+The real-binary/fake-az E2E suite is included once in each native `make test` run;
+`make e2e` is only a standalone developer subset. Race/coverage instrumentation
+applies to the Go test harness, not its separately built subprocess binaries.
 [Integration tests](integration-tests.md) describes command coverage and the
 manual dedicated-tenant live test (`make live-test`), which maintainers run
 locally and CI never runs. Offline fake runs are not live acceptance.
+
+## Dependency maintenance
+
+[Dependabot](../.github/dependabot.yaml) checks two ecosystems weekly, with up
+to 10 open pull requests each:
+
+- `gomod`: the root Go module, direct and indirect dependencies;
+- `github-actions`: action references in the workflows.
+
+Minor and patch updates are grouped per ecosystem; each major update arrives as
+its own pull request for review. There is no cooldown, ignore rule or
+major-version exclusion. Review updates like any other change with `make check`;
+regenerate goldens or docs only for intentional output changes.
+
+The terminal UI uses the `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`
+and `charm.land/lipgloss/v2` modules. Two Charm modules have no release tags,
+so they stay on reviewed pseudo-versions:
+`github.com/charmbracelet/x/exp/teatest/v2` (tests only) and the indirect
+`github.com/charmbracelet/ultraviolet`. Dependabot cannot offer tagged updates
+for them; review their upstream commits together with Bubble Tea upgrades.
+
+Dependabot cannot update tool versions embedded in workflow inputs
+(`with: version`, `syft-version`), `go install ...@version` commands or the
+preferred Go `toolchain`. Update these seven pins (golangci-lint, actionlint,
+govulncheck, zizmor, GoReleaser, Syft and Go) manually. When upgrading one:
+
+1. Inventory every occurrence: the workflows under
+   `.github/workflows/`, the `toolchain` line in `go.mod`, the contributor
+   `go install` command, the GoReleaser version literal in
+   `.github/scripts/test_release_config.rb` and exact version literals in
+   CONTRIBUTING and the docs. Changing pins in protected release workflows or
+   GoReleaser publishers requires explicit maintainer authorization for narrowly
+   scoped dependency/tool pin maintenance in those files. It does not authorize
+   changes to publication behavior, permissions, secrets or release blockers.
+   Without that authorization, stop and report the protected occurrences; do not
+   change them or leave pins inconsistent. With authorization, update every
+   occurrence together.
+2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
+   are spelled differently, such as "Go 1.27.3" or "GoReleaser 2.19.0". Leave
+   released upgrade-guide history unchanged.
+3. Run `make check` and `make ci-check`.
+
+Compatibility floors are not upgrade targets. The Go 1.26.0 `go` directive,
+Azure CLI 2.61.0 and its immutable minimum image digest stay fixed for the
+manual minimum-versus-latest matrix in [integration tests](integration-tests.md).
+The maintained latest pins are the seven tool pins above, including the
+preferred Go 1.27.3 toolchain and golangci-lint v2.15.0.
+GoReleaser owns the generated package and winget manifest schema versions
+(currently 1.12.0); `check_winget.ps1` fetches Microsoft's schema matching each
+generated `ManifestVersion`. Runner-provided Python, Ruby, PowerShell,
+Homebrew, Chocolatey, Docker and hosted `*-latest` runner images are managed
+by the platform and are not pinned in this repository.
+
+## PR validation binaries
+
+The native `test` job on Linux, macOS and Windows uploads one validation
+binary per runner after `make test` (including its end-to-end suite) passes. Use them to try a
+pull request without building it. They contain proposed, unreviewed code: they
+are not releases, and their checksums detect corruption but are not
+signatures or provenance. Do not expose real credentials or production
+tenants to an unreviewed binary.
+
+Each GitHub artifact is named
+`azctx-validation-<GOHOSTOS>-<GOHOSTARCH>-<full checkout SHA>`, for example
+`azctx-validation-linux-amd64-<sha>`, and holds exactly one
+`<artifact name>.tar.gz`. Artifacts are kept for 14 days unless repository
+policy is shorter. The tar archive contains three root files:
+
+| File | Mode | Content |
+| --- | --- | --- |
+| `azctx` (`azctx.exe` on Windows) | 0755 | `CGO_ENABLED=0`, `-trimpath` native build |
+| `metadata.json` | 0644 | Schema version 1 build metadata |
+| `SHA256SUMS` | 0644 | SHA-256 of the binary and `metadata.json` |
+
+The SHA is the revision that CI actually checked out and tested. **For a pull
+request this is GitHub's test merge commit (`GITHUB_SHA`), not the PR head
+commit**, so do not look for the head SHA in artifact names. The binary reports
+version `0.0.0-validation.<first 12 characters of the SHA>`, the full SHA as its
+commit and the commit's UTC timestamp as its build date. `metadata.json`
+records `schemaVersion`, `kind` (`validation`), `revision`, `revisionSource`
+(`checkout HEAD`), `version`, `buildDate`, `goos`, `goarch`, `binary`,
+`goVersion`, `cgoEnabled` and `trimpath`.
+
+List the artifacts of a completed CI run, then download and extract the one for
+your platform:
+
+```sh
+REPO=whiteducksoftware/azctx
+RUN_ID=<completed-ci-run-id>
+gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+  --jq '.artifacts[] | select(.name | startswith("azctx-validation-")) | .name'
+
+# Copy the full matching name from the list, including its tested checkout SHA.
+ARTIFACT='azctx-validation-darwin-arm64-<full-tested-checkout-sha>'
+gh run download "$RUN_ID" --repo "$REPO" --name "$ARTIFACT" \
+  --dir ./azctx-validation-download
+tar -xzf "./azctx-validation-download/$ARTIFACT.tar.gz" \
+  -C ./azctx-validation-download
+cd ./azctx-validation-download
+```
+
+`gh run download` only unwraps GitHub's outer artifact archive; extract the tar
+before running the binary. Ordinary `tar -xzf` keeps the executable mode, so no
+`chmod` is needed unless your extractor drops Unix permissions. Then verify and
+inspect offline. On Linux:
+
+```sh
+sha256sum -c SHA256SUMS
+./azctx version -o json
+cat metadata.json
+```
+
+On macOS:
+
+```sh
+shasum -a 256 -c SHA256SUMS
+./azctx version -o json
+cat metadata.json
+```
+
+On Windows, extract the `windows` artifact's tar with the built-in `tar -xzf`,
+enter the extraction directory and run:
+
+```powershell
+Get-Content SHA256SUMS | ForEach-Object {
+    $expected, $file = $_ -split '  ', 2
+    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) { throw "SHA256 mismatch: $file" }
+    Write-Output "$file`: OK"
+}
+.\azctx.exe version -o json
+Get-Content metadata.json
+```
+
+Both checksums must pass. The executable's `commit` must equal the metadata
+`revision`, and its `version`, `buildDate` and `goVersion` must equal the same
+metadata fields. None of these steps needs Azure.
 
 ## Generated reference and help
 
@@ -43,7 +183,8 @@ go test ./cmd -run 'TestEveryCommandHasUsefulOfflineHelp|TestAgentDocument'
 go test ./internal/clidocs
 ```
 
-`tools/gendocs` uses `cobra/doc` against an inert command tree with no runner
+`make docs` runs `go run ./internal/cmd/gendocs` and `make docs-check` adds
+`-check`. The command uses `cobra/doc` against an inert command tree with no runner
 or profile initialization. Dates/autogeneration tags are disabled.
 `make docs` rewrites the owned `docs/cli/` file set; never put hand-written files
 there. `make docs-check` compares exact bytes and filenames without rewriting
@@ -78,22 +219,31 @@ files under package-local `.test-work/`, cleaned after tests. No real Azure
 profile, token cache or Azure CLI is touched. Tests that simulate an Azure
 profile refresh do so in the fixture, never through production direct writes.
 
-## Picker capture
+Packages using `testutil.Build`/`BuildFakeAZ` call `testutil.RunTests` from
+`TestMain`. Default builds reuse one successful compilation per package recipe
+within that test process, using the compiler environment and working directory
+captured before tests change them. Requests are synchronized; failed builds
+are reported and can retry. Executables are byte copies, never hard links or
+symlinks, in each test's own layout, so replacement/mutation tests cannot alter
+another fixture. HOME, Azure config, state, fixtures and call logs stay isolated
+per test. Custom-ldflags builds remain independent. Shared build files are
+removed before `TestMain` exits (including failed test runs); cleanup errors
+fail the run. There is no persistent cross-run fixture cache or source-change
+invalidation within a run; ordinary Go's own build cache is unchanged.
 
-The README's static SVG is captured from `ui.NewPicker(...).View()` with
-synthetic GUID-distinct subscriptions, a fixed 160 by 15 terminal, no ANSI
-styling and no live account. It is a static terminal capture, not a demo GIF.
-The wrapper escapes XML and adds only a neutral terminal background.
-Regenerate from the repository root:
+## Demo GIF
 
-```sh
-go run ./tools/pickercapture > assets/img/picker-2026.11.svg
-make golden
-```
+The README's `assets/img/azctx-demo.gif` is a committed static asset. It shows
+the real built-in picker with ten synthetic subscriptions in three tenants
+(dev, staging and production names, invented GUIDs) responding to key presses
+(down, `/`, typing `prod` and `fab`, Escape, Enter). A caption bar names each
+key; the window title labels the demo as synthetic. No Azure CLI call or real
+profile was involved.
 
-`make golden` updates real picker screen goldens at 60, 100 and 160 columns.
-Review changes, run `make check`, and ensure repeat generation is unchanged.
-The capture generator does not change picker production behavior.
+The repository has no generator for the GIF and no test compares it with
+current picker output, so later picker changes are not reflected in it. The
+picker screen goldens at 60, 100 and 160 columns (`make golden`) remain the
+checked reference for picker output.
 
 ## Release process and manual winget PR
 

@@ -34,7 +34,7 @@ func TestDuplicateNamesKeepTenantAndIDAfterPickerSort(t *testing.T) {
 			t.Fatalf("duplicate-name matches=%+v", subscriptions)
 		}
 		picker := ui.NewPicker(subscriptions, 160, 20)
-		view := picker.View()
+		view := picker.View().Content
 		if !strings.Contains(view, "Acme") || !strings.Contains(view, "Zulu") {
 			t.Fatalf("tenant names missing from picker: %s", view)
 		}
