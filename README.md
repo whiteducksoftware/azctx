@@ -37,6 +37,9 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   config      Print effective configuration or its path
   doctor      Show safe, offline Azure CLI diagnostics
+  env         Export a context without changing the Azure CLI default
+  exec        Run a command with a context environment, without switching Azure CLI
+  guard       Check the active context against flags or the nearest .azctx.yaml
   help        Help about any command
   history     Show the last 100 completed subscription switches
   list        List subscriptions
@@ -116,6 +119,18 @@ Protected switches require confirmation or `--yes`; configured hidden entries
 require `--all`. `AZCTX_CONFIG_DIR` isolates azctx configuration and state.
 See [configuration and completion](docs/configuration.md) for the version-1
 schema, deterministic ranking and offline shell completion.
+
+`azctx env [query] --shell bash|zsh|fish|powershell` exports the current or
+explicitly queried subscription/tenant as `ARM_*` and `AZURE_*` context variables.
+`azctx exec QUERY -- COMMAND [ARGS]` sets those variables for one attached
+child without changing Azure CLI's default or the parent environment.
+`az` itself ignores these context variables: always pass `--subscription`.
+`azctx guard` checks the nearest strict `.azctx.yaml`, or explicit
+`--subscription`/`--tenant` flags, and exits 4 on a mismatch. Project files
+never trigger switching or login. Human `azctx -c` warns on mismatches;
+JSON/plain-field output stays unchanged. See the draft
+[CI/CD guide](docs/ci-cd.md) for pipeline exports, OIDC, workload identity,
+device-code devcontainers and process/guard contracts.
 
 `azctx tenant [query]` chooses a GUID-distinct tenant first, then a subscription
 within it; a unique tenant with one subscription switches directly. No-input

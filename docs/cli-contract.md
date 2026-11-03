@@ -13,12 +13,15 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | --- | --- |
 | `azctx` | Open the subscription picker when input is interactive; otherwise print the same table as `azctx list`. |
 | `azctx <query> [--all] [--yes]` | Switch by subscription name, alias, subscription ID or `tenant/subscription`. Successful switches are quiet. Protected targets require confirmation or `--yes`. |
-| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `tenant`, `history`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
+| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `tenant`, `history`, `env`, `exec`, `guard`, `login`, `alias`, `config`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
 | `azctx -` | Switch to the previous subscription, preserving the layer-06 private-state/rollback behavior. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
 | `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
 | `azctx tenant [query] [--all] [--yes]` | Select a GUID-distinct tenant, then a subscription within it. A unique tenant with one selectable subscription switches directly. Queries support text/JSON output; no-input/JSON ambiguities exit 2 with subscription candidates. Bare no-input or explicit table/JSON output lists subscriptions, with `--all` enabling inspection only of Azure-filtered entries. |
 | `azctx history [-o text\|json]` | Read the last 100 completed switches, newest first, without loading a profile or running Azure CLI. Separate schema-1 JSON; see [configuration](configuration.md#completed-switch-history). |
+| `azctx env [query] [--shell bash\|zsh\|fish\|powershell] [--format github\|azure-devops]` | Export exactly four subscription/tenant context variables without switching. Default: current context, bash. Shell and pipeline format flags are mutually exclusive. GitHub appends to existing `GITHUB_ENV`; DevOps prints logging commands. Default/text output only. |
+| `azctx exec <query> -- <cmd> [args]` | Resolve one command once, without a shell; attach streams and override only the four child context variables. Preserve child status/signals without extra diagnostics. Default/text/JSON affect azctx preflight errors only; child output is untouched. |
+| `azctx guard [--subscription <q>] [--tenant <q>] [-o text\|json]` | Check the actual active context against supplied dimensions or, with neither flag, the nearest strict `.azctx.yaml`. Silent on match; mismatch 4 (`context_mismatch`), no project/malformed project 1, unresolved/ambiguous query 2. No mutation or prompts. |
 | `azctx version [-o text\|json]` | Print version information, without loading the Azure profile or checking for updates. Its existing version JSON is unchanged. |
 | `azctx login [--use-device-code] [--tenant <name\|id> \| --all-tenants] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, attach login streams including live stderr capture, then offer one confirmation for failed MFA tenants. `--all-tenants` explicitly discovers tenant GUIDs and signs in individually. Disable Azure CLI's subscription picker only in login children. Supports default/text output, not subscription JSON. |
 | `azctx auth broker status` | Read effective platform broker settings and check Azure CLI availability, without a profile or mutations. Default/text output only. |
@@ -71,6 +74,23 @@ previous-state capture use the same resolved selection. Current entries hidden
 by Azure cloud/state policy remain hidden in ordinary current output.
 Configured hiding does not conceal the actual current subscription; protected
 current text gains `[protected]`, without changing JSON or plain-field formats.
+Human current output also warns about a mismatching or invalid nearest project
+file; JSON and plain-field modes do not read the project file.
+
+Environment/exec query resolution uses the pure selection catalog, never the
+switch/picker orchestration; ambiguity always fails even on a TTY. Protection
+requires no confirmation for a read-only export. `--all` exposes configured
+hidden candidates only, not Azure-filtered accounts. An omitted env query uses
+the actual current context (including configured hidden entries). Both IDs are
+validated as GUIDs before any export/child process. These commands require a
+profile but not an installed `az`, never read previous/recent/history state,
+and never invoke Azure, login, updates or switch side effects.
+
+Project files are expectations, never commands; they cannot drive target
+selection or login. See [project configuration](configuration.md#project-context)
+for strict parsing and [CI/CD](ci-cd.md) for exact exports and pipeline timing.
+Azure CLI ignores the context variables: use `--subscription` even in `exec`.
+Explicitly requested child commands own their output and side effects.
 
 Tables and picker labels distinguish user, service principal, system-assigned
 identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
@@ -157,12 +177,13 @@ boundary for handler failures, Cobra flag/argument errors and interruptions.
 | 1 | Error, including invalid arguments/formats, profile/state failures, login preflight/discovery errors and non-login Azure subprocess errors |
 | 2 | No subscription match, unavailable previous subscription, or ambiguous match when input is disabled |
 | 3 | Azure sign-in failed, or one or more tenant sign-ins remain unresolved (including partial success, no-input, declined/unreadable confirmation) |
-| 4 | Reserved: guard found a different context (layer 13) |
+| 4 | Guard found a different subscription or tenant context |
 | 130 | Canceled with Ctrl+C or an explicitly canceled command context |
 
-Statuses 3 and 4 are supported/tested through the typed `cmd.ExitError` boundary;
-this layer does not add future sign-in or guard behavior. Missing previous state
-is an error (1), not a query with no match. Escape/ordinary picker cancellation is
+Sign-in and guard failures use the typed `cmd.ExitError` boundary. An attached
+`exec` child instead returns its own status (which can be any exit code), or
+`128 + signal` on Unix; explicitly canceled execution returns 130.
+Missing previous state is an error (1), not a query with no match. Escape/ordinary picker cancellation is
 an error (1); Ctrl+C remains 130. A Ctrl+C byte in a redirected input stream is
 not a terminal interrupt and never opens a picker.
 
@@ -205,8 +226,10 @@ Consumers should tolerate additive fields and inspect `schemaVersion`.
 
 ## Error JSON
 
-With `-o json`/`--output=json`, every failure, including Cobra parse errors,
-is one object on stderr:
+With `-o json`/`--output=json`, azctx failures, including Cobra parse errors,
+are one object on stderr. An attached `exec` child owns its own streams and
+nonzero status; no additional JSON/error is appended after child diagnostics.
+Preflight exec failures still use this envelope:
 
 ```json
 {"code":"no_match","message":"no azure subscription found for 'missing'","exit_code":2}
