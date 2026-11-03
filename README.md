@@ -64,6 +64,9 @@ choco install azctx --version=2026.11.0
 winget install --exact --id whiteducksoftware.azctx --version 2026.11.0
 ```
 
+The macOS cask depends on Homebrew's `azure-cli` cask and installs Azure CLI
+through Homebrew if it is missing.
+
 On Linux, download the release archive for your architecture,
 `azctx_Linux_x86_64.tar.gz` (amd64), `azctx_Linux_arm64.tar.gz` or
 `azctx_Linux_armv6.tar.gz`, and the release checksum file. Verify both the
