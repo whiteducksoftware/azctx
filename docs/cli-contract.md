@@ -119,9 +119,39 @@ This is conservative heuristic filtering, not a guarantee that arbitrary
 unlabelled secrets can be recognized. Azure CLI stdout remains a data stream;
 explicit `exec` children keep all their own streams unchanged.
 
-Ctrl+C restores the built-in picker's cursor and exits 130. Login and `exec`
-forward interruption to the direct child, with a two-second kill fallback on
-context cancellation. Windows uses a child console process group and Ctrl+Break.
+Ctrl+C restores the built-in picker's cursor and exits 130. Switching, login,
+MFA retries and confirmation reads use a signal-aware command context; an
+interrupted Azure CLI returning 1 still produces azctx status 130, stops tenant
+retries and restores azctx's exact previous/MRU state on a failed switch.
+Declining or accepting the default `N` at the protected-switch prompt exits 1
+with `switch canceled; no changes made`, so `azctx prod && command` never
+continues; other declined confirmations retain their existing status.
+
+On Unix, a private supervisor and the attached command share a separate process
+group. When stdin is azctx's controlling terminal and azctx owns its foreground
+group, the child group temporarily owns the foreground terminal;
+stdin/stdout/stderr remain attached, not proxied through a
+replacement terminal. The supervisor observes terminal group signals without
+forwarding them again. Signals addressed to azctx's PID are forwarded to the
+child group once. The original foreground group is restored after the command.
+Restoration and parent-side terminal output also work in ordinary shell jobs
+with `TOSTOP` enabled, without changing process signal dispositions or existing
+signal subscriptions. An inherited noncontrolling terminal or background wrapper
+does not claim foreground ownership; the isolated child group and PID-directed
+signal forwarding still work. Background programs remain subject to the shell's
+normal terminal read restrictions.
+An interrupt gets a two-second grace period; a second interrupt kills promptly.
+Cancellation also cleans up the interrupted child group. Windows uses a child
+console process group and Ctrl+Break, with the same bounded direct-child kill.
+Protected, broker and tenant prompts can be canceled without closing stdin,
+including native Windows console reads.
+Windows confirmation echo follows accepted edits: backspace/delete on an empty
+answer does not erase the prompt, and a raw Ctrl+C cancels without being echoed.
+
+A successful child whose descendant holds an inherited stderr pipe is not a
+failed login: the two-second pipe-drain timeout is ignored only when the process
+succeeded. Real process failures, stderr flush failures and cancellation remain
+errors. Ordinary `exec` child exits and Unix signal statuses remain unchanged.
 This does not supervise an arbitrary descendant process tree.
 
 Tables and picker labels distinguish user, service principal, system-assigned
@@ -129,6 +159,13 @@ identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
 with their state marked. Nonempty different home/token tenant IDs mark delegated
 Azure Lighthouse access; `managedByTenants` alone does not imply delegation.
 Tenant labels prefer the display name, then default domain, then tenant ID.
+Built-in and fzf picker cells, subscription tables, current text, protected
+confirmation and human error/switch diagnostics replace each Unicode control
+character with a space before layout or styling. Tabs, newlines, terminal
+escape characters and C1 controls in profile values cannot create extra rows,
+columns or terminal commands. Ordinary Unicode text is preserved. This is
+display-only: matching, selected identities, schema-1 JSON, plain-field current
+formats, environment exports and raw `exec` streams retain their original values.
 Human lists, current text and pickers emit one line suggesting `az login` only
 when a displayed record lacks both usable modern tenant fields. Current output
 checks only the current record; narrowed pickers check only their candidates.
@@ -196,6 +233,9 @@ schema and safety boundaries are in [authentication](authentication.md).
   JSON mode also suppresses them.
   The inherited daily cache and two-second deadline remain; a check failure
   cannot fail a successful switch. Listing/current/version never check updates.
+  A future cache `checkedAt` is expired (including cached failed attempts), so
+  clock rollback cannot suppress the next eligible check. Offline cached status
+  marks the same future timestamp stale; a refreshed attempt uses the current clock.
   Doctor only reads an existing private update cache; it never checks the
   network, creates cache files or acquires update locks.
 
@@ -207,7 +247,7 @@ boundary for handler failures, Cobra flag/argument errors and interruptions.
 | Code | Meaning |
 | --- | --- |
 | 0 | Success |
-| 1 | Error, including invalid arguments/formats, profile/state failures, login preflight/discovery errors and non-login Azure subprocess errors |
+| 1 | Error, including invalid arguments/formats, profile/state failures, a declined or unconfirmed protected switch, login preflight/discovery errors and non-login Azure subprocess errors |
 | 2 | No subscription match, unavailable previous subscription, or ambiguous match when input is disabled |
 | 3 | Azure sign-in failed, or one or more tenant sign-ins remain unresolved (including partial success, no-input, declined/unreadable confirmation) |
 | 4 | Guard found a different subscription or tenant context |
@@ -295,7 +335,7 @@ Tokens after `--` are never output flags, including forwarded login arguments.
 | `CI` | Presence, even empty, disables picker input and optional update checks. |
 | `NO_COLOR` | Presence, even empty, disables azctx colors on all streams. |
 | `AZCTX_NO_UPDATE_CHECK=1` | Disable optional update checks. |
-| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml`, `state.json`, `history.json` and its private lock; must remain outside Azure configuration, including symlink targets. |
+| `AZCTX_CONFIG_DIR` | Override the azctx directory for `config.yaml`, `state.json`, `history.json` and their private locks; must remain outside Azure configuration, including symlink targets. |
 | `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `APPDATA` | Platform-standard user configuration resolution for private config and previous/recent subscription state. |
 | `XDG_CACHE_HOME`, `LOCALAPPDATA` | Platform-standard user cache resolution for update-check data (with the platform's home-directory fallback). |
 

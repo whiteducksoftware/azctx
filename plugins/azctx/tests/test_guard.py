@@ -123,6 +123,18 @@ class GuardTests(unittest.TestCase):
                 self.assertNotIn("never echo", reason)
                 self.assertEqual(len(reason.splitlines()), 1)
 
+    def test_exec_wrapper_bypasses_hook_even_when_guard_would_fail(self):
+        self.run_mock.return_value = subprocess.CompletedProcess([], 4)
+        for command in (
+            "azctx exec 11111111-1111-1111-1111-111111111111 -- terraform apply",
+            "azctx --no-input exec 11111111-1111-1111-1111-111111111111 -- azd up",
+            "azctx exec 11111111-1111-1111-1111-111111111111 -- az group list",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.invoke(command), (0, ""))
+        self.run_mock.assert_not_called()
+        self.which_mock.assert_not_called()
+
     def test_missing_azctx_allows_with_one_notice(self):
         self.which_mock.return_value = None
         code, notice = self.invoke()

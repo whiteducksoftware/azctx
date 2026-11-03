@@ -52,8 +52,9 @@ The [Makefile](Makefile) is the source of truth for available targets.
 `internal/` coverage of at least 70%; there is no `cmd/` gate. They then run the
 mandatory native completion performance gate, separately from instrumentation.
 CI publishes the profile separately for each OS. See [integration tests](docs/integration-tests.md)
-for the command coverage map, coverage policy and explicitly opt-in dedicated
-tenant nightly. A skipped or unconfigured nightly is not verified live acceptance.
+for the command coverage map, coverage policy and the manual live Azure test
+(`make live-test`), which maintainers run locally against a dedicated test
+tenant; CI never runs it. Offline fake runs are not live acceptance.
 Lint explicitly enables `errcheck` (including type assertions), `govet`,
 `revive`, `gocritic`, `nilerr` and `errorlint` (including error assertions).
 Fuzz seeds run with ordinary tests; `make fuzz` additionally mutates each

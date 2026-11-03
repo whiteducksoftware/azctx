@@ -105,7 +105,7 @@ func confirmTenantLogin(command *cobra.Command, count int) (bool, error) {
 	if _, err := fmt.Fprintf(command.ErrOrStderr(), "Sign in to these %d tenants now? [Y/n] ", count); err != nil {
 		return false, err
 	}
-	answer, err := readConfirmation(command.InOrStdin())
+	answer, err := readConfirmation(command.Context(), command.InOrStdin())
 	if err != nil {
 		return false, signInFailed("tenant sign-in incomplete; could not read confirmation", err)
 	}
