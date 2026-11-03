@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 )
 
@@ -83,6 +84,9 @@ func Build(t *testing.T, output, pkg string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A concurrent fork must not inherit the executable while it is writable.
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
 	destination, err := os.OpenFile(output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
 		t.Fatal(errors.Join(err, source.Close()))
