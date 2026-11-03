@@ -203,7 +203,11 @@ func selectOrdered(subscriptions []profile.Subscription, tenants bool) (int, err
 	if err != nil {
 		return -1, err
 	}
-	return result.(Picker).Selection()
+	final, ok := result.(Picker)
+	if !ok {
+		return -1, errors.New("unexpected picker result")
+	}
+	return final.Selection()
 }
 
 type subscriptionDelegate struct {
@@ -216,7 +220,11 @@ func (subscriptionDelegate) Height() int                         { return 1 }
 func (subscriptionDelegate) Spacing() int                        { return 0 }
 func (subscriptionDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
 func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, index int, item list.Item) {
-	subscription := item.(subscriptionItem).subscription
+	row, ok := item.(subscriptionItem)
+	if !ok {
+		return
+	}
+	subscription := row.subscription
 	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription))
 	prefix := "  "
 	style := lipgloss.NewStyle()

@@ -1,7 +1,7 @@
-.PHONY: build lint test check golden agent-check
+.PHONY: build lint test check golden agent-check fuzz
 
 build:
-	go build .
+	CGO_ENABLED=0 go build -trimpath .
 
 lint:
 	golangci-lint run --config .golangci.yml
@@ -16,3 +16,8 @@ agent-check:
 
 golden:
 	go test ./internal/ui -count=1 -update
+
+fuzz:
+	go test ./internal/profile -run '^$$' -fuzz '^FuzzProfile$$' -fuzztime=60s
+	go test ./internal/config -run '^$$' -fuzz '^FuzzConfig$$' -fuzztime=60s
+	go test ./internal/project -run '^$$' -fuzz '^FuzzProject$$' -fuzztime=60s

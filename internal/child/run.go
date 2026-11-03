@@ -38,13 +38,13 @@ func Run(ctx context.Context, name string, args, env []string, streams Streams) 
 	command.Args[0] = name
 	command.Env = environment(env)
 	command.Stdin, command.Stdout, command.Stderr = streams.Stdin, streams.Stdout, streams.Stderr
-	err = runAttached(command)
+	err = RunAttached(command)
 	if ctx.Err() != nil {
 		return 130, ctx.Err()
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
-		return processStatus(exit.ProcessState), nil
+		return ExitCode(exit.ProcessState), nil
 	}
 	if err != nil {
 		return 0, fmt.Errorf("start command %q: %w", name, err)
@@ -52,7 +52,9 @@ func Run(ctx context.Context, name string, args, env []string, streams Streams) 
 	return 0, nil
 }
 
-func runAttached(command *exec.Cmd) error {
+// RunAttached starts an already-resolved command with signal forwarding and a
+// bounded cancellation grace period. It never resolves or rewrites its argv.
+func RunAttached(command *exec.Cmd) error {
 	configureProcess(command)
 	command.WaitDelay = 2 * time.Second
 	signals := make(chan os.Signal, 1)

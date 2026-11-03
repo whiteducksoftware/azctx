@@ -17,6 +17,15 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
+func requirePicker(t *testing.T, value tea.Model) ui.Picker {
+	t.Helper()
+	picker, ok := value.(ui.Picker)
+	if !ok {
+		t.Fatal("final model is not a picker")
+	}
+	return picker
+}
+
 const productionID = "11111111-1111-1111-1111-111111111111"
 
 type replayFilterMsg list.FilterMatchesMsg
@@ -29,10 +38,9 @@ type filterReplayModel struct {
 
 func (model filterReplayModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	notify := false
-	switch message := message.(type) {
-	case list.FilterMatchesMsg:
-		if len(message) > 1 {
-			model.delayed <- message
+	if matches, ok := message.(list.FilterMatchesMsg); ok {
+		if len(matches) > 1 {
+			model.delayed <- matches
 			return model, nil
 		}
 		notify = true
@@ -41,7 +49,11 @@ func (model filterReplayModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		message = list.FilterMatchesMsg(replay)
 	}
 	updated, command := model.Picker.Update(message)
-	model.Picker = updated.(ui.Picker)
+	picker, ok := updated.(ui.Picker)
+	if !ok {
+		panic("picker fixture returned an unexpected model")
+	}
+	model.Picker = picker
 	if notify {
 		model.applied <- struct{}{}
 	}
@@ -71,7 +83,11 @@ func TestPickerIgnoresOutOfOrderFilterResults(t *testing.T) {
 	model.Send(replayFilterMsg(stale))
 	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(filterReplayModel).Picker
+	replayed, ok := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(filterReplayModel)
+	if !ok {
+		t.Fatal("final model is not the replay fixture")
+	}
+	final := replayed.Picker
 	index, err := final.Selection()
 	if err != nil || index != 1 || strings.Contains(final.View(), "Development Engineering Platform") {
 		t.Fatalf("stale filter replaced the current query: selection=%d, %v; view=%s", index, err, final.View())
@@ -85,7 +101,7 @@ func TestPickerNarrowLongName(t *testing.T) {
 		return bytes.Contains(output, []byte("界"))
 	}, teatest.WithDuration(3*time.Second))
 	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+	final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 	for _, line := range strings.Split(final.View(), "\n") {
 		if lipgloss.Width(line) > 60 {
 			t.Fatalf("wide name overflows a narrow terminal: %q (%d cells)", line, lipgloss.Width(line))
@@ -111,7 +127,7 @@ func TestPickerFuzzyFilterAndInterrupt(t *testing.T) {
 	}, teatest.WithDuration(3*time.Second))
 	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+	final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 	index, err := final.Selection()
 	if err != nil || index != 1 || strings.Contains(final.View(), "Development Engineering Platform") {
 		t.Fatalf("fuzzy selection = %d, %v; view=%s", index, err, final.View())
@@ -119,7 +135,7 @@ func TestPickerFuzzyFilterAndInterrupt(t *testing.T) {
 
 	interrupted := teatest.NewTestModel(t, ui.NewPicker(nil, 60, 10), teatest.WithInitialTermSize(60, 10))
 	interrupted.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
-	final = interrupted.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+	final = requirePicker(t, interrupted.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 	if index, err := final.Selection(); index != -1 || !errors.Is(err, ui.ErrInterrupted) {
 		t.Fatalf("interrupted selection = %d, %v", index, err)
 	}
@@ -138,7 +154,7 @@ func TestPickerColumns(t *testing.T) {
 			}, teatest.WithDuration(3*time.Second))
 			model.Send(tea.KeyMsg{Type: tea.KeyDown})
 			model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-			final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+			final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 			index, err := final.Selection()
 			if err != nil || index != 1 || subscriptions[index].Id != productionID {
 				t.Fatalf("selection = %d, %v; subscriptions=%+v", index, err, subscriptions)

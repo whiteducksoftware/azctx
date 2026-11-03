@@ -24,6 +24,7 @@ make test   # Tests alone
 make build  # Build the azctx executable
 make golden # Update picker screen goldens; review and commit intentional changes
 make agent-check # Offline Python hook tests (also included in test/check)
+make fuzz   # Profile, config and project parsers, 60 seconds each (also in CI)
 ```
 
 Python 3.10+ (`python3` on PATH) is required for the agent hook tests. Go tests
@@ -37,6 +38,15 @@ an unavailable CLI as a manual acceptance limitation rather than a pass.
 See the draft [AI agent guide](docs/ai-agents.md) for installation and limits.
 
 The [Makefile](Makefile) is the source of truth for available targets.
+Lint explicitly enables `errcheck` (including type assertions), `govet`,
+`revive`, `gocritic`, `nilerr` and `errorlint` (including error assertions).
+Fuzz seeds run with ordinary tests; `make fuzz` additionally mutates each
+parser's corpus for its own 60-second campaign. Use only synthetic input.
+`make build` disables CGO and strips source paths. Both GoReleaser build
+configurations also use `-trimpath`, `CGO_ENABLED=0`, commit-derived binary
+modification timestamps and a commit-derived `BuildDate`, not wall-clock time.
+These settings do not publish anything or change release workflow permissions.
+
 Tests use injected dependencies and a portable fake `az`; no Azure CLI
 installation, Azure login, real tenant or credentials are needed for checks.
 Keep fixtures synthetic and follow the boundaries in [AGENTS.md](AGENTS.md).

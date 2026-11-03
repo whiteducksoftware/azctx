@@ -82,13 +82,14 @@ func TestUpdateEnvironmentAndTerminalGates(t *testing.T) {
 			defer server.Close()
 			var output bytes.Buffer
 			checker := testChecker(t, server, &output)
-			if gate == "pipe" {
+			switch gate {
+			case "pipe":
 				checker.IsTerminal = func() bool { return false }
-			} else if gate == "CI" {
+			case "CI":
 				t.Setenv(gate, "false")
-			} else if gate == "empty CI" {
+			case "empty CI":
 				t.Setenv("CI", "")
-			} else {
+			default:
 				t.Setenv(gate, "1")
 			}
 			if err := checker.Check("owner", "repo"); err != nil {
