@@ -115,7 +115,16 @@ azctx list --all -o json
 azctx help
 ```
 
-Bare azctx lists when input is disabled. Successful switches are quiet.
+Bare azctx lists when input is disabled. Successful switches print
+`✓ Switched to <sub> (<subId>) in tenant <tenant> (<tenantId>)` on stderr
+(` [protected]` for protected targets); `-o json` keeps switches quiet.
+Pickers, current text and subscription tables use color only on their target
+TTY stream, and never with `NO_COLOR`. Login hides Azure CLI's subscription
+JSON by default while device codes/browser notices stay live on stderr; pass
+`-o`, `--output` or `--query` after `--` to retain login stdout.
+Only interactive text `azctx version` checks for updates (two-second deadline),
+not switching. `version -o json` and `doctor` remain offline; see
+[update opt-outs](docs/configuration.md).
 `--all` permits inspection, not switching to disabled or other-cloud accounts.
 See [the generated command reference](docs/cli/azctx.md) and
 [the CLI contract](docs/cli-contract.md) for all formats and exit statuses.

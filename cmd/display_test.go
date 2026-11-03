@@ -80,6 +80,25 @@ func TestHumanSubscriptionDisplaysFlattenControls(t *testing.T) {
 	}
 }
 
+func TestSuccessfulProtectedSwitchFeedbackIsSanitizedAndJSONQuiet(t *testing.T) {
+	for _, jsonOutput := range []bool{false, true} {
+		fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
+		deps := tenantDependencies(t, fake, []profile.Subscription{displaySubscription()})
+		writeSelectionConfig(t, "protected: ["+productionID+"]\n")
+		args := []string{confirmFlag, productionID}
+		want := "✓ Switched to " + safeDisplayName + " (" + productionID + ") in tenant " + safeTenantLabel + " (" + tenantID + ") [protected]\n"
+		if jsonOutput {
+			args = append(args, outputFlag, jsonFormat)
+			want = ""
+		}
+		var stdout, stderr bytes.Buffer
+		code := cmd.Run(args, deps, strings.NewReader(""), &stdout, &stderr)
+		if code != 0 || stdout.Len() != 0 || stderr.String() != want || len(fake.Calls) != 1 || fake.Calls[0].Args[3] != productionID {
+			t.Fatalf("code=%d stdout=%q stderr=%q calls=%+v", code, &stdout, &stderr, fake.Calls)
+		}
+	}
+}
+
 func TestListTableFlattensAllProfileColumns(t *testing.T) {
 	sub := displaySubscription()
 	sub.Id, sub.TenantName = "id\tvalue", "tenant\nvalue"

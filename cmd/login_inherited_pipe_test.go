@@ -30,7 +30,7 @@ func TestBinaryLoginSucceedsWithInheritedStderrPipe(t *testing.T) {
 		t.Fatal(err)
 	}
 	cleanProcess(t, command, cancel)
-	if err := command.Wait(); err != nil || ctx.Err() != nil || stdout.Len() != 0 || !strings.Contains(stderr.String(), "Successfully fetched") {
+	if err := command.Wait(); err != nil || ctx.Err() != nil || stdout.Len() != 0 || !strings.Contains(stderr.String(), "✓ Signed in:") {
 		t.Fatalf("login failed after successful child exit: error=%v stdout=%q stderr=%q context=%v", err, &stdout, &stderr, ctx.Err())
 	}
 	if time.Since(started) < 2*time.Second {

@@ -62,7 +62,7 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		{args: []string{currentFlag}, text: "Active subscription:", data: true},
 		{args: []string{versionCommand}, text: "azctx version ", data: true},
 		{args: []string{versionCommand, outputFlag, jsonFormat}, text: `"goVersion":"go`, data: true},
-		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 1 tenants and 2 subscriptions."},
+		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "✓ Signed in: 1 tenants, 2 subscriptions\n"},
 		{args: []string{loginCommand}, code: 3, text: "Azure CLI sign-in failed; see its attached output"},
 		{args: []string{productionName}},
 		{args: []string{"-"}, code: 1, text: "no previous subscription found"},

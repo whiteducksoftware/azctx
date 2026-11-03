@@ -74,7 +74,7 @@ func testFirstLogin(t *testing.T, existingDir bool, version string) {
 	code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr)
 	supported := version == supportedAzureVersion
 	if supported {
-		if code != 0 || !strings.Contains(stderr.String(), "Successfully fetched 1 tenants and 2 subscriptions.") {
+		if code != 0 || !strings.Contains(stderr.String(), "✓ Signed in: 1 tenants, 2 subscriptions\n") {
 			t.Fatalf("first login: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 		}
 	} else if code != 1 || !strings.Contains(stderr.String(), "2.61.0 or newer is required") {

@@ -11,6 +11,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/paginator"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -18,6 +19,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
 var (
@@ -39,6 +41,7 @@ func (item subscriptionItem) FilterValue() string {
 type Picker struct {
 	list     list.Model
 	delegate subscriptionDelegate
+	height   int
 	selected int
 	err      error
 }
@@ -81,7 +84,11 @@ func newOrderedPicker(subscriptions []profile.Subscription, width, height int) P
 	picker.list = list.New(items, delegate, max(1, width), max(1, height))
 	picker.list.Filter = filterSubscriptions
 	picker.list.DisableQuitKeybindings()
+	picker.list.SetShowTitle(false)
+	picker.list.SetShowFilter(false)
 	picker.list.SetShowStatusBar(false)
+	picker.list.SetShowPagination(false)
+	picker.list.SetShowHelp(false)
 	picker.setStyles(true)
 	picker.resize(width, height)
 	return picker
@@ -127,7 +134,9 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		picker.resize(message.Width, message.Height)
 	case tea.ColorProfileMsg:
-		if message.Profile >= colorprofile.ANSI {
+		picker.setColorProfile(message.Profile)
+		picker.list.SetDelegate(picker.delegate)
+		if picker.delegate.color {
 			// ST avoids a BEL byte, including on terminals without OSC support.
 			return picker, tea.Raw("\x1b]11;?\x1b\\")
 		}
@@ -164,18 +173,73 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		picker.list.SetFilterState(state)
 		picker.list.FilterInput.SetCursor(cursor)
 	}
+	picker.fit()
 	return picker, command
 }
 
+func (picker *Picker) setColorProfile(profile colorprofile.Profile) {
+	_, noColor := os.LookupEnv("NO_COLOR")
+	picker.delegate.color = profile >= colorprofile.ANSI && !noColor
+}
+
 func (picker *Picker) resize(width, height int) {
-	picker.list.SetSize(max(1, width), max(1, height))
-	picker.list.Title = "  " + picker.delegate.row(width, "Name", "Subscription ID", "Tenant")
+	picker.height = max(1, height)
+	picker.list.SetWidth(max(1, width))
+	header := picker.delegate
+	header.color = false
+	picker.list.Title = "  " + header.row(width, "Name", "Subscription ID", "Tenant", false)
 	if picker.delegate.tenants {
-		picker.list.Title = "  " + picker.delegate.row(width, "Tenant", "Tenant ID", "Domain")
+		picker.list.Title = "  " + header.row(width, "Tenant", "Tenant ID", "Domain", false)
+	}
+	picker.fit()
+}
+
+func (picker *Picker) fit() {
+	picker.list.SetHeight(max(1, min(10, len(picker.list.VisibleItems()))))
+	// A shorter body can add pages and expand the pagination/full-help footer.
+	for {
+		available := max(1, picker.height-lipgloss.Height(picker.headerView())-lipgloss.Height(picker.footerView()))
+		if picker.list.Height() <= available {
+			return
+		}
+		picker.list.SetHeight(available)
 	}
 }
 
-func (picker Picker) View() tea.View { return tea.NewView(picker.list.View()) }
+func (picker Picker) headerView() string {
+	header := picker.list.Styles.Title.Render(picker.list.Title)
+	if picker.list.FilterState() == list.Filtering {
+		header += "\n" + picker.list.FilterInput.View()
+	}
+	return picker.list.Styles.TitleBar.Render(header)
+}
+
+func (picker Picker) footerView() string {
+	footer := picker.list.Styles.HelpStyle.Render(picker.list.Help.View(picker.list))
+	if picker.list.Paginator.TotalPages > 1 {
+		pager := picker.list.Paginator
+		pagination := pager.View()
+		if lipgloss.Width(pagination) > picker.list.Width() {
+			pager.Type = paginator.Arabic
+			pagination = picker.list.Styles.ArabicPagination.Render(pager.View())
+		}
+		footer = picker.list.Styles.PaginationStyle.MarginTop(1).Render(pagination) + "\n" + footer
+	}
+	return footer
+}
+
+func (picker Picker) View() tea.View {
+	header := lipgloss.NewStyle().MaxHeight(max(1, picker.height-1)).Render(picker.headerView())
+	if picker.height == 1 {
+		return tea.NewView(header)
+	}
+	body := picker.list.View()
+	sections := []string{header, body}
+	if available := picker.height - lipgloss.Height(header) - lipgloss.Height(body); available > 0 {
+		sections = append(sections, lipgloss.NewStyle().MaxHeight(available).Render(picker.footerView()))
+	}
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, sections...))
+}
 
 // Selection reports the chosen sorted index, or cancellation/interruption.
 func (picker Picker) Selection() (int, error) { return picker.selected, picker.err }
@@ -197,8 +261,7 @@ func SelectTenantsOrdered(tenants []profile.Subscription) (int, error) {
 
 func selectOrdered(subscriptions []profile.Subscription, tenants bool) (int, error) {
 	options := []tea.ProgramOption{tea.WithOutput(os.Stderr)}
-	_, noColor := os.LookupEnv("NO_COLOR")
-	if noColor || !term.IsTerminal(int(os.Stderr.Fd())) {
+	if !log.ColorEnabled(os.Stderr) {
 		options = append(options, tea.WithColorProfile(colorprofile.NoTTY))
 	}
 	width, height, err := term.GetSize(int(os.Stderr.Fd()))
@@ -233,6 +296,7 @@ type subscriptionDelegate struct {
 	nameWidth   int
 	tenantWidth int
 	tenants     bool
+	color       bool
 }
 
 func (subscriptionDelegate) Height() int                         { return 1 }
@@ -244,34 +308,47 @@ func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, 
 		return
 	}
 	subscription := row.subscription
-	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription))
+	selected := index == model.Index()
+	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription), selected)
 	prefix := "  "
 	style := lipgloss.NewStyle()
-	if index == model.Index() {
+	if selected {
 		prefix = "▸ "
-		style = style.Bold(true).Foreground(lipgloss.Color("2"))
+		if delegate.color {
+			style = style.Bold(true)
+		}
 	}
-	_, _ = fmt.Fprint(writer, style.Render(prefix+line))
+	_, _ = fmt.Fprint(writer, style.Render(prefix)+line)
 }
 
-func (delegate subscriptionDelegate) row(width int, name, id, tenant string) string {
+func (delegate subscriptionDelegate) row(width int, name, id, tenant string, selected bool) string {
 	name, id, tenant = DisplayText(name), DisplayText(id), DisplayText(tenant)
+	style := lipgloss.NewStyle()
+	if delegate.color && selected {
+		style = style.Bold(true)
+	}
+	nameStyle, idStyle, tenantStyle := style, style, style
+	if delegate.color {
+		nameStyle = nameStyle.Foreground(lipgloss.Color("2"))
+		idStyle = idStyle.Foreground(lipgloss.Color("6"))
+		tenantStyle = tenantStyle.Faint(true)
+	}
 	if delegate.tenants {
 		nameWidth := min(delegate.nameWidth, max(1, width-2-3-36))
-		line := singleLineCell(name, nameWidth) + " | " + id
+		line := nameStyle.Render(singleLineCell(name, nameWidth)) + style.Render(" | ") + idStyle.Render(id)
 		if width >= 2+nameWidth+3+36+3+delegate.tenantWidth {
-			line += " | " + tenant
+			line += style.Render(" | ") + tenantStyle.Render(tenant)
 		}
 		return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 	}
 	nameWidth := min(delegate.nameWidth, max(1, width-2))
-	line := singleLineCell(name, nameWidth)
+	line := nameStyle.Render(singleLineCell(name, nameWidth))
 	tenantWidth := delegate.tenantWidth
 	switch {
 	case width >= 2+nameWidth+3+36+3+tenantWidth:
-		line += " | " + singleLineCell(id, 36) + " | " + tenant
+		line += style.Render(" | ") + idStyle.Render(singleLineCell(id, 36)) + style.Render(" | ") + tenantStyle.Render(tenant)
 	case width >= 2+nameWidth+3+tenantWidth:
-		line += " | " + tenant
+		line += style.Render(" | ") + tenantStyle.Render(tenant)
 	}
 	return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 }
