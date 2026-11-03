@@ -3,7 +3,6 @@ package cmd
 import (
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
@@ -59,7 +58,7 @@ Failed fetching available tenants, only tenants which do not require explicit MF
 This may be due to the azure cli being completely logged out or due to a network error.
 Subsequent logins should no longer have this issue.
 
-Feel free to open an issue at `+color.New(color.FgCyan).Sprint("https://github.com/whiteducksoftware/azctx/issues")+` if this issue persists.
+Feel free to open an issue at https://github.com/whiteducksoftware/azctx/issues if this issue persists.
 `+strings.Repeat("-", 80))
 	}
 
