@@ -1,4 +1,4 @@
-package prompt
+package ui
 
 var (
 	template_Long = promptTemplate{

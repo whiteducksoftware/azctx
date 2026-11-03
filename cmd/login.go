@@ -4,31 +4,30 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"github.com/whiteducksoftware/azctx/azurecli"
+	"github.com/whiteducksoftware/azctx/internal/azcli"
 	"github.com/whiteducksoftware/azctx/log"
-	"github.com/whiteducksoftware/azctx/utils"
 )
 
-var loginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "Login to Azure",
-	Long: `Login to Azure (wrapped around 'az login')
+func newLoginCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
+	loginCmd := &cobra.Command{
+		Use:   "login",
+		Short: "Login to Azure",
+		Long: `Login to Azure (wrapped around 'az login')
 	Authenticates the CLI instance to Azure and fetches all available tenants and subscriptions.
 	All args after -- are directly passed to the 'az login' command.`,
-	Run: utils.WrapCobraCommandHandler(loginRunE),
-}
-
-func init() {
+		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
+			return loginRunE(cmd, args, newCLI)
+		}),
+	}
 	loginCmd.Flags().Bool("force-mfa", false, "force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)")
-	rootCmd.AddCommand(loginCmd)
+	return loginCmd
 }
 
-func loginRunE(cmd *cobra.Command, args []string) error {
+func loginRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error)) error {
 	// Ensure that the azure cli is installed
-	cli, err := azurecli.New(afero.NewOsFs())
+	cli, err := newCLI()
 	if err != nil {
 		return err
 	}
@@ -49,7 +48,7 @@ func loginRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func refreshData(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error {
+func refreshData(cmd *cobra.Command, cli azcli.CLI, extraArgs []string) error {
 	// Fetch all available tenants
 	err := cli.UpdateTenants()
 	if err != nil {
