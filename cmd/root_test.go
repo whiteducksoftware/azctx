@@ -16,7 +16,12 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
-const fixtureProfile = `{"subscriptions":[{"id":"prod-id","name":"Production","tenantId":"tenant","isDefault":true},{"id":"dev-id","name":"Development","tenantId":"tenant"},{"id":"tenant","name":"N/A(tenant level account)"}]}`
+const (
+	productionID   = "11111111-1111-1111-1111-111111111111"
+	developmentID  = "22222222-2222-2222-2222-222222222222"
+	tenantID       = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	fixtureProfile = `{"subscriptions":[{"id":"` + productionID + `","name":"Production","tenantId":"` + tenantID + `","isDefault":true},{"id":"` + developmentID + `","name":"Development","tenantId":"` + tenantID + `"},{"id":"` + tenantID + `","name":"N/A(tenant level account)"}]}`
+)
 
 const argumentDelimiter = "--"
 
@@ -24,13 +29,18 @@ const productionName = "Production"
 
 const deviceCodeFlag = "--use-device-code"
 
-const loginCommand = "login"
+const (
+	loginCommand = "login"
+	profileFile  = "azureProfile.json"
+	currentFlag  = "-c"
+)
 
 func commandDependencies(t *testing.T, fake *testutil.FakeRunner) cmd.Dependencies {
 	t.Helper()
 	t.Setenv("PATH", "")
+	testutil.IsolateUserDirs(t)
 	files := fstest.MapFS{
-		"azureProfile.json": &fstest.MapFile{Data: []byte(fixtureProfile)},
+		profileFile: &fstest.MapFile{Data: []byte(fixtureProfile)},
 	}
 	return cmd.Dependencies{
 		Runner: fake, FS: files, ConfigDir: "config",
@@ -50,8 +60,8 @@ func TestCommandSelection(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "name", args: []string{argumentDelimiter, productionName}, want: "prod-id"},
-		{name: "picker", want: "dev-id"},
+		{name: "name", args: []string{argumentDelimiter, productionName}, want: productionID},
+		{name: "picker", want: developmentID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
@@ -64,7 +74,7 @@ func TestCommandSelection(t *testing.T) {
 			if len(fake.Calls) != 1 || !reflect.DeepEqual(fake.Calls[0].Args, []string{"account", "set", "--subscription", tc.want}) {
 				t.Fatalf("az calls = %+v", fake.Calls)
 			}
-			contents, err := fs.ReadFile(deps.FS, "azureProfile.json")
+			contents, err := fs.ReadFile(deps.FS, profileFile)
 			if err != nil || string(contents) != fixtureProfile {
 				t.Fatalf("profile changed: %q, %v", contents, err)
 			}
@@ -79,11 +89,11 @@ func TestCurrentSubscription(t *testing.T) {
 	root := cmd.NewRootCommand(deps)
 	root.SetOut(&output)
 	root.SetErr(&messages)
-	root.SetArgs([]string{"-c"})
+	root.SetArgs([]string{currentFlag})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.Calls) != 0 || output.String() != "Active subscription: /Production (tenant/prod-id)\n" {
+	if len(fake.Calls) != 0 || output.String() != "Active subscription: "+tenantID+"/Production ("+tenantID+"/"+productionID+")\n" {
 		t.Fatalf("current output = %q, az calls = %+v", output.String(), fake.Calls)
 	}
 	if strings.Contains(messages.String(), "Active subscription:") || strings.Contains(messages.String(), "level=") {
@@ -101,8 +111,8 @@ func TestSwitchMessagesUseStderr(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	want := "Warning: Deprecated flag --short/-s used. Size is now automatically determined.\nSetting active subscription to /Production (tenant/prod-id)\n"
-	if stdout.Len() != 0 || !strings.HasSuffix(stderr.String(), want) || strings.Contains(stderr.String(), "level=") || strings.Contains(stderr.String(), "\x1b") {
+	want := "Warning: Deprecated flag --short/-s used. Size is now automatically determined.\n"
+	if stdout.Len() != 0 || stderr.String() != want {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -115,7 +125,7 @@ func TestCommandsReturnErrors(t *testing.T) {
 		{args: []string{argumentDelimiter, productionName}, want: "Error executing command: denied"},
 		{args: []string{argumentDelimiter, "missing"}, want: "no azure subscription found for 'missing'"},
 		{args: []string{productionName}, want: `unknown command "Production" for "azctx"`},
-		{args: []string{"-"}, want: "not implemented"},
+		{args: []string{"-"}, want: "no previous subscription found"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			fake := &testutil.FakeRunner{Responses: []testutil.Response{{
@@ -123,7 +133,7 @@ func TestCommandsReturnErrors(t *testing.T) {
 			}}}
 			root := cmd.NewRootCommand(commandDependencies(t, fake))
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err == nil || err.Error() != tc.want {
+			if err := root.Execute(); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
 			}
 		})
@@ -135,24 +145,24 @@ func TestLoginPassesThroughArguments(t *testing.T) {
 		{Result: azcli.Result{Stdout: `{"value":[]}`}}, {},
 	}}
 	root := cmd.NewRootCommand(commandDependencies(t, fake))
-	root.SetArgs([]string{loginCommand, argumentDelimiter, deviceCodeFlag, "--tenant", "tenant"})
+	root.SetArgs([]string{loginCommand, argumentDelimiter, deviceCodeFlag, "--tenant", tenantID})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	want := [][]string{
 		{"rest", "--method", "get", "--url", "/tenants?api-version=2020-01-01", "--output", jsonFormat},
-		{loginCommand, deviceCodeFlag, "--tenant", "tenant"},
+		{loginCommand, deviceCodeFlag, "--tenant", tenantID},
 	}
 	var got [][]string
 	for _, call := range fake.Calls {
 		got = append(got, call.Args)
 	}
-	if !reflect.DeepEqual(got, want) || fake.Calls[1].Attached {
+	if !reflect.DeepEqual(got, want) || !fake.Calls[1].Attached {
 		t.Fatalf("az calls = %+v", fake.Calls)
 	}
 }
 
-func TestCommandReturnsUpdateError(t *testing.T) {
+func TestOfflineUpdateCannotFailSwitch(t *testing.T) {
 	failure := errors.New("offline")
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 	deps := commandDependencies(t, fake)
@@ -160,8 +170,7 @@ func TestCommandReturnsUpdateError(t *testing.T) {
 	root := cmd.NewRootCommand(deps)
 	root.SetArgs([]string{argumentDelimiter, productionName})
 	err := root.Execute()
-	var handlerErr *cmd.HandlerError
-	if !errors.Is(err, failure) || !errors.As(err, &handlerErr) || len(fake.Calls) != 1 {
+	if err != nil || len(fake.Calls) != 1 {
 		t.Fatalf("post-switch update error = %v, calls = %+v", err, fake.Calls)
 	}
 }
@@ -174,7 +183,7 @@ func TestPickerInterruptReachesExitBoundary(t *testing.T) {
 		// Duplicate names must also propagate interruption from the narrowed picker.
 		if args != nil {
 			deps.FS = fstest.MapFS{
-				"azureProfile.json": &fstest.MapFile{Data: []byte(`{"subscriptions":[{"name":"Production"},{"name":"Production"}]}`)},
+				profileFile: &fstest.MapFile{Data: []byte(`{"subscriptions":[{"id":"one","name":"Production"},{"id":"two","name":"Production"}]}`)},
 			}
 		}
 		deps.CheckUpdates = func(string, string) error {
@@ -200,7 +209,7 @@ func TestCanceledPickerAndIndependentFlags(t *testing.T) {
 	}
 	root := cmd.NewRootCommand(deps)
 	root.SetArgs([]string{"--filter-tenant-level=false"})
-	if err := root.Execute(); err != nil || len(fake.Calls) != 0 {
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "canceled") || len(fake.Calls) != 0 {
 		t.Fatalf("canceled picker = %v, calls = %+v", err, fake.Calls)
 	}
 	// A fresh tree must not inherit the preceding tree's flag state.

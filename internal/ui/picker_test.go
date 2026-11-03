@@ -79,7 +79,7 @@ func TestPickerIgnoresOutOfOrderFilterResults(t *testing.T) {
 }
 
 func TestPickerNarrowLongName(t *testing.T) {
-	subscriptions := []profile.Subscription{{Id: productionID, Name: strings.Repeat("界", 40), TenantName: "Acme"}}
+	subscriptions := []profile.Subscription{{Id: productionID, Name: strings.Repeat("界", 40), TenantName: acmeTenant}}
 	model := teatest.NewTestModel(t, ui.NewPicker(subscriptions, 60, 10), teatest.WithInitialTermSize(60, 10))
 	teatest.WaitFor(t, model.Output(), func(output []byte) bool {
 		return bytes.Contains(output, []byte("界"))
