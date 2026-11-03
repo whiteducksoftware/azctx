@@ -30,7 +30,8 @@ type subscriptionItem struct {
 }
 
 func (item subscriptionItem) FilterValue() string {
-	return strings.Join([]string{item.subscription.Name, tenantLabel(item.subscription), item.subscription.Id}, "\x00")
+	sub := item.subscription
+	return strings.Join([]string{sub.Name, sub.TenantName, sub.TenantDomain, sub.Tenant, sub.Id}, "\x00")
 }
 
 // Picker is the subscription list's Bubble Tea model.
@@ -54,7 +55,7 @@ func NewPicker(subscriptions []profile.Subscription, width, height int) Picker {
 	items := make([]list.Item, len(subscriptions))
 	for index, subscription := range subscriptions {
 		items[index] = subscriptionItem{subscription: subscription, index: index}
-		delegate.nameWidth = max(delegate.nameWidth, lipgloss.Width(subscription.Name))
+		delegate.nameWidth = max(delegate.nameWidth, lipgloss.Width(subscription.DisplayName()))
 		delegate.tenantWidth = max(delegate.tenantWidth, lipgloss.Width(tenantLabel(subscription)))
 	}
 	picker := Picker{delegate: delegate, selected: -1, err: ErrCanceled}
@@ -175,7 +176,7 @@ func (subscriptionDelegate) Spacing() int                        { return 0 }
 func (subscriptionDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
 func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, index int, item list.Item) {
 	subscription := item.(subscriptionItem).subscription
-	line := delegate.row(model.Width(), subscription.Name, subscription.Id, tenantLabel(subscription))
+	line := delegate.row(model.Width(), subscription.DisplayName(), subscription.Id, tenantLabel(subscription))
 	prefix := "  "
 	style := lipgloss.NewStyle()
 	if index == model.Index() {
@@ -199,8 +200,5 @@ func (delegate subscriptionDelegate) row(width int, name, id, tenant string) str
 }
 
 func tenantLabel(subscription profile.Subscription) string {
-	if subscription.TenantName != "" {
-		return subscription.TenantName
-	}
-	return subscription.Tenant
+	return subscription.TenantLabel()
 }

@@ -14,7 +14,7 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 
 - `main.go`: executable error presentation and exit boundary.
 - `cmd/`: Cobra command construction and orchestration with injected dependencies.
-- `internal/azcli/`: Azure CLI runner, login, subscription operations and legacy cache access.
+- `internal/azcli/`: Azure CLI runner, version check, login, read-only INI settings and cloud-aware subscriptions.
 - `internal/profile/`: read-only `io/fs` Azure profile parser and models.
 - `internal/match/`: subscription matching.
 - `internal/ui/`: Bubble Tea/Bubbles list picker, Lip Gloss rendering and screen goldens.
@@ -29,8 +29,9 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 ## Invariants and boundaries
 
 - Never read or write credentials or the MSAL token cache.
-- Never write `azureProfile.json` or anything in `AZURE_CONFIG_DIR`.
-  Do not expand the existing legacy tenant-cache writer; its removal belongs to layer 08.
+- Only read Azure `azureProfile.json`, `config` and `clouds.config`; never write anything in `AZURE_CONFIG_DIR`.
+- Tenant metadata comes only from the profile; do not add tenant-cache or REST fallbacks.
+- Check Azure CLI >=2.61.0 on login, not on switching; disable its picker only in the login child environment.
 - Validate subscription and tenant IDs as GUIDs before passing them to `az`.
 - Tests use injected runners or the fake `az`, isolated filesystems and fixtures; never a real tenant.
 - Injected `io/fs.FS` values are read-only and rooted at the Azure config directory.

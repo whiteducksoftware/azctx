@@ -1,8 +1,9 @@
 # CLI contract
 
 This contract applies to azctx 2026.11. Subscription JSON has schema version
-**1**. Commands never read credentials or MSAL caches and never write the Azure
-profile. The inherited login wrapper delegates authentication to Azure CLI.
+**1**. Commands read only `azureProfile.json`, INI `config` and `clouds.config`
+in the Azure configuration root. They never read credentials/MSAL caches or
+write anything there. Authentication remains delegated to Azure CLI.
 
 ## Commands and formats
 
@@ -13,9 +14,9 @@ profile. The inherited login wrapper delegates authentication to Azure CLI.
 | `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `login`, `version`, `help`, `completion` or starts with `-`. |
 | `azctx -` | Switch to the previous subscription, preserving the layer-06 private-state/rollback behavior. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
-| `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Tenant-level accounts are hidden unless `--all` is present. |
+| `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
 | `azctx version [-o text\|json]` | Print version information, without loading the Azure profile or checking for updates. Its existing version JSON is unchanged. |
-| `azctx login [--force-mfa] [-- <Azure CLI arguments>]` | Preserve the existing attached Azure CLI login streams, including live stderr capture. Supports default/text output, not subscription JSON. |
+| `azctx login [--force-mfa] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, then attach login streams including live stderr capture. Disable Azure CLI's subscription picker only in the login child's environment. Supports default/text output, not subscription JSON. |
 
 `-o`/`--output`, `--verbose` and `--no-input` are persistent flags, accepted before
 or after a subcommand. Formats are case-sensitive. Unsupported formats and
@@ -24,13 +25,46 @@ invalid arguments/flags fail with exit 1 before an Azure subprocess is started.
 `--short`, `-s` and `--filter-tenant-level` are removed, not deprecated.
 
 Unqualified queries retain case-insensitive fuzzy matching of subscription names,
-legacy tenant labels and subscription IDs; an exact subscription ID wins.
+profile tenant display names, default domains, tenant IDs and subscription IDs;
+an exact subscription ID wins.
 A qualified query splits at the first `/`: the tenant selector must exactly
-match a tenant ID or available legacy tenant label, ignoring case. Within that
+match a tenant ID, profile display name or default domain, ignoring case. Within that
 tenant, the subscription selector matches only subscription names/IDs, using
-the same fuzzy/exact-ID rules. Both selectors must be nonempty. Tenant domains
-are not selectors in this layer. Use an ID for names containing literal `/`.
+the same fuzzy/exact-ID rules. Both selectors must be nonempty.
+Use an ID for names containing literal `/`.
 Duplicate names retain their subscription and tenant identities.
+
+The active cloud comes from `[cloud] name` in Azure CLI's `config`, overridden
+by `AZURE_CLOUD_NAME`, with `AzureCloud` as the absent/blank-setting default.
+Whitespace-only values are blank. No list of
+built-in clouds is assumed. Only exact `environmentName` matches are selectable;
+missing environment fields are not inferred. `list --all` is inspection only:
+foreign-cloud entries are included but never marked current.
+
+Current selection uses a unique active-cloud profile `isDefault`, falling back
+to that cloud's `subscription` GUID in `clouds.config` only when no active-cloud
+profile default exists. A stale/foreign remembered ID or multiple defaults
+cannot identify a current subscription. Listing, current output, switching and
+previous-state capture use the same resolved selection. Hidden current entries
+remain hidden in ordinary current output.
+
+Tables and picker labels distinguish user, service principal, system-assigned
+identity and user-assigned identity accounts. `Warned`/`PastDue` remain visible
+with their state marked. Nonempty different home/token tenant IDs mark delegated
+Azure Lighthouse access; `managedByTenants` alone does not imply delegation.
+Tenant labels prefer the display name, then default domain, then tenant ID.
+Human lists, current text and pickers emit one line suggesting `az login` only
+when a displayed record lacks both usable modern tenant fields. Current output
+checks only the current record; narrowed pickers check only their candidates.
+`list --all` checks every displayed entry, including hidden/foreign records.
+JSON, plain-field current formats and quiet direct switches do not emit the hint.
+
+Login initialization permits a missing Azure directory/profile; only Azure CLI
+creates them. Existing malformed settings remain errors. After a supported,
+attached login succeeds, azctx strictly reloads Azure's profile. Ordinary
+list/current/switch initialization still requires a readable profile and reports
+missing files with an `az login` hint. `azcli.CheckVersion` itself requires no
+profile or Azure configuration directory.
 
 ## Input, color and streams
 
@@ -92,7 +126,7 @@ List envelope:
 Current envelope:
 
 ```json
-{"schemaVersion":1,"subscription":{"id":"11111111-1111-1111-1111-111111111111","name":"Production","tenantId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","tenantName":"","tenantDomain":"","state":"Enabled","isDefault":true,"user":{"name":"synthetic@example.invalid","type":"user"},"environment":"AzureCloud","delegated":false}}
+{"schemaVersion":1,"subscription":{"id":"11111111-1111-1111-1111-111111111111","name":"Production","tenantId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","tenantName":"Example Directory","tenantDomain":"example.invalid","state":"Enabled","isDefault":true,"user":{"name":"synthetic@example.invalid","type":"user"},"environment":"AzureCloud","delegated":false}}
 ```
 
 Every `subscriptions` entry, current `subscription` and error `candidates` entry
@@ -103,18 +137,19 @@ uses **exactly the same subscription object**:
 | `id` | string | Subscription ID |
 | `name` | string | Subscription name |
 | `tenantId` | string | Tenant ID |
-| `tenantName` | string | Empty in this layer; profile-backed metadata arrives in layer 08 |
-| `tenantDomain` | string | Empty in this layer; profile-backed metadata arrives in layer 08 |
+| `tenantName` | string | Profile `tenantDisplayName`, falling back to `tenantDefaultDomain`, then `tenantId` |
+| `tenantDomain` | string | Profile `tenantDefaultDomain`, empty when absent |
 | `state` | string | Profile subscription state |
-| `isDefault` | boolean | Profile default selection |
+| `isDefault` | boolean | Resolved current selection in the active cloud only |
 | `user` | object | Always includes string `name` and string `type` |
 | `environment` | string | Profile `environmentName` |
-| `delegated` | boolean | Always false until layer 08 supplies delegated metadata |
+| `delegated` | boolean | Nonempty `homeTenantId` differs from nonempty `tenantId`, ignoring GUID case |
 
 All fields are present, including empty strings/false. Missing profile strings
-become `""`; missing booleans become `false`. Empty lists are `[]`, never `null`.
-The legacy tenant cache is not used to fill version-1 JSON metadata. JSON is one
-compact object followed by a newline; list order preserves profile order.
+become `""` (except the tenant-name ID fallback); missing booleans become `false`.
+Empty lists are `[]`, never `null`. All tenant metadata comes from the profile,
+without extra tenant API calls or cache files. JSON is one compact object
+followed by a newline; list order preserves profile order.
 Consumers should tolerate additive fields and inspect `schemaVersion`.
 
 ## Error JSON
@@ -147,6 +182,8 @@ Tokens after `--` are never output flags, including forwarded login arguments.
 | Variable | Effect |
 | --- | --- |
 | `AZURE_CONFIG_DIR` | Read-only Azure configuration root; unset uses `~/.azure`. Credentials/MSAL caches are never read. |
+| `AZURE_{SECTION}_{NAME}` | Azure CLI setting overrides, in uppercase; environment wins over INI `config`. Section names are case-sensitive, keys are not. Booleans accept `1/yes/true/on` and `0/no/false/off`, ignoring case. Missing files use defaults; malformed files/booleans are errors when read. |
+| `AZURE_CORE_LOGIN_EXPERIENCE_V2` | Caller value is preserved; each wrapped login child alone overrides it to `off`. |
 | `AZCTX_NO_INPUT=1` | Disable azctx-owned pickers/prompts. Other values do not enable this gate. |
 | `CI` | Presence, even empty, disables picker input and optional update checks. |
 | `NO_COLOR` | Presence, even empty, disables azctx colors on all streams. |

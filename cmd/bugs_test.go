@@ -25,13 +25,9 @@ func TestDuplicateNamesKeepTenantAndIDAfterPickerSort(t *testing.T) {
 	deps := commandDependencies(t, fake)
 	deps.FS = fstest.MapFS{
 		profileFile: &fstest.MapFile{Data: []byte(`{"subscriptions":[
-			{"id":"` + productionID + `","name":"Visual Studio Enterprise","tenantId":"` + tenantID + `","isDefault":true},
-			{"id":"` + developmentID + `","name":"Visual Studio Enterprise","tenantId":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
+			{"id":"` + productionID + `","name":"Visual Studio Enterprise","tenantId":"` + tenantID + `","tenantDisplayName":"Zulu","environmentName":"AzureCloud","isDefault":true},
+			{"id":"` + developmentID + `","name":"Visual Studio Enterprise","tenantId":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","tenantDisplayName":"Acme","environmentName":"AzureCloud"}
 		]}`)},
-		"azctxTenants.json": &fstest.MapFile{Data: []byte(`[
-			{"tenantId":"` + tenantID + `","displayName":"Zulu"},
-			{"tenantId":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","displayName":"Acme"}
-		]`)},
 	}
 	deps.Select = func(subscriptions []profile.Subscription) (int, error) {
 		if len(subscriptions) != 2 {

@@ -7,20 +7,15 @@ import (
 )
 
 type CLI struct {
-	fs         fs.FS
-	diskConfig bool
-	runner     Runner
-	configDir  string
-	profile    profile.Profile
-	tenants    []Tenant
+	fs          fs.FS
+	runner      Runner
+	configDir   string
+	profile     profile.Profile
+	activeCloud string
+	activeIndex int
 	// Terminal controls attached login streams; nil uses the process terminal.
 	Terminal *Terminal
 
-	FilterTenantLevelAccount bool
-}
-
-// Tenant is the legacy tenant-cache entry, retained until layer 08.
-type Tenant struct {
-	Id   string `json:"tenantId"`
-	Name string `json:"displayName"`
+	// IncludeAll exposes hidden entries for listing, never for cloud switching.
+	IncludeAll bool
 }
