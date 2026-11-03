@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,7 +50,7 @@ func ExitCode(err error) int {
 	if err == nil {
 		return ExitSuccess
 	}
-	if errors.Is(err, ui.ErrInterrupted) {
+	if errors.Is(err, ui.ErrInterrupted) || errors.Is(err, context.Canceled) {
 		return ExitInterrupted
 	}
 	var classified *ExitError
@@ -79,7 +80,7 @@ func WriteError(output io.Writer, format string, err error) int {
 	if errors.As(err, &classified) {
 		payload.Code, payload.Candidates = classified.Code, classified.Candidates
 	}
-	if errors.Is(err, ui.ErrInterrupted) {
+	if status == ExitInterrupted {
 		payload.Code = CodeInterrupted
 	}
 	if format == formatJSON {

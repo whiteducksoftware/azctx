@@ -14,6 +14,19 @@ const (
 	profileJSON  = "azureProfile.json"
 )
 
+// OpenConfig resolves a read-only Azure filesystem without requiring a profile
+// or existing directory. It does not create any files or directories.
+func OpenConfig(files fs.FS, configDir string) (fs.FS, string, error) {
+	if files != nil {
+		return files, configDir, nil
+	}
+	directory, err := resolveConfigDir(configDir, true)
+	if err != nil {
+		return nil, directory, err
+	}
+	return os.DirFS(directory), directory, nil
+}
+
 func resolveConfigDir(configDir string, allowMissing bool) (string, error) {
 	if configDir == "" {
 		configDir = os.Getenv(configDirEnv)
@@ -30,10 +43,10 @@ func resolveConfigDir(configDir string, allowMissing bool) (string, error) {
 		return configDir, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("%s (%s) is not a valid directory. Please run `az login` and try again: %w", configDirEnv, configDir, err)
+		return configDir, fmt.Errorf("%s (%s) is not a valid directory. Please run `az login` and try again: %w", configDirEnv, configDir, err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("%s (%s) is not a directory. Please run `az login` and try again", configDirEnv, configDir)
+		return configDir, fmt.Errorf("%s (%s) is not a directory. Please run `az login` and try again", configDirEnv, configDir)
 	}
 	return configDir, nil
 }

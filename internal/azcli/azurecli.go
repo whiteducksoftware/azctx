@@ -3,11 +3,11 @@
 package azcli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
@@ -70,6 +70,7 @@ func (cli *CLI) reload(allowMissing bool) error {
 		cli.profile = profile.Profile{}
 	}
 	cli.activeCloud = settings.ActiveCloud()
+	cli.settings = settings
 	remembered, _ := iniValue(clouds, cli.activeCloud, "subscription")
 	return cli.resolveDefault(remembered)
 }
@@ -79,13 +80,14 @@ func (cli CLI) InteractiveLogin(extraArgs []string) error {
 	if err := validateLoginIDs(extraArgs); err != nil {
 		return err
 	}
-	if _, err := CheckVersion(context.Background(), cli.runner); err != nil {
+	prompt, err := cli.loginPrompt(extraArgs)
+	if err != nil {
 		return err
 	}
-	log.Info("Logging in... Please check your browser for the login prompt.")
+	log.Info("Logging in... %s", prompt)
 
 	// Execute the az login command
-	err := cli.execLogin(extraArgs)
+	err = cli.execLogin(extraArgs)
 	if err != nil {
 		return fmt.Errorf("failed to login: %w", err)
 	}
@@ -103,24 +105,44 @@ func (cli CLI) IterativeTenantLogin(extraArgs []string) error {
 			return fmt.Errorf("invalid tenant: %w", err)
 		}
 	}
-	if _, err := CheckVersion(context.Background(), cli.runner); err != nil {
+	prompt, err := cli.loginPrompt(extraArgs)
+	if err != nil {
 		return err
 	}
 	// Loop through the tenants and execute the az login command
 	for _, tenant := range cli.tenantSubscriptions() {
-		log.Info("Logging into tenant %s... Please check your browser for the login prompt.", tenant.TenantLabel())
+		log.Info("Logging into tenant %s... %s", tenant.TenantLabel(), prompt)
 
 		// Execute the az login command
 		args := []string{"--tenant", tenant.Tenant}
 		args = append(args, extraArgs...)
 		err := cli.execLogin(args)
 		if err != nil {
+			if cli.context().Err() != nil {
+				return cli.context().Err()
+			}
 			log.Error("Failed to login to tenant %s. Azure CLI returned the following error: %s", tenant.TenantLabel(), err.Error())
 			continue
 		}
 	}
 
 	return nil
+}
+
+func (cli CLI) loginPrompt(args []string) (string, error) {
+	azureVersion, err := CheckVersion(cli.context(), cli.runner)
+	if err != nil {
+		return "", err
+	}
+	platform := cli.Platform
+	if platform == "" {
+		platform = runtime.GOOS
+	}
+	info, err := BrokerStatus(cli.settings, platform, azureVersion)
+	if err != nil {
+		return "", err
+	}
+	return LoginPrompt(info, args), nil
 }
 
 // SetSubscription asks az to set the default subscription.
@@ -133,12 +155,7 @@ func (cli CLI) SetSubscription(subscription profile.Subscription) error {
 	}
 	// Execute az account set command
 	args := []string{"account", "set", "--subscription", subscription.Id}
-	_, err := cli.capture(args)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cli.capture(args)
 }
 
 // ConfigDir is the protected, read-only Azure configuration directory.
