@@ -25,6 +25,9 @@ make build  # Build the azctx executable
 make golden # Update picker screen goldens; review and commit intentional changes
 make agent-check # Offline Python hook tests (also included in test/check)
 make fuzz   # Profile, config and project parsers, 60 seconds each (also in CI)
+make e2e    # Existing real-binary/fake-az suite, portable across all three OSes
+make ci-check # Offline workflow, coverage, schema and scanner-policy regressions
+make completion-perf # Native 500-subscription completion, every call under 50 ms
 ```
 
 Python 3.10+ (`python3` on PATH) is required for the agent hook tests. Go tests
@@ -38,6 +41,12 @@ an unavailable CLI as a manual acceptance limitation rather than a pass.
 See the draft [AI agent guide](docs/ai-agents.md) for installation and limits.
 
 The [Makefile](Makefile) is the source of truth for available targets.
+`make test`/`make check` now write `coverage.out` and require statement-weighted
+`internal/` coverage of at least 70%; there is no `cmd/` gate. They then run the
+mandatory native completion performance gate, separately from instrumentation.
+CI publishes the profile separately for each OS. See [integration tests](docs/integration-tests.md)
+for the command coverage map, coverage policy and explicitly opt-in dedicated
+tenant nightly. A skipped or unconfigured nightly is not verified live acceptance.
 Lint explicitly enables `errcheck` (including type assertions), `govet`,
 `revive`, `gocritic`, `nilerr` and `errorlint` (including error assertions).
 Fuzz seeds run with ordinary tests; `make fuzz` additionally mutates each

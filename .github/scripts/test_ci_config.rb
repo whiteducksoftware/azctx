@@ -120,7 +120,7 @@ assert(go_mod.match?(/^go 1\.26(?:\.0)?$/), 'the minimum Go version must remain 
 assert(go_mod.match?(/^toolchain go1\.27\.3$/),
        'the preferred toolchain must include the GO-2026-6809 fix in Go 1.27.3')
 lint_steps = ci.fetch('jobs').fetch('lint').fetch('steps')
-assert(lint_steps.any? { |step| step['run'] == 'ruby .github/scripts/test_ci_config.rb' },
+assert(lint_steps.any? { |step| step['run'] == 'make ci-check' },
        'CI must run these configuration regressions')
 audit = lint_steps.find { |step| step.fetch('uses', '').start_with?('zizmorcore/zizmor-action@') }
 assert(audit.fetch('with').fetch('inputs') == '.github/workflows' &&
@@ -158,5 +158,16 @@ makefile = File.read('Makefile')
 end
 assert(makefile.include?("CGO_ENABLED=0 go build -trimpath ."), 'make build must use the hardened build flags')
 assert(makefile.include?("test: agent-check"), 'make check/test must retain hook coverage')
+test_recipe = makefile[/^test:.*\n((?:\t.*\n)+)/, 1]
+assert(test_recipe.include?("go test -race -coverpkg=./... -coverprofile=coverage.out ./...") &&
+       test_recipe.include?("$(MAKE) completion-perf"),
+       'make test must retain full instrumentation and require native completion acceptance')
+assert(makefile.include?("GOFLAGS= go test -race=false -cover=false -tags=completionperf " \
+                        "-run '^TestCompletion500SubscriptionsIsOfflineAndFast$$' -count=1 -v ./cmd"),
+       'completion acceptance must run once, uncached and without inherited instrumentation')
+assert(ci.fetch('jobs').fetch('test').fetch('strategy').fetch('matrix').fetch('os').sort ==
+       %w[macos-latest ubuntu-latest windows-latest] &&
+       ci.fetch('jobs').fetch('test').fetch('steps').any? { |step| step['run'] == 'make test' },
+       'all three native platforms must run correctness and completion performance acceptance')
 
-puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; exact release exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage'
+puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; exact release exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness and native completion acceptance'
