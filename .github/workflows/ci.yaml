@@ -7,9 +7,6 @@ on:
 permissions:
   contents: read
 
-env:
-  GO_VERSION: '1.23.6'
-
 jobs:
   lint:
     name: lint
@@ -23,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 #v5.3.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Check go mod
         run: |
@@ -32,9 +29,9 @@ jobs:
           git diff --exit-code go.sum
 
       - name: lint
-        uses: golangci/golangci-lint-action@4696ba8babb6127d732c3c6dde519db15edab9ea #v6.5.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a #v9
         with:
-          version: latest
+          version: v2.15.0
           args: --issues-exit-code=1  --config=.golangci.yml
 
   ci-linux:
@@ -50,7 +47,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 #v5.3.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Build with Goreleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 #v6.2.1
@@ -72,7 +69,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 #v5.3.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 #v6.2.1
