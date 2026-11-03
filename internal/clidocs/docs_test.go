@@ -2,11 +2,13 @@ package clidocs_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/whiteducksoftware/azctx/internal/clidocs"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
@@ -108,26 +110,68 @@ func TestCommittedDocumentationIsFresh(t *testing.T) {
 }
 
 func TestDocumentationFreshnessOnCRLFCheckout(t *testing.T) {
-	directory := testutil.WorkDir(t)
-	entries, err := os.ReadDir("../../docs/cli")
+	for _, variant := range []string{"working tree", "source without Git"} {
+		t.Run(variant, func(t *testing.T) {
+			source := testutil.WorkDir(t)
+			attributes, err := os.ReadFile("../../.gitattributes")
+			if err != nil {
+				t.Fatal(err)
+			}
+			root, err := os.OpenRoot(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := root.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err := root.WriteFile(".gitattributes", attributes, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			docs := filepath.Join(source, "docs", "cli")
+			if err := os.MkdirAll(docs, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if variant == "working tree" {
+				if err := os.WriteFile(filepath.Join(docs, "azctx.md"), []byte("stale indexed page\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				for _, args := range [][]string{{"init", "--quiet"}, {"add", "."}} {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					command := exec.CommandContext(ctx, "git", args...)
+					command.Dir = source
+					output, err := command.CombinedOutput()
+					cancel()
+					if err != nil {
+						t.Fatalf("seed stale index: %v\n%s", err, output)
+					}
+				}
+			}
+			if err := clidocs.Sync(docs, false); err != nil {
+				t.Fatal(err)
+			}
+			checkDocumentationCRLFCheckout(t, source)
+		})
+	}
+	checkDocumentationCRLFCheckout(t, filepath.Join("..", ".."))
+}
+
+func checkDocumentationCRLFCheckout(t *testing.T, source string) {
+	t.Helper()
+	// Check the imported bytes too: Git's clean filters must not hide a bad
+	// source page or an extra empty directory that Git cannot represent.
+	if err := clidocs.Sync(filepath.Join(source, "docs", "cli"), true); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(source, "docs", "cli"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) == 0 {
 		t.Fatal("committed CLI reference missing")
 	}
-	args := []string{
-		"-c", "core.autocrlf=true", "-c", "core.eol=crlf",
-		"checkout-index", "--prefix=" + filepath.ToSlash(directory) + "/", "--",
-	}
-	for _, entry := range entries {
-		args = append(args, "docs/cli/"+entry.Name())
-	}
-	command := exec.Command("git", args...)
-	command.Dir = filepath.Join("..", "..")
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("Git CRLF checkout failed: %v\n%s", err, output)
-	}
+	directory := testutil.CRLFCheckout(t, source, "docs/cli")
 	if err := clidocs.Sync(filepath.Join(directory, "docs", "cli"), true); err != nil {
 		t.Fatal(err)
 	}

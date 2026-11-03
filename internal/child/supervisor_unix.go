@@ -32,6 +32,10 @@ func supervise() int {
 	startError := os.NewFile(uintptr(fd), "child-start-error")
 	unix.CloseOnExec(fd)
 	defer startError.Close()
+	jobControl := os.Getenv(supervisorJobEnv) == "true"
+	if err := os.Unsetenv(supervisorJobEnv); err != nil {
+		return 1
+	}
 	command := exec.Command(os.Args[3]) //nolint:gosec // Already resolved executable supplied by the parent, never shell code.
 	command.Args = os.Args[4:]
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -39,7 +43,12 @@ func supervise() int {
 		command.ExtraFiles = append(command.ExtraFiles, os.NewFile(uintptr(inherited), "child-extra"))
 	}
 	signals := make(chan os.Signal, 8)
-	signal.Notify(signals, forwardedSignals()...)
+	changes := make(chan os.Signal, 1)
+	signal.Notify(changes, syscall.SIGCHLD)
+	defer signal.Stop(changes)
+	// Stay runnable when a terminal stop signal stops the target. Only a
+	// confirmed wait4 stop propagates suspension to the shell-visible parent.
+	signal.Notify(signals, append(forwardedSignals(), syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU, syscall.SIGCONT)...)
 	defer signal.Stop(signals)
 	if err := command.Start(); err != nil {
 		var pathError *os.PathError
@@ -52,12 +61,68 @@ func supervise() int {
 		return 1
 	}
 	_ = startError.Close()
-	done := make(chan error, 1)
-	go func() { done <- command.Wait() }()
-	return superviseWait(command, signals, done)
+	defer func() { _ = command.Process.Release() }()
+	states := make(chan childState)
+	go waitChild(command.Process.Pid, states, changes)
+	return superviseWait(command, signals, states, jobControl)
 }
 
-func superviseWait(command *exec.Cmd, signals <-chan os.Signal, done <-chan error) int {
+type childState struct {
+	status unix.WaitStatus
+	err    error
+}
+
+func waitChild(pid int, states chan<- childState, changes <-chan os.Signal) {
+	// This is the target's only wait/reap consumer. Cmd.Wait cannot observe
+	// stops. All target streams are *os.File, with no exec-owned copy goroutines
+	// or context watcher to join; Release closes its process handle after reaping.
+	// Drain nonblocking before waiting for SIGCHLD, whose notifications coalesce.
+	for {
+		var status unix.WaitStatus
+		waited, err := unix.Wait4(pid, &status, unix.WUNTRACED|unix.WNOHANG, nil)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err == nil && waited == 0 {
+			<-changes
+			continue
+		}
+		states <- childState{status, err}
+		if err != nil || status.Exited() || status.Signaled() {
+			return
+		}
+	}
+}
+
+func (s childState) exitCode(signals <-chan os.Signal, interrupted bool) int {
+	if s.err != nil {
+		return 1
+	}
+	for len(signals) > 0 {
+		interrupted = (<-signals == os.Interrupt) || interrupted
+	}
+	if interrupted {
+		return 130
+	}
+	if s.status.Signaled() {
+		return 128 + int(s.status.Signal())
+	}
+	return s.status.ExitStatus()
+}
+
+func childStopped(canceling, jobControl bool) bool {
+	if canceling {
+		// A stopped target cannot handle pending cancellation.
+		_ = unix.Kill(-unix.Getpgrp(), unix.SIGCONT)
+		return false
+	}
+	if jobControl {
+		_ = unix.Kill(os.Getppid(), unix.SIGTSTP)
+	}
+	return true
+}
+
+func superviseWait(command *exec.Cmd, signals <-chan os.Signal, states <-chan childState, jobControl bool) int {
 	var timeout <-chan time.Time
 	var timer *time.Timer
 	defer func() {
@@ -65,21 +130,25 @@ func superviseWait(command *exec.Cmd, signals <-chan os.Signal, done <-chan erro
 			timer.Stop()
 		}
 	}()
-	interrupted, count := false, 0
+	interrupted, stopped, count := false, false, 0
 	for {
 		select {
-		case err := <-done:
-			if err != nil && command.ProcessState == nil {
-				return 1
+		case state := <-states:
+			if state.err != nil || state.status.Exited() || state.status.Signaled() {
+				return state.exitCode(signals, interrupted)
 			}
-			for len(signals) > 0 {
-				interrupted = (<-signals == os.Interrupt) || interrupted
-			}
-			if interrupted {
-				return 130
-			}
-			return ExitCode(command.ProcessState)
+			// Only stops and exits are requested, never continued states.
+			// Do not use WaitStatus.Stopped: on BSD its continued-state encoding
+			// overlaps SIGSTOP, which must also remain cancellable.
+			stopped = childStopped(count > 0, jobControl)
 		case value := <-signals:
+			switch value {
+			case syscall.SIGCONT:
+				stopped = false
+				continue
+			case syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU:
+				continue
+			}
 			// The child received the same group signal. Never forward it again.
 			interrupted = interrupted || value == os.Interrupt
 			count++
@@ -88,6 +157,10 @@ func superviseWait(command *exec.Cmd, signals <-chan os.Signal, done <-chan erro
 			} else {
 				timer = time.NewTimer(2 * time.Second)
 				timeout = timer.C
+			}
+			if stopped {
+				_ = unix.Kill(-unix.Getpgrp(), unix.SIGCONT)
+				stopped = false
 			}
 		case <-timeout:
 			_ = command.Process.Kill()

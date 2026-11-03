@@ -145,6 +145,7 @@ func TestMFASummaryStrictlyReloadsAfterLastLogin(t *testing.T) {
 		{Result: azcli.Result{Stdout: brokerVersionJSON}},
 		{Result: azcli.Result{Stderr: mfaFixture(t, "50076")}},
 		{},
+		{},
 	}}
 	deps := commandDependencies(t, fake)
 	files, ok := deps.FS.(fstest.MapFS)

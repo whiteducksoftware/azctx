@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	supervisorArg = "--azctx-internal-supervisor"
-	supervisorEnv = "AZCTX_INTERNAL_SUPERVISOR"
+	supervisorArg    = "--azctx-internal-supervisor"
+	supervisorEnv    = "AZCTX_INTERNAL_SUPERVISOR"
+	supervisorJobEnv = "AZCTX_INTERNAL_JOB_CONTROL"
 )
 
 // A supervisor shares the child's group, but azctx does not. It observes group
@@ -33,7 +34,7 @@ func configureProcess(command *exec.Cmd) (processHooks, error) {
 	if err != nil {
 		return processHooks{}, err
 	}
-	restore, err := foreground(command)
+	terminal, err := foreground(command)
 	if err != nil {
 		_ = readError.Close()
 		_ = writeError.Close()
@@ -44,7 +45,8 @@ func configureProcess(command *exec.Cmd) (processHooks, error) {
 	command.Args = append([]string{self, supervisorArg, strconv.Itoa(fd), command.Path}, command.Args...)
 	command.Path = self
 	command.Env = append(command.Environ(), supervisorEnv+"="+strconv.Itoa(os.Getpid()))
-	return processHooks{
+	command.Env = append(command.Env, supervisorJobEnv+"="+strconv.FormatBool(terminal != nil))
+	hooks := processHooks{
 		started: func() { _ = writeError.Close() },
 		finish: func() error {
 			data, readErr := io.ReadAll(readError)
@@ -62,13 +64,20 @@ func configureProcess(command *exec.Cmd) (processHooks, error) {
 					}
 				}
 			}
-			return errors.Join(startErr, readErr, restore())
+			return errors.Join(startErr, readErr, terminal.restore())
 		},
 		close: func() {
 			_ = readError.Close()
 			_ = writeError.Close()
 		},
-	}, nil
+	}
+	if terminal != nil {
+		hooks.signals = []os.Signal{syscall.SIGTSTP, syscall.SIGCONT}
+		hooks.signal = func(value os.Signal, canceling bool) (bool, error) {
+			return terminal.signal(command, value, canceling)
+		}
+	}
+	return hooks, nil
 }
 
 type startupFailure struct {
@@ -78,34 +87,88 @@ type startupFailure struct {
 	Message string `json:"message"`
 }
 
-func foreground(command *exec.Cmd) (func() error, error) {
+type foregroundTerminal struct {
+	fd, group int
+	owned     bool
+}
+
+func foreground(command *exec.Cmd) (*foregroundTerminal, error) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	file, ok := command.Stdin.(*os.File)
 	if !terminalHandoff || !ok || !term.IsTerminal(int(file.Fd())) {
-		return func() error { return nil }, nil
+		return nil, nil
 	}
 	fd := int(file.Fd())
 	group, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP)
 	if errors.Is(err, unix.ENOTTY) {
-		return func() error { return nil }, nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read terminal foreground group: %w", err)
 	}
 	if group != unix.Getpgrp() {
-		return func() error { return nil }, nil
+		return nil, nil
 	}
 	command.Stdout = terminalOutput(command.Stdout)
 	command.Stderr = terminalOutput(command.Stderr)
 	command.SysProcAttr.Foreground, command.SysProcAttr.Ctty = true, fd
-	return func() error {
-		if err := terminalAccess(func() error {
-			return unix.IoctlSetPointerInt(fd, unix.TIOCSPGRP, group)
-		}); err != nil {
-			return fmt.Errorf("restore terminal foreground group: %w", err)
-		}
+	return &foregroundTerminal{fd: fd, group: group, owned: true}, nil
+}
+
+func (t *foregroundTerminal) give(group int) error {
+	return terminalAccess(func() error {
+		return unix.IoctlSetPointerInt(t.fd, unix.TIOCSPGRP, group)
+	})
+}
+
+func (t *foregroundTerminal) restore() error {
+	if t == nil || !t.owned {
 		return nil
-	}, nil
+	}
+	if err := t.give(t.group); err != nil {
+		return fmt.Errorf("restore terminal foreground group: %w", err)
+	}
+	t.owned = false
+	return nil
+}
+
+func (t *foregroundTerminal) signal(command *exec.Cmd, value os.Signal, canceling bool) (bool, error) {
+	switch value {
+	case syscall.SIGTSTP:
+		// The supervisor reports an actual stopped child, not just delivery of
+		// SIGTSTP (which a child can catch or ignore). Cancellation must not stop
+		// azctx while its kill deadline is running.
+		if canceling {
+			return true, nil
+		}
+		if err := t.restore(); err != nil {
+			return true, err
+		}
+		// Stop the shell-visible job, including any shell pipeline peers.
+		return true, unix.Kill(-t.group, unix.SIGSTOP)
+	case syscall.SIGCONT:
+		group, err := unix.IoctlGetInt(t.fd, unix.TIOCGPGRP)
+		if err != nil {
+			return true, fmt.Errorf("read resumed terminal foreground group: %w", err)
+		}
+		// fg gives azctx its terminal before SIGCONT. bg must not steal it.
+		if group == t.group {
+			if err := t.give(command.Process.Pid); err != nil {
+				if errors.Is(unix.Kill(-command.Process.Pid, 0), unix.ESRCH) {
+					return true, nil
+				}
+				return true, fmt.Errorf("resume terminal foreground group: %w", err)
+			}
+			t.owned = true
+		}
+		err = unix.Kill(-command.Process.Pid, unix.SIGCONT)
+		if errors.Is(err, unix.ESRCH) {
+			err = nil
+		}
+		return true, err
+	default:
+		return false, nil
+	}
 }
 
 func forwardedSignals() []os.Signal {

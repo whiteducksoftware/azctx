@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/redact"
 )
 
 type Call struct {
@@ -38,6 +39,12 @@ func (f *FakeRunner) Run(_ context.Context, args []string, options azcli.Options
 	}
 	response := f.Responses[0]
 	f.Responses = f.Responses[1:]
+	if options.ObserveTenantFailure != nil {
+		for _, failure := range azcli.ParseTenantFailures(response.Result.Stderr) {
+			options.ObserveTenantFailure(failure)
+		}
+	}
+	response.Result.Stderr = redact.Text(response.Result.Stderr)
 	if terminal := options.Terminal; terminal != nil {
 		stdout, stderr := terminal.Stdout, terminal.Stderr
 		if stdout == nil {

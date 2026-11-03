@@ -16,6 +16,33 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
+func TestFZFExpectedKeyProtocol(t *testing.T) {
+	dir := testutil.WorkDir(t)
+	testutil.Build(t, filepath.Join(dir, testutil.ExecutableName("fzf")), "github.com/whiteducksoftware/azctx/internal/testutil/fakefzf")
+	t.Setenv("PATH", dir)
+	t.Setenv("FAKEFZF_RECORD", filepath.Join(dir, "record.json"))
+	t.Setenv("FAKEFZF_EXIT", "")
+	subscriptions := []profile.Subscription{{Id: productionID, Name: "FZF protocol subscription", Tenant: pickerTenantID, TenantName: acmeTenant}}
+	row := "0\tFZF protocol subscription\t" + productionID + "\tAcme\t" + pickerTenantID
+	for _, tc := range []struct {
+		name, output string
+		wantIndex    int
+		wantErr      error
+	}{
+		{"Enter", "\n" + row + "\n", 0, nil},
+		{"Escape", "esc\n", -1, ui.ErrCanceled},
+		{"Escape with selected row", "esc\n" + row + "\n", -1, ui.ErrCanceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("FAKEFZF_OUTPUT", tc.output)
+			index, err := ui.SelectFZF(context.Background(), subscriptions, &bytes.Buffer{})
+			if index != tc.wantIndex || !errors.Is(err, tc.wantErr) {
+				t.Fatalf("selection = %d, %v; want %d, %v", index, err, tc.wantIndex, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestFZFProcessBoundary(t *testing.T) {
 	dir := testutil.WorkDir(t)
 	testutil.Build(t, filepath.Join(dir, testutil.ExecutableName("fzf")), "github.com/whiteducksoftware/azctx/internal/testutil/fakefzf")
@@ -48,7 +75,7 @@ func TestFZFProcessBoundary(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	wantArgs := []string{"--no-multi", "--no-sort", "--delimiter=\t", "--with-nth=2..", "--no-ansi", "--no-expect", "--prompt=azctx> ", "--color=bw"}
+	wantArgs := []string{"--no-multi", "--no-sort", "--delimiter=\t", "--with-nth=2..", "--no-ansi", "--expect=esc", "--prompt=azctx> ", "--color=bw"}
 	wantInput := "0\t--query=$(touch SHOULD_NOT_EXIST) 0 forged [31m\t" + productionID + "\tTenant Name [0m\t" + pickerTenantID +
 		"\n1\tSame ID, distinct tenant\t" + productionID + "\t" + pickerHomeID + "\t" + pickerHomeID + "\n"
 	if !reflect.DeepEqual(got.Args, wantArgs) || got.Opts != "" || got.File != "" ||
@@ -72,9 +99,15 @@ func assertFZFCancellation(t *testing.T, subscriptions []profile.Subscription) {
 		}
 	}
 	t.Setenv("FAKEFZF_EXIT", "")
-	t.Setenv("FAKEFZF_OUTPUT", "1\tforged\n")
-	if _, err := ui.SelectFZF(context.Background(), subscriptions, &messages); err == nil {
-		t.Fatal("accepted an invented row")
+	row := "1\tSame ID, distinct tenant\t" + productionID + "\t" + pickerHomeID + "\t" + pickerHomeID
+	for _, output := range []string{
+		"", "\n", row + "\n", "\n1\tforged\n", "tab\n" + row + "\n",
+		"\n0" + row[1:] + "\n", "\n" + row + "\n" + row + "\n", "\n" + row + "\n\n",
+	} {
+		t.Setenv("FAKEFZF_OUTPUT", output)
+		if index, err := ui.SelectFZF(context.Background(), subscriptions, &messages); index != -1 || err == nil || err.Error() != "invalid fzf selection" {
+			t.Fatalf("invalid output %q: selection=%d err=%v", output, index, err)
+		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

@@ -15,6 +15,8 @@ import (
 
 // Runner is the boundary for all Azure CLI processes. A nonzero process exit
 // returns both its captured result and an error; startup failures use code -1.
+// Implementations redact returned and attached stderr, classifying transient
+// raw lines first when Options.ObserveTenantFailure is set.
 type Runner interface {
 	Run(context.Context, []string, Options) (Result, error)
 }
@@ -30,10 +32,13 @@ type Options struct {
 	Env []string
 	// Terminal selects attached mode. Nil selects captured mode.
 	Terminal *Terminal
+	// ObserveTenantFailure receives classified, redacted login warnings before
+	// display redaction can obscure their AADSTS codes. It never receives raw text.
+	ObserveTenantFailure func(TenantFailure)
 }
 
 // Terminal supplies the attached streams. Nil streams use the process terminal.
-// Stderr is always also captured in Result, even in attached mode.
+// Stderr is always also captured, redacted, in Result, even in attached mode.
 type Terminal struct {
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -82,7 +87,16 @@ func (r *execRunner) Run(ctx context.Context, args []string, options Options) (R
 	}
 	safeStderr := redact.NewWriter(diagnostic)
 	command.Stderr = safeStderr
-	err := errors.Join(child.RunAttached(command), safeStderr.Flush())
+	var failures *tenantFailureWriter
+	if options.ObserveTenantFailure != nil {
+		failures = &tenantFailureWriter{output: safeStderr, observe: options.ObserveTenantFailure}
+		command.Stderr = failures
+	}
+	err := child.RunAttached(command)
+	if failures != nil {
+		failures.flush()
+	}
+	err = errors.Join(err, safeStderr.Flush())
 	if ctx.Err() != nil {
 		err = errors.Join(ctx.Err(), err)
 	}

@@ -16,7 +16,8 @@ import (
 
 // New loads the profile and Azure CLI settings using an already resolved runner.
 // Files is read-only and rooted at configDir. With nil files, an empty configDir
-// selects AZURE_CONFIG_DIR or the user's .azure directory.
+// selects AZURE_CONFIG_DIR or the user's .azure directory. An explicit configDir
+// also overrides AZURE_CONFIG_DIR for every Azure CLI child.
 func New(files fs.FS, runner Runner, configDir string) (CLI, error) {
 	return newCLI(files, runner, configDir, false)
 }
@@ -28,6 +29,7 @@ func NewForLogin(files fs.FS, runner Runner, configDir string) (CLI, error) {
 }
 
 func newCLI(files fs.FS, runner Runner, configDir string, allowMissing bool) (CLI, error) {
+	runner = WithConfigDir(runner, configDir)
 	if files == nil {
 		var err error
 		configDir, err = resolveConfigDir(configDir, allowMissing)

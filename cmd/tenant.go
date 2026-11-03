@@ -62,7 +62,7 @@ func tenantRunE(command *cobra.Command, args []string, newCLI func() (azcli.CLI,
 		return err
 	}
 	cli.Context = command.Context()
-	return switchConfigured(command, cli, deps, catalog.Config, target)
+	return switchConfigured(command, cli, deps, catalog.Config, target, false)
 }
 
 func tenantCatalog(cli azcli.CLI, deps Dependencies) (selection.Catalog, error) {

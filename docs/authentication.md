@@ -51,8 +51,11 @@ the login child, never the caller or the persisted configuration.
 
 Ordinary login starts **one** attached `az login`, then parses documented
 `Authentication failed against tenant <id> '<name>': AADSTS<code>` stderr lines,
-even if that process exits unsuccessfully. A table on **stderr** lists every
-reported tenant, code and explanation:
+even if that process exits unsuccessfully. A missing or empty quoted display name
+uses the tenant GUID as its label. Classification happens before diagnostic
+redaction, so display names such as `Password` or `Token` cannot hide failures;
+streamed diagnostics and retained messages remain redacted. A table on
+**stderr** lists every reported tenant, code and explanation:
 
 | Code | Meaning and action |
 | --- | --- |
@@ -67,7 +70,11 @@ On a TTY azctx asks **once**, for example,
 Confirmation reads only that line, without buffering away subsequent Azure
 login input or replacing the attached terminal. Each retry uses
 `az login --tenant <GUID>`, preserves device-code/other passthrough options,
-and replaces any previous tenant selector. Tenants that succeeded are not
+and replaces any previous tenant selector. Follow-up tenant sign-ins omit the
+initial `--subscription VALUE` or `--subscription=VALUE` selector, which may
+belong to another tenant. If follow-up attempts change the initial login's
+default subscription, azctx restores it through GUID-validated `az account set`,
+never by writing Azure files directly. Tenants that succeeded are not
 retried. Duplicate warnings share one sign-in, case-insensitively by tenant ID;
 a known non-retryable failure takes precedence. New policy blocks discovered
 during retries are explained and not attempted again. There is no retry loop.
@@ -76,7 +83,8 @@ Azure CLI merges the subscriptions from individual logins.
 Without a TTY, with `CI` present, `--no-input` or `AZCTX_NO_INPUT=1`, azctx lists
 initial failures and returns **3** without prompting, retrying or discovering
 more tenants. Declined confirmation, unreadable confirmation, failed sign-in
-processes and any unresolved/partial tenant failures also return 3.
+processes, failures to restore the initial default through Azure CLI, and any
+unresolved/partial tenant failures also return 3.
 Ctrl+C/context cancellation remains **130**, including during retries.
 Invalid flags, unsupported Azure CLI versions, discovery errors before tenant
 failures, and profile reload errors after otherwise successful login remain 1.
