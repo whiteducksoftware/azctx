@@ -113,6 +113,7 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	rootCmd.AddCommand(newLoginCommand(func() (azcli.CLI, error) { return newCLI(true) }, deps))
 	rootCmd.AddCommand(newAuthCommand(resolveRunner, deps))
 	rootCmd.AddCommand(newDoctorCommand(resolveRunner, deps))
+	configureHelp(rootCmd)
 	return rootCmd
 }
 

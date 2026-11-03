@@ -1,7 +1,8 @@
-# Authentication and diagnostics (draft)
+# Authentication and diagnostics
 
 This guide covers broker-aware sign-in, multi-tenant MFA and offline diagnostics.
-Layer 18 finalizes the release guide.
+This is the unreleased 2026.11 source contract, not a claim of live broker
+acceptance or package availability. See [release status](releasing.md).
 
 ## Sign in
 
@@ -58,7 +59,7 @@ reported tenant, code and explanation:
 | `50076` | MFA required; eligible for one targeted sign-in. |
 | `50079` | MFA registration required; eligible for one targeted sign-in. |
 | `53003` | Conditional Access blocked token issuance; retry will not help. Contact the tenant administrator. |
-| Other | The original diagnostic is shown verbatim; no automatic retry. |
+| Other | Original diagnostic retained, subject to heuristic redaction; no automatic retry. |
 
 On a TTY azctx asks **once**, for example,
 `Sign in to these 2 tenants now? [Y/n]`. Empty input, `y` or `yes`
@@ -105,8 +106,8 @@ If initial login has failures and azctx input is disabled, the above exit-3
 rule takes precedence over discovery. With no initial failures the explicit
 option may run in no-input mode; Azure CLI still owns its sign-in interaction.
 
-`--force-mfa` is **removed**, not deprecated. Use ordinary login for targeted
-MFA recovery, or `--all-tenants` to enumerate all available tenants. Non-user
+Use ordinary login for targeted MFA recovery, or `--all-tenants` to enumerate
+all available tenants. See [the migration guide](upgrade.md) for removed flags. Non-user
 passthrough (`--identity`/`-i` or `--service-principal`) runs one unchanged Azure
 login and **skips both MFA orchestration and tenant discovery**, even with
 `--all-tenants`. azctx does not log passthrough argument values or authenticate
@@ -205,7 +206,7 @@ profile payload, MSAL cache or leftover tenant-file content is printed. The
 explicitly reported path/cloud fields may reveal local filesystem/cloud names;
 review them before sharing a report. Subscriptions' schema-1 DTO is unchanged.
 
-## Live acceptance checklist — unverified
+## Live acceptance checklist: unverified
 
 No live identities were available during implementation. Offline fake-Azure
 tests are not proof of live broker support. A maintainer must manually verify:
