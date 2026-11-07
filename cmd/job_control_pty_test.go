@@ -211,9 +211,24 @@ func runInteractiveJob(t *testing.T, binary string, exercise func(context.Contex
 	writeJobInput(t, master, "/bin/bash -c "+quoteJobArg(command)+"\n")
 	exercise(ctx, master, screen)
 	for _, path := range []string{wrapper, group} {
-		pid := recordedJobGroup(t, path)
-		if err := syscall.Kill(-pid, 0); !errors.Is(err, syscall.ESRCH) {
-			t.Fatalf("job group %d survived shell completion: %v", pid, err)
+		waitJobGroupGone(ctx, t, recordedJobGroup(t, path))
+	}
+}
+
+func waitJobGroupGone(ctx context.Context, t *testing.T, group int) {
+	t.Helper()
+	// SIGKILL also kills the supervisor; init reaps its orphaned target asynchronously.
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		err := syscall.Kill(-group, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("job group %d survived shell completion: %v (context: %v)", group, err, ctx.Err())
 		}
 	}
 }
