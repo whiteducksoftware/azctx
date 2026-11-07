@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/whiteducksoftware/azctx/internal/redact"
 	"github.com/whiteducksoftware/azctx/internal/ui"
@@ -97,7 +98,19 @@ func WriteError(output io.Writer, format string, err error) int {
 	}{Code: CodeError, Message: redact.Text(err.Error()), ExitCode: status}
 	var classified *ExitError
 	if errors.As(err, &classified) {
-		payload.Code, payload.Candidates = classified.Code, classified.Candidates
+		payload.Code, payload.Candidates = classified.Code, slices.Clone(classified.Candidates)
+		for index := range payload.Candidates {
+			candidate := &payload.Candidates[index]
+			candidate.ID = redact.Text(candidate.ID)
+			candidate.Name = redact.Text(candidate.Name)
+			candidate.TenantID = redact.Text(candidate.TenantID)
+			candidate.TenantName = redact.Text(candidate.TenantName)
+			candidate.TenantDomain = redact.Text(candidate.TenantDomain)
+			candidate.State = redact.Text(candidate.State)
+			candidate.User.Name = redact.Text(candidate.User.Name)
+			candidate.User.Type = redact.Text(candidate.User.Type)
+			candidate.Environment = redact.Text(candidate.Environment)
+		}
 	}
 	if status == ExitInterrupted {
 		payload.Code = CodeInterrupted
