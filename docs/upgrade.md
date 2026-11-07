@@ -26,6 +26,8 @@ brew upgrade --cask whiteducksoftware/tap/azctx
 
 macOS 13+ is required. Binaries are unsigned/not notarized; the cask declares
 staged-binary quarantine removal, not Apple signing.
+The cask depends on Homebrew's `azure-cli` cask, which installs Azure CLI
+through Homebrew if it is missing; the migrated `azure-cli` formula is not used.
 
 ### Windows Chocolatey
 
@@ -89,6 +91,7 @@ changes. Ambiguous selections retain the existing candidate-output policy.
 
 | Area | Correction | What to do |
 | --- | --- | --- |
+| Homebrew Azure CLI dependency | The macOS cask depends on the `azure-cli` cask instead of the formula removed from Homebrew core, installing Azure CLI through Homebrew if missing. | Install with `brew install --cask whiteducksoftware/tap/azctx`; no separate Azure CLI installation is needed. |
 | Switch confirmation | Successful picker, query, tenant and previous-subscription switches print `✓ Switched to <sub> (<subId>) in tenant <tenant> (<tenantId>)` on stderr, with ` [protected]` for protected targets. Labels are display-sanitized. | Stdout is unchanged; use `-o json` to suppress confirmation. |
 | Terminal colors | Built-in subscription/tenant picker rows, current text and list tables color names green, IDs cyan and tenants faint; all selected-row cells and separators are bold with `▸` and list headers are bold. Status messages gain explicit cyan identity accents and a green success `✓`; diagnostic redaction runs before styling. | Colors require a TTY on the target stream and absent `NO_COLOR`; forced-color variables cannot override either gate. Piped text, screen goldens, JSON, doctor, other tables and fzf remain plain. |
 | Compact picker | Built-in subscription and tenant pickers show at most 10 rows inline, shrink for fewer matches or short terminals, and keep column headers visible while navigating and filtering. | All matches remain accessible through navigation and filtering. Responsive columns, selection order and optional fzf behavior are unchanged. |

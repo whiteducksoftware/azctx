@@ -18,7 +18,8 @@ an environment variable or maintainer approval alone cannot bypass it.
 - Linux ships only the existing `azctx_Linux_*.tar.gz` archives. macOS keeps
   `azctx_Darwin_*.tar.gz`; Windows keeps `azctx_Windows_*.zip`.
 - The macOS-only cask targets `whiteducksoftware/homebrew-tap/Casks/azctx.rb`,
-  depends on the `azure-cli` formula and installs `azctx`. The binaries remain
+  depends on the `azure-cli` cask and installs Azure CLI through Homebrew if it
+  is missing, alongside `azctx`. The binaries remain
   unsigned/not notarized. A declarative `postflight_steps` `run` invokes
   `/usr/bin/xattr -dr com.apple.quarantine` on the staged binary; no deprecated
   Ruby `postflight` hook is used. Tap trust and formula-to-cask migration are
@@ -104,14 +105,21 @@ other quoting, interpolation, modifiers, inline comments, calls, extra stanzas
 or blocks like `on_linux`, fails closed instead of being ignored. Every core
 stanza must occur exactly once, each architecture's `url` must name its own
 release archive with a lowercase SHA-256, and `postflight_steps` must contain
-only the quarantine-removal `run`. The only permitted Ruby symbol is the exact
-root-level `depends_on :macos` declaration that GoReleaser 2.19 emits for a
+only the quarantine-removal `run`. The exact root-level `depends_on :macos`
+declaration is permitted because GoReleaser 2.19 emits it for a
 macOS-only cask; it may appear at most once and is part of the compared
-statements, so native style can neither add nor remove it. Other symbols,
-platforms and contexts are still rejected. All statements, including their
+statements, so native style can neither add nor remove it. The dependency must
+be exactly `depends_on cask: "azure-cli"` or its one-element array form;
+formula dependencies, other casks and extra dependencies are rejected.
+Homebrew 7.0.12 also normalizes GoReleaser's no-zap comment to
+`zap :not_required`; this exact root-level no-cleanup marker is accepted at
+most once and is semantically equivalent to omitting cleanup. Real cleanup
+stanzas, other symbols, platforms and contexts are still rejected.
+All actionable statements, including their
 architecture block, must then equal the original Linux artifact's; native style
-may only reorder or reformat them. Tests cover both the historical GoReleaser
-2.18.3 fixtures and the current 2.19 output with its native-style normalization.
+may only reorder or reformat them. The four fixtures are regenerated from real
+publisher-disabled GoReleaser 2.19.0 output and current native Homebrew
+normalization, not hand-edited.
 A new GoReleaser or Homebrew output shape therefore needs a reviewed parser
 update. Only after that comparison does it mint the
 single-tap contents-write App token and run the Python standard-library
