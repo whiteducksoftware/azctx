@@ -16,7 +16,7 @@ NORMALIZED = Path(".release-check/cask/azctx.rb")
 RELEASES = "https://github.com/whiteducksoftware/azctx/releases/download/#{version}"
 # The only Ruby syntax that current GoReleaser casks and `brew style --fix` emit:
 # whole-line comments, double-quoted strings whose only interpolation is
-# #{version}, `label:` keywords, bare words, the exact :macos platform and [ ] ,
+# #{version}, `label:` keywords, bare words, exact :macos/:not_required symbols and [ ] ,
 # punctuation. Comments after code, other quoting/interpolation, other symbols,
 # modifiers, calls, semicolons and parentheses are rejected rather than skipped.
 SYNTAX = re.compile(
@@ -24,6 +24,7 @@ SYNTAX = re.compile(
     r"""|(?P<string>"(?:[^"\\\#\n]|\#\{version\})*")"""
     r"""|(?P<label>[a-z_][a-z0-9_]*:)(?![:a-z0-9_])"""
     r"""|(?P<platform>:macos)(?![A-Za-z0-9_:])"""
+    r"""|(?P<no_zap>:not_required)(?![A-Za-z0-9_:])"""
     r"""|(?P<word>[a-z_][a-z0-9_]*)(?![a-z0-9_:])|(?P<punctuation>[\[\],])"""
 )
 # The known azctx cask template: every block and stanza must occur exactly once.
@@ -38,7 +39,7 @@ STRING, ARRAY, DEPENDENCY = (str,), (tuple,), (str, tuple)
 STANZAS = {
     ("cask",): {
         "version": (("", STRING),), "name": (("", STRING),), "desc": (("", STRING),),
-        "homepage": (("", STRING),), "binary": (("", STRING),), "depends_on": (("formula", DEPENDENCY),),
+        "homepage": (("", STRING),), "binary": (("", STRING),), "depends_on": (("cask", DEPENDENCY),),
     },
     ("cask", "livecheck"): {"skip": (("", STRING),)},
     ("cask", "postflight_steps"): {"run": (("", STRING), ("args", ARRAY))},
@@ -122,6 +123,7 @@ def arguments(tokens, line):
 def cask_semantics(cask):
     """Return the sorted known-template statements, rejecting any unrecognized syntax."""
     path, result = (), []
+    no_zap = False
     for line, tokens in statements(cask):
         words = [text for _, text, _ in tokens]
         stanza = words[0]
@@ -141,6 +143,11 @@ def cask_semantics(cask):
             # GoReleaser 2.19 marks macOS-only casks explicitly; retain this
             # constraint in the comparison without accepting general Ruby symbols.
             result.append((path, "depends_on_macos", ()))
+        elif path == ("cask",) and words == ["zap", ":not_required"]:
+            # Homebrew replaces GoReleaser's no-zap comment with this inert marker.
+            if no_zap:
+                raise ValueError(f"duplicate cask no-zap marker on line {line}")
+            no_zap = True
         else:
             signature = STANZAS.get(path, {}).get(stanza)
             values = arguments(tokens[1:], line)
@@ -153,7 +160,9 @@ def cask_semantics(cask):
                 raise ValueError(f"unexpected cask stanza on line {line}")
             if stanza == "depends_on" and isinstance(values[0][1], tuple) and len(values[0][1]) == 1:
                 # A one-element array and a scalar are the same Homebrew dependency.
-                values = (("formula", values[0][1][0]),)
+                values = (("cask", values[0][1][0]),)
+            if stanza == "depends_on" and values != (("cask", "azure-cli"),):
+                raise ValueError(f"cask dependency is not the Azure CLI cask on line {line}")
             if stanza == "url" and values[0][1] != f"{RELEASES}/azctx_Darwin_{ARCHITECTURE[path[-1]]}.tar.gz":
                 raise ValueError(f"cask url is not this architecture's release archive on line {line}")
             if stanza == "run" and values != QUARANTINE:

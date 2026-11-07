@@ -23,7 +23,7 @@ class ReleaseConfigurationTest < Minitest::Test
     raise 'cask destination' unless cask.fetch('directory') == 'Casks' &&
                                     cask.fetch('repository').values_at('owner', 'name', 'branch') ==
                                       %w[whiteducksoftware homebrew-tap main]
-    raise 'Azure CLI formula dependency' unless cask.fetch('dependencies') == [{ 'formula' => 'azure-cli' }]
+    raise 'Azure CLI cask dependency' unless cask.fetch('dependencies') == [{ 'cask' => 'azure-cli' }]
     raise 'cask binaries' unless cask.fetch('binaries') == ['azctx']
     raise 'unsigned cask needs declarative quarantine removal' unless
       cask.fetch('custom_block').include?('postflight_steps do') &&
@@ -727,6 +727,7 @@ class ReleaseConfigurationTest < Minitest::Test
   def test_package_policy_rejects_regressions
     mutations = [
       ->(u, _) { u['brews'] = [] },
+      ->(u, _) { u['homebrew_casks'][0]['dependencies'] = [{ 'formula' => 'azure-cli' }] },
       ->(u, _) { u['homebrew_casks'][0]['skip_upload'] = 'false' },
       ->(u, _) { u['homebrew_casks'][0]['hooks'] = { 'post' => { 'install' => 'system_command "xattr"' } } },
       ->(u, _) { u['homebrew_casks'][0]['directory'] = 'Formula' },
