@@ -39,9 +39,11 @@ Documentation parsing accepts LF and CRLF, including multiline shell
 continuations; this does not relax the byte-exact output fixture checks below.
 The generated CLI reference in `docs/cli/*.md` is pinned to LF by
 `.gitattributes`; ordinary Markdown, including README quickstart extraction,
-must also work with Git's CRLF checkouts. `make docs-check` compares generated
-pages byte-for-byte and rejects changed, missing or extra files without
-normalizing line endings.
+must also work with Git's CRLF checkouts. CRLF tests import current working-tree
+files (including unstaged and untracked pages) into an isolated Git repository,
+so they also work from source archives without Git metadata. `make docs-check`
+compares generated pages byte-for-byte and rejects changed, missing or extra
+files without normalizing line endings.
 For plugin changes also run `claude plugin validate .` and
 `claude plugin validate ./plugins/azctx` when Claude Code is available; report
 an unavailable CLI as a manual acceptance limitation rather than a pass.
@@ -141,11 +143,12 @@ then `gh stack top` and `gh stack add` for the new branch.
 Use `gh stack sync` to fetch, rebase and push an existing stack; it is not a
 read-only check. Rerun `make check` on affected layers after rebasing.
 
-### Classic stacked PRs (current release delivery)
+### Classic stacked PRs (fallback)
 
 Use this fallback when the extension or native stack access is unavailable.
-The 2026.11 release currently uses ordinary branches and PRs with explicit
-parent bases; do not migrate an in-flight stack without maintainer coordination.
+The 2026.11 release is registered as native GitHub stack 123, with explicit
+parent bases. Preserve its existing branch tips and PR bases; do not migrate or
+rewrite an in-flight stack without maintainer coordination.
 For example, to create a **new** layer-04 branch on layer 03:
 
 ```sh

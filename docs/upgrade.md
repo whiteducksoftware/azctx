@@ -1,20 +1,17 @@
 # Upgrading to azctx 2026.11
 
-This guide covers breaking changes from 2024.12.5 to the unreleased 2026.11
-source contract. It is not notice that 2026.11 is published.
-[Release readiness is blocked](releasing.md) on supported native Windows/macOS
-egress enforcement; the tag workflow fails closed before any publisher.
-Keep a working installation until its replacement is actually available.
+This guide covers changes from 2024.12.5 to 2026.11. Review the breaking changes
+before replacing your installation. See the [release documentation](releasing.md)
+for package verification, publication gates and maintainer procedures.
 
-## Package manager commands after publication
+## Package manager commands
 
-These are **future stable-release** instructions. Verify package availability
-and provenance first. Do not run them to test a draft release.
+Verify package availability and provenance before upgrading.
 
 ### macOS Homebrew
 
-The formula becomes a macOS-only cask. After the cask is published and tap trust
-is established, migrate explicitly:
+The formula is replaced by a macOS-only cask. Verify the tap's trust and migrate
+explicitly:
 
 ```sh
 brew uninstall --formula azctx
@@ -29,11 +26,10 @@ brew upgrade --cask whiteducksoftware/tap/azctx
 
 macOS 13+ is required. Binaries are unsigned/not notarized; the cask declares
 staged-binary quarantine removal, not Apple signing.
-No tap migration or cask installation was performed here.
 
 ### Windows Chocolatey
 
-After the stable package is published and accepted:
+Upgrade an existing installation:
 
 ```powershell
 choco upgrade azctx --version=2026.11.0
@@ -46,9 +42,7 @@ Do not install the same binary through multiple package managers.
 
 ### Windows winget
 
-The generated fork branch does not publish to the community index.
-A maintainer must manually open the upstream winget PR and await acceptance
-before these commands work for 2026.11:
+Upgrade an existing installation:
 
 ```powershell
 winget upgrade --exact --id whiteducksoftware.azctx --version 2026.11.0
@@ -56,13 +50,12 @@ winget upgrade --exact --id whiteducksoftware.azctx --version 2026.11.0
 
 For a new installation use
 `winget install --exact --id whiteducksoftware.azctx --version 2026.11.0`.
-The manifest requires `Microsoft.AzureCLI` >=2.61.0. Native schema/package
-checks do not establish index availability or an installed upgrade.
+The manifest requires `Microsoft.AzureCLI` >=2.61.0.
 
 ### Linux and manual release binaries
 
-Homebrew Linux publication ends. A Linux formula user must deliberately move
-to a verified archive after publication:
+Homebrew no longer publishes Linux builds. To migrate from the Linux formula
+to a verified archive, first uninstall the formula:
 
 ```sh
 brew uninstall --formula azctx
@@ -89,6 +82,24 @@ and replace their previous manually managed binary. Never overwrite a
 package-manager-owned file manually. A matching checksum and valid provenance,
 not the filename alone, establish the bytes being installed.
 
+## Behavior fixes in 2026.11
+
+These fixes restore documented behavior without new flags or public JSON schema
+changes. Ambiguous selections retain the existing candidate-output policy.
+
+| Area | Correction | What to do |
+| --- | --- | --- |
+| Multi-tenant login | Tenant failures are recognized before diagnostic redaction, even with absent display names or names such as `Password`/`Token`. Eligible MFA retries and partial-login exit 3 now apply even when `az login` exits 0. Follow-up retries/discovery sign-ins omit the initial `--subscription` selector while retaining unrelated passthrough arguments, then restore any changed default through GUID-validated Azure CLI operations. | Handle the existing partial/declined/non-interactive sign-in status 3. A failed default-restoration process also exits 3; ordinary successful-login profile reload errors remain 1. Diagnostics stay redacted. See [authentication](authentication.md). |
+| Azure CLI INI headers | Headers follow Python ConfigParser semantics: `[cloud] # active cloud` and `[AzureCloud] ; comment` are accepted; the last closing bracket ends the section name, so `[a]b]` names `a]b`, including brackets in apparent trailing comments. | No rewrite is needed. Section-name case sensitivity, option-name case insensitivity, environment precedence, continuation handling, malformed/duplicate-input rejection and safety bounds are unchanged. |
+| Diagnostic JSON redaction | Token labels stay scoped to their JSON field: spaced `"token_type": "Bearer", "access_token": "…"` keeps the `access_token` key visible and hides its value. Quoted separators and escaped quotes remain safe across streamed writes, alongside existing array, slashed-key and path filtering. | No migration is needed. Redaction remains heuristic; Azure CLI stdout and explicit exec-child streams remain raw. See [security](security.md#redaction-is-heuristic). |
+| Tenant queries and reserved aliases | `azctx tenant 'Ops/Ops'` treats the slash literally; root `TENANT/SUBSCRIPTION` syntax is unchanged. Alias name `-` is rejected by configuration load/save and `alias set` because it is reserved for previous-subscription selection. | Rename or remove an existing `'-'` alias in private `config.yaml`. Use the tenant-first command for literal slash-containing tenant names. |
+| Concurrent previous selection | `azctx -` waits for preceding switch completion/rollback, then resolves and protects the actual previous target against the refreshed profile. Pickers and confirmations hold no switch lock; a previous target changed during selection/confirmation fails with an explicit retry message without switching. | Retry after reviewing the refreshed target. Unavailable or changed tenant/cloud identities retain no-match status 2; existing protection and state/history rules remain. |
+| Azure subprocess configuration | An explicit injected Azure `ConfigDir` now applies consistently to switching, login, tenant discovery, version diagnostics and confirmed broker changes. `login --all-tenants` disables dynamic extension installation only for its tenant-discovery child. | Ordinary inherited-directory use needs no migration. Provision `az account tenant list` separately if your Azure CLI requires an extension; azctx never installs it or changes global extension settings. Other children retain their existing extension behavior. |
+| Private storage symlinks | Private config/state/history/cache writes, removals and lock files reject leaf symlinks and non-regular files. Directory-entry locations inside either Azure configuration root are rejected even if their targets point outside. Ordinary private files and safe symlinked parents outside Azure remain supported. | Stop azctx processes and relocate leaf-symlinked private data to regular files in a safe azctx-owned directory, such as an `AZCTX_CONFIG_DIR` outside Azure configuration. Do not modify Azure configuration or credentials. Windows ACL policy is unchanged; this is not hostile parent-swap protection. |
+| Picker editing and cancellation | Filter editing preserves the cursor after Home/arrow navigation. Long subscription/tenant labels occupy one display row, including Unicode, keeping narrow-terminal pagination visible. fzf Escape cancels with exit 1, distinct from Ctrl+C exit 130; Enter retains the caller's ranked selection index. | No migration is needed. Matching, ranking, GUID validation and state/history semantics are unchanged. |
+| Unix attached commands | Intentional Ctrl+Z suspends the child and azctx's shell job, returning the shell prompt; `fg` restores child terminal ownership before continuation. Background resumes do not take the shell's terminal. Ctrl+C is still delivered once with exit 130; ordinary child statuses pass through and stopped-child cancellation retains its bounded kill fallback. | A catchable cancellation signal addressed to stopped azctx remains pending until the shell job continues. Native Windows console behavior is unchanged. No implicit shell parsing, expansion or pipelines are added. See [signal and terminal behavior](cli-contract.md#executable-and-diagnostic-boundaries) and [CI/CD](ci-cd.md). |
+| Guarded examples | Terraform and README pipeline examples use `&&` so failed guards cannot run subsequent commands. | Stop on every guard failure; agents still require the [two-guard exec preflight](ai-agents.md#exec-preflight). |
+
 ## Breaking changes
 
 | Area | Change | Who is affected | What to do |
@@ -100,10 +111,10 @@ not the filename alone, establish the bytes being installed.
 | Human profile displays | Built-in/fzf picker cells, subscription tables, current text, protected confirmation and human error/switch diagnostics flatten Unicode controls to spaces before layout/styling. Ordinary screen layouts are unchanged. | Users with tabs, newlines, escape sequences or C1 controls in profile labels or table fields. | Use GUIDs to distinguish visually similar labels. Matching, selected identities, schema-1 JSON, plain-field current output, environment exports and raw `exec` streams are unchanged. See [the CLI contract](cli-contract.md). |
 | Command interruption and login pipe cleanup | Production Ctrl+C returns 130 during switching, login, MFA retries and protected/broker/tenant prompts; interrupted switches restore exact previous/MRU state. Unix terminal signals are delivered once, PID-directed signals still forward, and a second interrupt or two-second grace timeout kills an uncooperative child. A successful login is not failed merely because a browser retains its stderr pipe. | Interactive users and scripts. | Treat 130 as cancellation, not Azure sign-in failure (3). Ordinary `exec` child exit/signal statuses and declined broker/MFA confirmation statuses are unchanged; a declined protected switch now exits 1 (see below). See [signal and terminal behavior](cli-contract.md). Native Windows console and redirected-input prompts honor cancellation. |
 | GitHub runner environment append | `env --format github` appends in place to the existing `GITHUB_ENV` with one no-follow `O_APPEND` write instead of replacing it with a private `0600` copy, so the runner-owned file keeps its inode, owner and mode. Container jobs running as a different user (such as root) no longer leave a file the runner cannot read, and the step user needs write permission on the file only. | GitHub Actions container jobs and CI authors. | Safety checks are unchanged: an existing absolute regular file outside Azure configuration, without symlinks/hard links, at most 8 MiB; swaps detected after opening are refused without writing. Open, partial-write and close failures exit 1; a partial write can leave a truncated last line. See [CI/CD](ci-cd.md). Private azctx files keep atomic replacement. |
-| Shell job control and Windows confirmation editing | Foreground restoration and stderr forwarding no longer suspend an ordinary Unix shell job, including with `TOSTOP`. Noncontrolling terminals and background wrappers do not attempt a foreground takeover. Windows console backspace/delete edits only existing answer characters, and raw Ctrl+C is not echoed. | Interactive users and terminal wrappers. | Single terminal interrupts, PID forwarding and raw child exits are preserved; independent interruption after a successful child still returns 130. Background terminal-read restrictions still apply. |
+| Shell job control and Windows confirmation editing | Foreground restoration and stderr forwarding no longer spuriously suspend an ordinary Unix shell job, including with `TOSTOP`; intentional Ctrl+Z still suspends the shell job (see [behavior fixes above](#behavior-fixes-in-202611)). Noncontrolling terminals and background wrappers do not attempt a foreground takeover. Windows console backspace/delete edits only existing answer characters, and raw Ctrl+C is not echoed. | Interactive users and terminal wrappers. | Single terminal interrupts, PID forwarding and raw child exits are preserved; independent interruption after a successful child still returns 130. Background terminal-read restrictions still apply. |
 | Declined protected switch and concurrent switch state | Declining the protected-switch prompt, including the default `N`, exits **1** with `switch canceled; no changes made` (a refusal is never success), so `azctx prod && terraform apply` stops. Switches hold a retained private `state.lock` across the state update, `az account set`, rollback and history append; concurrent switches wait instead of losing previous/recent IDs and record the subscription the preceding switch actually left active as previous, and a rollback never overwrites state that another writer committed meanwhile. | Scripts chaining after an interactive protected switch, and parallel switch users. | Treat exit 1 as "not switched". A waiting switch honours Ctrl+C (130) without changes. A rollback conflict keeps the newer `state.json` and reports it with the original failure. Read-only `list`, `-c`, `env`, `exec` and `guard` take no lock and remain non-mutating. See [configuration](configuration.md). |
 | Diagnostic redaction coverage | Redacted diagnostics also hide 80+ character standard-base64 values containing `/` (judged across path separators and split writes), `AccountKey=`/`SharedAccessKey=` connection-string values, `Authorization: Basic` credentials and every element of a labelled array such as `"password": ["…"]`. Ordinary paths, URLs, the Basic SKU/tier and already-redacted `[REDACTED]` text stay readable; `token=/value` now hides the whole value, including its leading `/`. | Users sharing verbose, doctor, error or Azure CLI stderr diagnostics. | Expect more `[REDACTED]` in diagnostics only. Azure CLI stdout and explicit `exec` streams remain raw. Redaction is still a heuristic: shorter unlabelled keys and unusual formats can be missed, so never paste raw secrets. See [security](security.md#redaction-is-heuristic). |
-| Future release packages | macOS moves from the deprecated formula publisher to a macOS-only cask with declarative quarantine removal for unsigned binaries; Chocolatey/winget require Azure CLI >=2.61.0 and skip prerelease publishing. | Package users and release maintainers. | See [release configuration](releasing.md). This layer publishes nothing and does not migrate the tap or establish tap trust; those remain #100 acceptance. Portable publishers use Ubuntu block mode; full native Windows/macOS enforcement is unmet and the release workflow fails closed until reviewed enforcement and acceptance exist. Releases default to not-latest until package availability is verified. |
+| Release packages | macOS moves from the deprecated formula to a macOS-only cask with declarative quarantine removal for unsigned binaries; Chocolatey/winget require Azure CLI >=2.61.0. | Package users. | Follow the package-manager commands above and verify provenance before replacing an installation. See [release documentation](releasing.md) for publication gates and maintainer acceptance. |
 | Contributor integration checks | The existing real-binary/fake-az suite runs on all three CI platforms; `make test`/`make check` now report statement-weighted `internal/` coverage and require at least 70%, with no `cmd/` gate. | Contributors and CI maintainers. | See [integration tests](integration-tests.md) for `make e2e`, offline policy tests and the manual dedicated-test-tenant `make live-test`, which CI never runs. Offline fake runs are not live acceptance; no tenant was supplied or live run verified during implementation. |
 | Hardening and redaction | Verbose, doctor, error diagnostics and Azure CLI stderr redact recognized token-shaped values, including tokens split across writes. Login children receive interrupts before a bounded cancellation fallback. | Troubleshooting and login users. | Expect `[REDACTED]` in diagnostics; stdout data and explicit `exec` child streams are unchanged. Filtering is heuristic, not a substitute for avoiding secrets in logs/argv. IDs derived from local data remain GUID-validated; only the user's explicit login arguments after `--` retain the passthrough exception. See [diagnostic boundaries](cli-contract.md#executable-and-diagnostic-boundaries). |
 | Windows builds | The 32-bit `windows/arm` build is removed; Windows on ARM64 remains supported. | Users of the 32-bit Windows ARM binary. | Move to a supported 64-bit Windows system and use the `windows/arm64` or `windows/amd64` binary. |
@@ -182,6 +193,7 @@ not the filename alone, establish the bytes being installed.
 
 | Area | Change | Who is affected | What to do |
 | --- | --- | --- | --- |
+| Documentation checkout and manual live-test tooling | CRLF tests check current working-tree docs, including regenerated/untracked pages, through an isolated Git checkout that ignores inherited Git variables and system/global Git configuration. Byte-exact source checks and missing/extra-file rejection remain. The manual live-test recipe honors `go env GOEXE`, including `.exe` on Windows. | Contributors and maintainers. | Run `make docs-check` after documentation changes. `make live-test` remains a manual dedicated-test-tenant action, never CI or offline acceptance. See [integration tests](integration-tests.md#manual-live-azure-test). |
 | CI checks | Every pull request (including stacked branches) and push to `main` runs race-enabled tests on Linux, macOS and Windows, Go/workflow linting, module verification and vulnerability scanning; Linux and Windows snapshot builds never publish. | Contributors. | Run `make check` before opening a PR and resolve failing checks. All reachable vulnerability findings and scanner errors fail; the layer 02 temporary x/text exceptions have been removed after the dependency upgrade. |
 | Hardening checks and reproducibility | Six strict linters and assertion checks are explicitly enabled; CI fuzzes each of the profile/config/project parsers for 60 seconds. Builds disable CGO, use `-trimpath` and GoReleaser derives binary timestamps and `BuildDate` from the commit. | Contributors and binary builders. | Run `make check` and `make fuzz`; the latter uses only offline synthetic corpora. See [release configuration](releasing.md) for least-privilege publisher configuration and the native enforcement blocker. Branch configuration is not evidence of a clean remote-main OpenSSF Scorecard run. |
 | Dependency and build metadata | Legacy UI, logging, filesystem and version dependencies are replaced with Bubble Tea/Bubbles/Lip Gloss, sahilm/fuzzy, x/term and the standard library. Both release configs now set `internal/version.Version`, `BuildDate` and `Commit` under the module import path. | Contributors and custom binary builders. | Use the new ldflags when building release binaries; Go build information supplies fallback metadata. Run `make golden` for intentional picker screen updates. The Go 1.26 language floor and preferred Go 1.27.3 toolchain are unchanged. |

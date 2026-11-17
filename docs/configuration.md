@@ -28,7 +28,8 @@ updateCheck: true
 ```
 
 Only these keys are accepted. `version: 1` is required in an existing file.
-Aliases map nonempty names without `/` to subscription GUIDs; names and GUIDs
+Aliases map nonempty names without `/` to subscription GUIDs; `-` is reserved
+for the previous-subscription shortcut and cannot be an alias. Names and GUIDs
 are matched ignoring case. Duplicate keys and case-colliding aliases are errors.
 `pinned`, `hidden` and `protected` accept subscription **or token tenant** GUIDs.
 All three lists and aliases default to empty. `picker` defaults to `builtin`;
@@ -146,8 +147,13 @@ switches run one after another instead of losing previous/recent IDs. Once it
 holds the lock, a switch re-reads the local `azureProfile.json` (no Azure call),
 so the previous ID in `state.json` and `history.json` is the subscription a
 preceding switch actually left active; if that re-read fails, the switch stops
-with no changes. A waiting switch can be canceled with Ctrl+C (exit 130) without
-changes. A rollback
+with no changes. Previous-subscription selection also reads its target under
+the lock and checks it against the refreshed profile. Pickers and protection
+prompts run without that lock; before switching, `azctx -` reacquires it and
+rechecks the previous target's subscription, tenant and cloud identity. If the
+target changed after selection or confirmation, the switch fails and requires
+a retry rather than applying the old confirmation to another identity.
+A waiting switch can be canceled with Ctrl+C (exit 130) without changes. A rollback
 restores the exact previous bytes only while the file still holds its own
 update; if another writer changed it meanwhile, the newer state is kept and the
 original switch error is reported together with that restore error. Read-only
@@ -185,9 +191,11 @@ This avoids suggesting forms that the tenant/subscription matcher cannot resolve
 ## Tenant-first selection and fzf
 
 `azctx tenant [query]` matches token tenant GUIDs first, then exact profile
-names/domains, then fuzzy names/domains/GUIDs. Identically named tenants remain
-separate by GUID. After selecting a tenant, only that tenant's selectable
-subscriptions appear. A unique tenant with one subscription switches directly.
+names/domains, then fuzzy names/domains/GUIDs. Tenant queries treat `/` literally,
+so `azctx tenant 'Ops/Ops'` matches that tenant name, not `TENANT/SUBSCRIPTION`.
+Identically named tenants remain separate by GUID. After selecting a tenant,
+only that tenant's selectable subscriptions appear. A unique tenant with one
+subscription switches directly.
 Pinned/recency priorities never resolve ambiguity automatically.
 
 Without input or with JSON, a query with several tenants or subscriptions exits

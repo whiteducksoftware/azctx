@@ -34,6 +34,48 @@ func TestAgentExecGuidanceRequiresProjectAndTargetGuards(t *testing.T) {
 	}
 }
 
+func TestDocumentedGuardedExecutionFailClosed(t *testing.T) {
+	readme := filepath.Join("..", "README.md")
+	for _, example := range []struct {
+		file, section, next string
+		commands            int
+	}{
+		{"../docs/integrations.md", "## Terraform\n", "## Azure Developer CLI\n", 2},
+		{readme, "For GitHub Actions:\n", "For Azure DevOps:\n", 2},
+		{readme, "For Azure DevOps:\n", "## 12. AI agents\n", 2},
+	} {
+		t.Run(example.file+"/"+strings.TrimSpace(strings.TrimPrefix(example.section, "## ")), func(t *testing.T) {
+			document := strings.ReplaceAll(string(readAgentFile(t, example.file)), "\r\n", "\n")
+			_, section, ok := strings.Cut(document, example.section)
+			if !ok {
+				t.Fatal("guarded execution section missing")
+			}
+			section, _, _ = strings.Cut(section, example.next)
+			var snippets []agentSnippet
+			for _, snippet := range agentCommandSnippets(section) {
+				if snippet.invocation {
+					snippets = append(snippets, snippet)
+				}
+			}
+			if len(snippets) != example.commands {
+				t.Fatalf("guarded example has %d commands, want %d", len(snippets), example.commands)
+			}
+			for index, snippet := range snippets {
+				args := expandAgentSynopsis(snippet.text)[0]
+				if index == 0 && (len(args) == 0 || args[0] != guardCommand) {
+					t.Fatal("execution must start with guard")
+				}
+				if err := parseAgentExample(args, true); err != nil {
+					t.Fatalf("%s: %v", snippet.text, err)
+				}
+				if index < len(snippets)-1 && !strings.HasSuffix(strings.TrimSpace(snippet.text), "&&") {
+					t.Errorf("step %d must short-circuit subsequent commands on every nonzero status: %s", index+1, snippet.text)
+				}
+			}
+		})
+	}
+}
+
 func agentExecPreflight(t *testing.T, file string) [][]string {
 	t.Helper()
 	document := strings.ReplaceAll(string(readAgentFile(t, file)), "\r\n", "\n")

@@ -130,7 +130,7 @@ func TestMFALoginRetriesOnlyFailedTenantsWithOneConfirmation(t *testing.T) {
 		t.Fatalf("code=%d calls=%+v stdout=%q stderr=%q", code, fake.Calls, stdout.String(), stderr.String())
 	}
 	for _, call := range fake.Calls[1:] {
-		if !call.Attached || !reflect.DeepEqual(call.Env, []string{childPickerOff}) {
+		if !call.Attached || !reflect.DeepEqual(call.Env, []string{childPickerOff, childConfigDirPrefix + deps.ConfigDir}) {
 			t.Fatalf("detached login or incorrect environment: %+v", call)
 		}
 	}
@@ -161,8 +161,10 @@ func TestAllTenantsDiscoversInsteadOfUsingProfile(t *testing.T) {
 	if code != 0 || !reflect.DeepEqual(got, want) || strings.Contains(stderr.String(), "[Y/n]") {
 		t.Fatalf("code=%d calls=%+v stdout=%q stderr=%q", code, fake.Calls, stdout.String(), stderr.String())
 	}
-	if fake.Calls[2].Attached || len(fake.Calls[2].Env) != 0 {
-		t.Fatalf("tenant discovery must remain captured and unmodified: %+v", fake.Calls[2])
+	if fake.Calls[2].Attached || !reflect.DeepEqual(fake.Calls[2].Env, []string{
+		"AZURE_EXTENSION_USE_DYNAMIC_INSTALL=no", childConfigDirPrefix + deps.ConfigDir,
+	}) {
+		t.Fatalf("tenant discovery must remain captured with isolated settings: %+v", fake.Calls[2])
 	}
 }
 

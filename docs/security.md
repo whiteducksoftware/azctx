@@ -42,7 +42,12 @@ with `history.lock`, and optional update cache and lock files. Shared atomic wri
 on Unix; existing permissions are tightened where the writer requires it.
 Windows ACLs follow the user's filesystem policy, not a POSIX-mode guarantee.
 Paths inside either resolved or environment Azure configuration are rejected,
-including existing symlink targets.
+checking both the directory entry through canonical parents and any existing
+symlink target. Private writes, removal and locks reject leaf symlinks and
+non-regular files. Lock opens do not follow leaf symlinks (Windows: reparse
+points are opened and rejected, with no delete sharing); the opened handle is
+checked against the validated regular file before locking. These checks do
+not establish immunity to hostile concurrent parent-directory replacement.
 `env --format github` is not a private azctx write: it appends in place to the
 runner-owned `GITHUB_ENV` through one no-follow `O_APPEND` handle (Windows:
 append-only, reparse points opened rather than followed, no delete sharing),
@@ -112,6 +117,9 @@ values, `AccountKey=`/`SharedAccessKey=` connection-string values,
 `"password": ["…"]`, including split writes. The writer buffers at most 80
 bytes, so shorter unlabelled keys are emitted unchanged. Path segments that
 share an 80-byte window with a recognized key may be hidden with it.
+Labels do not carry across JSON fields: a `token_type` of `Bearer` does not
+hide the following `access_token` key instead of its value. Separators inside
+quoted strings do not end a field, including across streamed writes.
 It is not proof that arbitrary unlabelled secrets will be found. Do not use it
 as permission to collect private logs.
 

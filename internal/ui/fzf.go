@@ -59,10 +59,20 @@ func SelectFZF(ctx context.Context, subscriptions []profile.Subscription, messag
 		}
 		return -1, fmt.Errorf("fzf selection failed: %w", err)
 	}
-	selected := strings.TrimSuffix(output.String(), "\n")
-	for i, row := range rows {
-		if selected == row {
-			return i, nil
+	return parseFZFSelection(output.String(), rows)
+}
+
+func parseFZFSelection(output string, rows []string) (int, error) {
+	key, selected, ok := strings.Cut(output, "\n")
+	if key == "esc" {
+		return -1, ErrCanceled
+	}
+	if ok && key == "" {
+		selected = strings.TrimSuffix(selected, "\n")
+		for i, row := range rows {
+			if selected == row {
+				return i, nil
+			}
 		}
 	}
 	return -1, errors.New("invalid fzf selection")
@@ -70,7 +80,7 @@ func SelectFZF(ctx context.Context, subscriptions []profile.Subscription, messag
 
 func fzfArguments(messages io.Writer) []string {
 	// with-nth also transforms search fields; another nth would hide the name.
-	args := []string{"--no-multi", "--no-sort", "--delimiter=\t", "--with-nth=2..", "--no-ansi", "--no-expect", "--prompt=azctx> "}
+	args := []string{"--no-multi", "--no-sort", "--delimiter=\t", "--with-nth=2..", "--no-ansi", "--expect=esc", "--prompt=azctx> "}
 	_, noColor := os.LookupEnv("NO_COLOR")
 	file, ok := messages.(interface{ Fd() uintptr })
 	if noColor || !ok || !term.IsTerminal(int(file.Fd())) {

@@ -19,6 +19,53 @@ const (
 	fixtureStderr = "stderr"
 )
 
+func TestMFAFakeAZNoInputKeepsRedactedTenantFailures(t *testing.T) {
+	dir := testutil.BuildFakeAZ(t)
+	for _, label := range []string{" 'Password'", " 'Token'", ""} {
+		t.Run(label, func(t *testing.T) {
+			deps := commandDependencies(t, &testutil.FakeRunner{})
+			const secret = "synthetic-secret-not-for-output"
+			warning := "Authentication failed against tenant " + mfaTenant + label +
+				": AADSTS50076: password=" + secret
+			fixtures := []map[string]any{
+				{fixtureArgs: []string{versionCommand, outputFlag, jsonFormat}, fixtureStdout: brokerVersionJSON},
+				{fixtureArgs: []string{loginCommand}, fixtureStderr: warning},
+			}
+			runner, record := configureMFAProcess(t, dir, fixtures)
+			deps.Runner = runner
+			var stdout, stderr bytes.Buffer
+			code := cmd.Run([]string{loginCommand, noInputFlag}, deps, strings.NewReader(""), &stdout, &stderr)
+			calls, err := os.ReadFile(record)
+			if code != 3 || err != nil || strings.Count(string(calls), "\n") != 2 ||
+				stdout.Len() != 0 || strings.Contains(stderr.String(), secret) ||
+				!strings.Contains(stderr.String(), "[REDACTED]") || !strings.Contains(stderr.String(), "MFA required") ||
+				!strings.Contains(stderr.String(), mfaTenant) || strings.Contains(stderr.String(), "[Y/n]") {
+				t.Fatalf("code=%d error=%v calls=%s stdout=%q stderr=%q", code, err, calls, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func configureMFAProcess(t *testing.T, dir string, fixtures []map[string]any) (azcli.Runner, string) {
+	t.Helper()
+	files := testutil.WorkDir(t)
+	fixturePath, record := filepath.Join(files, "mfa.json"), filepath.Join(files, "mfa.jsonl")
+	data, err := json.Marshal(fixtures)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFixture(t, fixturePath, string(data))
+	t.Setenv("PATH", dir)
+	t.Setenv("FAKEAZ_FIXTURES", fixturePath)
+	t.Setenv("FAKEAZ_RECORD", record)
+	t.Setenv("FAKEAZ_ENV_KEYS", "")
+	runner, err := azcli.NewRunner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runner, record
+}
+
 func TestMFAFakeAZConfirmationPreservesAttachedInputAndStreams(t *testing.T) {
 	dir := testutil.BuildFakeAZ(t)
 	deps := commandDependencies(t, &testutil.FakeRunner{})

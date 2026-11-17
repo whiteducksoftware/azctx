@@ -10,6 +10,8 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
 
+const windowsOS = "windows"
+
 func TestAtomicPrivateReplacement(t *testing.T) {
 	base := testutil.WorkDir(t)
 	azure := filepath.Join(base, "azure")
@@ -30,7 +32,7 @@ func TestAtomicPrivateReplacement(t *testing.T) {
 	if err != nil || string(data) != "{}" {
 		t.Fatalf("replacement=%s error=%v", data, err)
 	}
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != windowsOS {
 		for path, mode := range map[string]os.FileMode{filepath.Dir(name): 0o700, name: 0o600} {
 			info, err := os.Stat(path)
 			if err != nil || info.Mode().Perm() != mode {
@@ -55,6 +57,17 @@ func TestProcessLockIsExclusiveAndReusable(t *testing.T) {
 	if err != nil || !acquired {
 		t.Fatalf("first lock: acquired=%v error=%v", acquired, err)
 	}
+	before, err := os.Stat(name)
+	if err != nil {
+		release()
+		t.Fatal(err)
+	}
+	if runtime.GOOS != windowsOS && before.Mode().Perm() != 0o600 {
+		release()
+		t.Fatalf("lock is not private: %v", before.Mode())
+	}
+	// Pin the lazily loaded Windows file ID before releasing the first handle.
+	_ = os.SameFile(before, before)
 	secondRelease, acquired, err := storage.Lock(name, azure)
 	if err != nil || acquired {
 		if acquired {
@@ -69,6 +82,26 @@ func TestProcessLockIsExclusiveAndReusable(t *testing.T) {
 		t.Fatalf("reused lock: acquired=%v error=%v", acquired, err)
 	}
 	release()
+	after, err := os.Stat(name)
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatalf("retained lock identity changed: before=%v after=%v error=%v", before, after, err)
+	}
+}
+
+func TestRemovePrivateRegularFileAndMissingDestination(t *testing.T) {
+	dir := testutil.WorkDir(t)
+	path, azure := filepath.Join(dir, "state.json"), filepath.Join(dir, "azure")
+	if err := storage.Write(path, azure, []byte("synthetic state")); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := storage.Remove(path, azure); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 0 {
+		t.Fatalf("removed file or staging left behind: %v error=%v", entries, err)
+	}
 }
 
 func TestEnvironmentCannotRedirectStorageIntoAzure(t *testing.T) {

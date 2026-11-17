@@ -142,8 +142,10 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	picker.list, command = picker.list.Update(message)
 	if picker.list.FilterValue() != filter && picker.list.FilterState() != list.Unfiltered {
 		state := picker.list.FilterState()
+		cursor := picker.list.FilterInput.Position()
 		picker.list.SetFilterText(picker.list.FilterValue())
 		picker.list.SetFilterState(state)
+		picker.list.FilterInput.SetCursor(cursor)
 	}
 	return picker, command
 }
@@ -239,22 +241,28 @@ func (delegate subscriptionDelegate) row(width int, name, id, tenant string) str
 	name, id, tenant = DisplayText(name), DisplayText(id), DisplayText(tenant)
 	if delegate.tenants {
 		nameWidth := min(delegate.nameWidth, max(1, width-2-3-36))
-		line := lipgloss.NewStyle().Width(nameWidth).MaxWidth(nameWidth).Render(name) + " | " + id
+		line := singleLineCell(name, nameWidth) + " | " + id
 		if width >= 2+nameWidth+3+36+3+delegate.tenantWidth {
 			line += " | " + tenant
 		}
 		return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
 	}
 	nameWidth := min(delegate.nameWidth, max(1, width-2))
-	line := lipgloss.NewStyle().Width(nameWidth).MaxWidth(nameWidth).Render(name)
+	line := singleLineCell(name, nameWidth)
 	tenantWidth := delegate.tenantWidth
 	switch {
 	case width >= 2+nameWidth+3+36+3+tenantWidth:
-		line += " | " + lipgloss.NewStyle().Width(36).MaxWidth(36).Render(id) + " | " + tenant
+		line += " | " + singleLineCell(id, 36) + " | " + tenant
 	case width >= 2+nameWidth+3+tenantWidth:
 		line += " | " + tenant
 	}
 	return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
+}
+
+func singleLineCell(value string, width int) string {
+	// Width wraps text, so truncate before applying column padding.
+	value = lipgloss.NewStyle().MaxWidth(width).Render(value)
+	return lipgloss.NewStyle().Width(width).Render(value)
 }
 
 func tenantLabel(subscription profile.Subscription) string {

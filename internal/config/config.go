@@ -162,6 +162,9 @@ func readAliases(node *yaml.Node, result map[string]string) error {
 	}
 	for i := 0; i < len(node.Content); i += 2 {
 		key, value := node.Content[i], node.Content[i+1]
+		if key.Value == "-" {
+			return lineError(key, "alias '-' is reserved for the previous subscription")
+		}
 		if key.Tag != stringTag || strings.TrimSpace(key.Value) == "" || strings.Contains(key.Value, "/") {
 			return lineError(key, "alias must be a nonempty name without '/'")
 		}

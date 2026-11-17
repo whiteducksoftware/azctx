@@ -37,7 +37,7 @@ ci-check:
 # Manual maintainer check against a dedicated test tenant; never run in CI.
 # Example: make live-test LIVE_TEST_ARGS='--opt-in-live-azure --tenant T --subscription S1 --subscription S2'
 live-test: build
-	python3 -B scripts/live-azure-test.py --binary ./azctx $(LIVE_TEST_ARGS)
+	python3 -B scripts/live-azure-test.py --binary ./azctx$(shell go env GOEXE) $(LIVE_TEST_ARGS)
 
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1

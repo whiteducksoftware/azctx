@@ -7,8 +7,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const openOp = "open"
-
 // openAppend opens path for in-place appends. FILE_APPEND_DATA without
 // FILE_WRITE_DATA makes every write land at end of file, and
 // FILE_FLAG_OPEN_REPARSE_POINT opens a symlink/junction itself instead of its

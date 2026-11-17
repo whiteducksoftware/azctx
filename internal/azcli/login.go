@@ -77,10 +77,17 @@ func (cli CLI) execLogin(extraArgs []string) (LoginResult, error) {
 	if terminal == nil {
 		terminal = &Terminal{}
 	}
+	login := LoginResult{Attempted: true}
 	result, err := cli.runner.Run(cli.context(), args, Options{
 		Terminal: terminal, Env: []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"},
+		ObserveTenantFailure: func(failure TenantFailure) {
+			login.Failures = append(login.Failures, failure)
+		},
 	})
-	login := LoginResult{Attempted: true, Failures: parseTenantFailures(result.Stderr)}
+	if len(login.Failures) == 0 {
+		// Runners predating the typed observer can still return safe diagnostics.
+		login.Failures = ParseTenantFailures(result.Stderr)
+	}
 	if cli.context().Err() != nil {
 		return login, errors.Join(cli.context().Err(), err)
 	}
@@ -104,6 +111,7 @@ func (cli CLI) execLogin(extraArgs []string) (LoginResult, error) {
 
 // LoginTenant adds one tenant to a login already version-checked by Login.
 // Existing tenant selectors are replaced, never duplicated or sent as names.
+// Subscription selectors apply only to the initial login, not other tenants.
 func (cli CLI) LoginTenant(id string, extraArgs []string) (LoginResult, error) {
 	if err := profile.ValidateGUID(id); err != nil {
 		return LoginResult{}, fmt.Errorf("invalid tenant: %w", err)
@@ -111,7 +119,7 @@ func (cli CLI) LoginTenant(id string, extraArgs []string) (LoginResult, error) {
 	args := []string{loginTenantFlag, id}
 	for i := 0; i < len(extraArgs); i++ {
 		flag, _, inline := loginIDOption(extraArgs[i])
-		if flag == loginTenantFlag || flag == loginShortTenantFlag {
+		if flag == loginTenantFlag || flag == loginShortTenantFlag || flag == loginSubscriptionFlag {
 			if !inline {
 				i++
 			}

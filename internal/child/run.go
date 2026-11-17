@@ -67,7 +67,7 @@ func RunAttached(command *exec.Cmd) error {
 	defer hooks.close()
 	command.WaitDelay = 2 * time.Second
 	signals := make(chan os.Signal, 8)
-	signal.Notify(signals, forwardedSignals()...)
+	signal.Notify(signals, append(forwardedSignals(), hooks.signals...)...)
 	defer signal.Stop(signals)
 	control := &signalControl{command: command}
 	command.Cancel = func() error { return control.interrupt() }
@@ -77,12 +77,13 @@ func RunAttached(command *exec.Cmd) error {
 	}
 	hooks.started()
 	done, stopped := make(chan struct{}), make(chan struct{})
+	var signalErr error
 	go func() {
 		defer close(stopped)
 		for {
 			select {
 			case value := <-signals:
-				control.signal(value)
+				signalErr = errors.Join(signalErr, control.signal(value, hooks.signal))
 			case <-done:
 				return
 			}
@@ -96,6 +97,7 @@ func RunAttached(command *exec.Cmd) error {
 	}
 	close(done)
 	<-stopped
+	err = errors.Join(err, signalErr)
 	interrupted := control.finish()
 	if interrupted || (command.ProcessState != nil && ExitCode(command.ProcessState) == 130) {
 		_ = killProcess(command.Process)
@@ -115,6 +117,8 @@ type processHooks struct {
 	started func()
 	finish  func() error
 	close   func()
+	signals []os.Signal
+	signal  func(os.Signal, bool) (bool, error)
 }
 
 type signalControl struct {
@@ -143,20 +147,32 @@ func (c *signalControl) interruptLocked() error {
 	return nil
 }
 
-func (c *signalControl) signal(value os.Signal) {
+func (c *signalControl) signal(value os.Signal, jobSignal func(os.Signal, bool) (bool, error)) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if jobSignal != nil {
+		handled, err := jobSignal(value, c.interrupted || c.count > 0)
+		if handled {
+			if err != nil {
+				// A failed handoff is not a user interrupt. Unblock Wait without
+				// inventing SIGINT or overwriting an already completed exit.
+				_ = killProcess(c.command.Process)
+			}
+			return err
+		}
+	}
 	c.count++
 	if c.count > 1 {
 		c.interrupted = c.interrupted || value == os.Interrupt
 		_ = killProcess(c.command.Process)
-		return
+		return nil
 	}
 	if value == os.Interrupt {
 		_ = c.interruptLocked()
 	} else {
 		_ = forwardSignal(c.command.Process, value)
 	}
+	return nil
 }
 
 func (c *signalControl) finish() bool {

@@ -41,3 +41,24 @@ func TestReadOnlyTenantCatalogPreservesGUIDsAndPriorities(t *testing.T) {
 		t.Fatal("read-only tenant resolution mutated its source")
 	}
 }
+
+func TestTenantNamesContainingSlashMatchLiterally(t *testing.T) {
+	const slashTenant = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	const otherTenant = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	slash := profile.Subscription{Id: "11111111-1111-1111-1111-111111111111", Tenant: slashTenant, TenantName: "Ops/Ops"}
+	other := profile.Subscription{Id: "22222222-2222-2222-2222-222222222222", Tenant: otherTenant, TenantName: "Ops"}
+	for _, test := range []struct {
+		name string
+		subs []profile.Subscription
+	}{
+		{name: "coexisting", subs: []profile.Subscription{slash, other}},
+		{name: "alone", subs: []profile.Subscription{slash}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := (selection.Catalog{Subscriptions: test.subs}).Tenants("Ops/Ops", false)
+			if err != nil || len(got) != 1 || got[0].ID != slashTenant {
+				t.Fatalf("literal tenant name selected %+v, err=%v; want tenant %s", got, err, slashTenant)
+			}
+		})
+	}
+}

@@ -1,8 +1,8 @@
 # Integrations
 
-These examples target the unreleased 2026.11 source. Install or build reviewed
-tools separately; azctx does not install integrations, fetch tokens or grant
-Azure access. [CI/CD](ci-cd.md) covers pipeline authentication and export timing.
+Install or build reviewed tools separately; azctx does not install integrations,
+fetch tokens or grant Azure access. [CI/CD](ci-cd.md) covers pipeline
+authentication and export timing.
 
 ## env and exec
 
@@ -55,13 +55,15 @@ identity or an existing Azure CLI login. Review aliases, provider blocks,
 backend configuration and any explicit tenant/subscription overrides.
 
 ```sh
-azctx guard --no-input
+azctx guard --no-input &&
 azctx exec 11111111-1111-1111-1111-111111111111 -- terraform plan
 ```
 
 Run subsequent commands only if guard succeeds. Guard checks the current
 default, not Terraform's resolved provider target. Review the plan before
 mutating infrastructure; this guide does not perform an apply.
+Agents must also follow the [two-guard exec preflight](ai-agents.md#exec-preflight)
+before each exec call.
 
 ## Azure Developer CLI
 

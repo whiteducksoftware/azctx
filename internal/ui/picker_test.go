@@ -94,6 +94,31 @@ func TestPickerIgnoresOutOfOrderFilterResults(t *testing.T) {
 	}
 }
 
+func TestPickerEditsFilterAtCursor(t *testing.T) {
+	subscriptions := []profile.Subscription{
+		{Id: productionID, Name: "Xylophone Yarrow Production", TenantName: acmeTenant},
+		{Id: attentionID, Name: "Development Sandbox", TenantName: acmeTenant},
+	}
+	var model tea.Model = ui.NewPicker(subscriptions, 100, 15)
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("/")},
+		{Type: tea.KeyRunes, Runes: []rune("prd")},
+		{Type: tea.KeyHome},
+		{Type: tea.KeyRunes, Runes: []rune("x")},
+		{Type: tea.KeyRunes, Runes: []rune("y")},
+	} {
+		model, _ = model.Update(key)
+	}
+	if view := model.View(); !strings.Contains(view, "xyprd") || !strings.Contains(view, subscriptions[1].Name) {
+		t.Fatalf("filter editing lost the insertion point:\n%s", view)
+	}
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if index, err := requirePicker(t, model).Selection(); err != nil || index != 1 {
+		t.Fatalf("edited filter selection = %d, %v", index, err)
+	}
+}
+
 func TestPickerNarrowLongName(t *testing.T) {
 	subscriptions := []profile.Subscription{{Id: productionID, Name: strings.Repeat("界", 40), TenantName: acmeTenant}}
 	model := teatest.NewTestModel(t, ui.NewPicker(subscriptions, 60, 10), teatest.WithInitialTermSize(60, 10))
@@ -105,6 +130,55 @@ func TestPickerNarrowLongName(t *testing.T) {
 	for _, line := range strings.Split(final.View(), "\n") {
 		if lipgloss.Width(line) > 60 {
 			t.Fatalf("wide name overflows a narrow terminal: %q (%d cells)", line, lipgloss.Width(line))
+		}
+	}
+}
+
+func TestPickerLongNamesStayOnOneRow(t *testing.T) {
+	for _, width := range []int{30, 60, 100, 160} {
+		for _, tenants := range []bool{false, true} {
+			for _, name := range []string{"Production Engineering Platform ", "界 🌍 e\u0301 "} {
+				t.Run(fmt.Sprintf("%d/tenants=%t/%s", width, tenants, name), func(t *testing.T) {
+					const height = 12
+					subscriptions := make([]profile.Subscription, 12)
+					for index := range subscriptions {
+						subscriptions[index] = profile.Subscription{
+							Id: productionID, Name: fmt.Sprintf("Row%02d %s", index, strings.Repeat(name, 10)),
+							TenantName: acmeTenant,
+						}
+					}
+					var model tea.Model = ui.NewPicker(subscriptions, width, height)
+					if tenants {
+						model = ui.NewTenantPicker(subscriptions, width, height)
+					}
+					for index := range subscriptions {
+						requirePickerRowsFit(t, model.View(), width, height, index)
+						if index < len(subscriptions)-1 {
+							model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+						}
+					}
+					model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+					if index, err := requirePicker(t, model).Selection(); err != nil || index != 11 {
+						t.Fatalf("paginated selection = %d, %v", index, err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func requirePickerRowsFit(t *testing.T, view string, width, height, index int) {
+	t.Helper()
+	lines := strings.Split(view, "\n")
+	if len(lines) > height {
+		t.Fatalf("row %d overflows height %d with %d lines", index, height, len(lines))
+	}
+	if strings.Count(view, "▸ ") != 1 {
+		t.Fatalf("selected row %d is not visible:\n%s", index, view)
+	}
+	for _, line := range lines {
+		if (width >= 60 || strings.HasPrefix(line, "▸ ")) && lipgloss.Width(strings.TrimRight(line, " ")) > width {
+			t.Fatalf("row %d exceeds width %d: %q", index, width, line)
 		}
 	}
 }

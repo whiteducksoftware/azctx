@@ -595,7 +595,32 @@ class LiveScriptTest(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertIn(" live-test", makefile.splitlines()[0])
         recipe = makefile.split("\nlive-test: build\n", 1)[1].split("\n\n", 1)[0]
-        self.assertEqual(recipe.strip(), "python3 -B scripts/live-azure-test.py --binary ./azctx $(LIVE_TEST_ARGS)")
+        self.assertEqual(
+            recipe.strip(),
+            "python3 -B scripts/live-azure-test.py --binary ./azctx$(shell go env GOEXE) $(LIVE_TEST_ARGS)",
+        )
+
+    def test_make_target_uses_go_executable_suffix(self):
+        executable(self.bin / "go", textwrap.dedent("""\
+            import os, sys
+            if sys.argv[1:] != ["env", "GOEXE"]:
+                sys.exit("offline dry run must not build or run anything")
+            print(os.environ["FAKE_GOEXE"])
+            """))
+        for suffix in ("", ".exe"):
+            with self.subTest(suffix=suffix):
+                env = self.env | {"FAKE_GOEXE": suffix}
+                result = subprocess.run(
+                    ["make", "--no-print-directory", "-n", "live-test", "LIVE_TEST_ARGS=--help"],
+                    cwd=ROOT, env=env, text=True, capture_output=True, check=False, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [
+                    "CGO_ENABLED=0 go build -trimpath .",
+                    f"python3 -B scripts/live-azure-test.py --binary ./azctx{suffix} --help",
+                ])
+                self.assertFalse(self.record.exists(), "dry run must never start azctx")
+                self.assertFalse(self.host_az.exists(), "dry run must never start Azure CLI")
 
 
 if __name__ == "__main__":

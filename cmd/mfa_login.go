@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/log"
 )
 
@@ -117,12 +118,22 @@ func confirmTenantLogin(command *cobra.Command, count int) (bool, error) {
 }
 
 func retryTenantLogin(command *cobra.Command, cli azcli.CLI, args []string, failures, retry []azcli.TenantFailure) ([]azcli.TenantFailure, error) {
+	var initialDefault profile.Subscription
+	attempted := false
 	for _, tenant := range retry {
 		if err := command.Context().Err(); err != nil {
 			return nil, err
 		}
 		if tenantRetryBlocked(tenant.ID, failures) {
 			continue
+		}
+		if !attempted {
+			// The initial login, not the pre-login profile, chooses the default.
+			// A partial first login may not have created a readable profile yet.
+			if cli.Reload() == nil {
+				initialDefault, _ = cli.ActiveSubscription()
+			}
+			attempted = true
 		}
 		log.Info("Signing in to tenant %s.", tenant.ID)
 		result, err := cli.LoginTenant(tenant.ID, args)
@@ -141,7 +152,33 @@ func retryTenantLogin(command *cobra.Command, cli azcli.CLI, args []string, fail
 			log.Error("Sign-in did not complete for tenant %s; see Azure CLI output.", tenant.ID)
 		}
 	}
+	if err := command.Context().Err(); err != nil {
+		return nil, err
+	}
+	if err := restoreLoginDefault(cli, initialDefault); err != nil {
+		if len(failures) != 0 {
+			return failures, signInFailed("tenant sign-in incomplete; could not restore the initial default subscription", err)
+		}
+		return failures, err
+	}
 	return failures, command.Context().Err()
+}
+
+func restoreLoginDefault(cli azcli.CLI, initial profile.Subscription) error {
+	if initial.Id == "" {
+		return nil
+	}
+	if err := cli.Reload(); err != nil {
+		return err
+	}
+	current, err := cli.ActiveSubscription()
+	if err == nil && strings.EqualFold(current.Id, initial.Id) {
+		return nil
+	}
+	if err := cli.SetSubscription(initial); err != nil {
+		return signInFailed("could not restore the initial default subscription", err)
+	}
+	return nil
 }
 
 func tenantRetryBlocked(id string, failures []azcli.TenantFailure) bool {
