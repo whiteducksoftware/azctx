@@ -143,8 +143,7 @@ Use explicit `--subscription` on az resource commands, including inside exec.
 
 ## Verify a release
 
-**2026.11 is not published by this layer.** These commands apply only after an
-authorized release actually exists. Obtain the archive and matching checksum
+Obtain the archive and matching checksum
 file from the same explicit tag in
 [whiteducksoftware/azctx](https://github.com/whiteducksoftware/azctx/releases).
 Confirm the tag, repository, expected archive and trusted signer/workflow
@@ -194,13 +193,13 @@ See [GitHub artifact attestation verification](https://docs.github.com/en/action
 ## Unsigned macOS binaries
 
 macOS binaries are unsigned and not notarized. A GitHub attestation is **not**
-Developer ID signing or Apple notarization. The future cask declares removal
+Developer ID signing or Apple notarization. The cask declares removal
 of `com.apple.quarantine` on its staged binary; this bypasses that quarantine
 check, not a trust review. Manual archive users may need the narrow command in
 [troubleshooting](troubleshooting.md#macos-quarantine), only after verification.
 Do not globally disable Gatekeeper.
 
-## Release infrastructure is not accepted yet
+## Release infrastructure
 
 Portable publishers are configured for Ubuntu block-mode endpoint enforcement.
 Pinned Harden-Runner on hosted Windows/macOS supports audit only. The native
@@ -209,8 +208,7 @@ credentials or the `release` environment, and Ubuntu publishers re-verify their
 output before minting a token. Chocolatey is not published for 2026.11, so no
 native job holds a publisher credential.
 
-No App installation, environment reviewer settings, secret rotation, live
-attestation or package availability is established
-by these docs. The upstream winget PR remains manual.
-See [release configuration](releasing.md) for the exact boundary and required
-hosted acceptance before go-live.
+Publishing jobs run in the protected `release` environment, which needs a code
+owner's approval and accepts tag deployments only. Publisher tokens come from a
+GitHub App installed on the tap and the winget fork only. The upstream winget PR
+remains manual. See [release configuration](releasing.md).

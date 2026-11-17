@@ -10,12 +10,22 @@ Verify package availability and provenance before upgrading.
 
 ### macOS Homebrew
 
-The formula is replaced by a macOS-only cask. Verify the tap's trust and migrate
-explicitly:
+The formula is replaced by a macOS-only cask. Remove the formula first, then
+install the cask:
 
 ```sh
 brew uninstall --formula azctx
 brew install --cask whiteducksoftware/tap/azctx
+```
+
+`brew update` reports the migration. If the cask is not trusted yet, it suggests
+only `brew trust` and `brew install --cask`. Run with the formula still
+installed, the cask cannot link `azctx`, and `azctx version` keeps showing
+2024.12.5. To fix that:
+
+```sh
+brew uninstall --formula azctx
+brew reinstall --cask whiteducksoftware/tap/azctx
 ```
 
 Once already on the cask:

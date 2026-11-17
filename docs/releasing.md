@@ -1,9 +1,8 @@
-# Release configuration (not a go-live procedure)
+# Release configuration
 
-Layer 17 configures future releases. It does **not** create the GitHub App,
-protected environment, tap migration, tag or release. Those are #100 acceptance
-work, as are package availability and any later promotion to GitHub's latest
-release. Do not run a publishing release to test this configuration.
+This page describes how tags become releases and packages. The publishing steps
+and acceptance checks for a release are tracked in #100. Do not run a publishing
+release to test this configuration.
 
 **Chocolatey is not published for 2026.11.** The Windows build always passes
 `--skip=chocolatey` and the workflow has no Chocolatey publisher or
@@ -43,12 +42,13 @@ their output before any token exists. See
   Static builds retain `CGO_ENABLED=0`, `-trimpath`, `.CommitTimestamp` and the
   commit-derived binary `BuildDate`.
 
-## Protected future workflow
+## Protected workflow
 
 All publishing jobs use the `release` environment; the native macOS formatter
-and native Windows build do not. Provisioning that
-environment, required reviewers and an App installation is deliberately deferred
-to #100. Its expected interface is:
+and native Windows build do not. The environment requires approval from a code
+owner and accepts deployments from tags only. The GitHub App
+`white-duck-azctx-release` is installed on `homebrew-tap` and the
+`winget-pkgs` fork only, with contents read and write. The environment holds:
 
 | Name | Kind | Purpose |
 | --- | --- | --- |
