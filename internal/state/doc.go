@@ -1,3 +1,2 @@
-// Package state is reserved for previous subscriptions, recent use, and switch
-// history in later release layers.
+// Package state stores the previous subscription in azctx's private configuration.
 package state

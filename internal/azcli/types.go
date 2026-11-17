@@ -13,6 +13,8 @@ type CLI struct {
 	configDir  string
 	profile    profile.Profile
 	tenants    []Tenant
+	// Terminal controls attached login streams; nil uses the process terminal.
+	Terminal *Terminal
 
 	FilterTenantLevelAccount bool
 }

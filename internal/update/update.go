@@ -1,57 +1,191 @@
+// Package update performs optional, cached stable-release checks.
 package update
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
+	"github.com/whiteducksoftware/azctx/internal/storage"
 	"github.com/whiteducksoftware/azctx/internal/version"
+	"github.com/whiteducksoftware/azctx/log"
 )
 
-// Check retains the synchronous, uncached post-switch check until layer 06.
+const interval = 24 * time.Hour
+
+// Checker exposes network, clock, terminal and cache boundaries for hermetic use.
+// Zero values use production defaults.
+type Checker struct {
+	Client     *http.Client
+	URL        string
+	Current    string
+	CacheDir   string
+	AzureDir   string
+	Now        func() time.Time
+	IsTerminal func() bool
+	Output     io.Writer
+}
+
+type cachedRelease struct {
+	CheckedAt time.Time `json:"checkedAt"`
+	Tag       string    `json:"tag"`
+}
+
+// Check uses the process terminal and standard per-user cache location.
 func Check(owner, repo string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+owner+"/"+repo+"/releases/latest", nil)
-	if err != nil {
-		return fmt.Errorf("failed to check for updates: %w", err)
+	return (Checker{}).Check(owner, repo)
+}
+
+func (c Checker) enabled() bool {
+	tty := c.IsTerminal
+	if tty == nil {
+		tty = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to check for updates: %w", err)
+	_, ci := os.LookupEnv("CI")
+	return tty() && !ci && os.Getenv("AZCTX_NO_UPDATE_CHECK") != "1"
+}
+
+func (c Checker) cachePath() (string, error) {
+	if c.CacheDir == "" {
+		var err error
+		c.CacheDir, err = os.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve update cache: %w", err)
+		}
 	}
-	defer response.Body.Close()
-	if response.StatusCode == http.StatusNotFound {
+	return storage.Path(c.CacheDir, c.AzureDir, "update.json")
+}
+
+// Check returns diagnostics for debug logging only; callers must not fail a
+// successful subscription switch because an optional update check failed.
+func (c Checker) Check(owner, repo string) error {
+	if !c.enabled() {
 		return nil
 	}
+	name, err := c.cachePath()
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if c.Now != nil {
+		now = c.Now()
+	}
+	release, acquired, err := storage.Lock(name+".lock", c.AzureDir)
+	if err != nil || !acquired {
+		return err
+	}
+	defer release()
+	cached, err := readCache(name)
+	if err != nil {
+		return err
+	}
+	if !cached.CheckedAt.IsZero() && now.Sub(cached.CheckedAt) < interval {
+		return c.notice(owner, repo, cached.Tag)
+	}
+	// Cache attempts too, so offline/proxy failures do not recur every run.
+	cached = cachedRelease{CheckedAt: now}
+	if err := save(name, c.AzureDir, cached); err != nil {
+		return err
+	}
+	tag, err := c.latest(owner, repo)
+	if err != nil {
+		return err
+	}
+	cached.Tag = tag
+	if err := save(name, c.AzureDir, cached); err != nil {
+		return err
+	}
+	return c.notice(owner, repo, tag)
+}
+
+func readCache(name string) (cachedRelease, error) {
+	data, err := os.ReadFile(name)
+	if errors.Is(err, os.ErrNotExist) {
+		return cachedRelease{}, nil
+	}
+	if err != nil {
+		return cachedRelease{}, fmt.Errorf("read update cache: %w", err)
+	}
+	var cached cachedRelease
+	if err := json.Unmarshal(data, &cached); err != nil {
+		log.Debug("decode update cache: %v", err)
+		return cachedRelease{}, nil
+	}
+	return cached, nil
+}
+
+func save(name, azureDir string, cached cachedRelease) error {
+	data, err := json.Marshal(cached)
+	if err != nil {
+		return err
+	}
+	return storage.Write(name, azureDir, data)
+}
+
+func (c Checker) latest(owner, repo string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	endpoint := c.URL
+	if endpoint == "" {
+		endpoint = "https://github.com/" + owner + "/" + repo + "/releases/latest"
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to check for updates: %w", err)
+	}
+	client := c.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to check for updates: %w", err)
+	}
+	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to check for updates: GitHub returned %s", response.Status)
+		return "", fmt.Errorf("failed to check for updates: GitHub returned %s", response.Status)
 	}
-	var release struct {
-		TagName string `json:"tag_name"` //nolint:tagliatelle // GitHub's wire format uses snake_case.
-		HTMLURL string `json:"html_url"` //nolint:tagliatelle // GitHub's wire format uses snake_case.
+	if !strings.Contains(response.Request.URL.Path, "/releases/tag/") {
+		return "", nil
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&release); err != nil {
-		return fmt.Errorf("failed to check for updates: %w", err)
+	tag := path.Base(response.Request.URL.Path)
+	if _, prerelease, valid := releaseParts(tag); !valid || prerelease {
+		return "", nil
 	}
-	current := version.Get().Version
-	if newerRelease(current, release.TagName) {
-		if _, err := fmt.Fprintf(os.Stderr, "A new version of azctx is available: %s → %s\n%s\n", current, release.TagName, release.HTMLURL); err != nil {
+	return tag, nil
+}
+
+func (c Checker) notice(owner, repo, tag string) error {
+	current := c.Current
+	if current == "" {
+		current = version.Get().Version
+	}
+	output := c.Output
+	if output == nil {
+		output = os.Stderr
+	}
+	if newerRelease(current, tag) {
+		releaseURL := "https://github.com/" + owner + "/" + repo + "/releases/tag/" + url.PathEscape(tag)
+		if _, err := fmt.Fprintf(output, "A new version of azctx is available: %s → %s\n%s\n", current, tag, releaseURL); err != nil {
 			return fmt.Errorf("failed to print update notice: %w", err)
 		}
 	}
 	return nil
 }
 
-// GitHub's latest-release endpoint returns stable releases. Compare numeric
-// release components; a prerelease of the same version precedes that release.
+// Compare CalVer components numerically; prerelease update tags are ignored.
 func newerRelease(current, latest string) bool {
 	currentParts, currentPrerelease, currentOK := releaseParts(current)
 	latestParts, latestPrerelease, latestOK := releaseParts(latest)

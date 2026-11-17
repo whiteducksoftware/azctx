@@ -83,9 +83,10 @@ operating system requirements.
 
 ## Troubleshooting
 
-### Error: `AZURE_CONFIG_DIR is not set / a valid directory. [...]`
+### Missing Azure configuration or `azureProfile.json`
 
-Run `az configure` once to create the configuration directory.
+Run `az login` to create the subscription profile. An unset `AZURE_CONFIG_DIR`
+silently uses the default `~/.azure` directory.
 
 Check the [Microsoft Documentation](https://docs.microsoft.com/en-us/cli/azure/azure-cli-configuration?view=azure-cli-latest#cli-configuration-file) for the correct path to the azure cli config directory and export it as AZURE_CONFIG_DIR environment variable.  
 
@@ -110,19 +111,36 @@ make check # Run lint and tests
 ### Internal boundaries
 
 `cmd` constructs Cobra commands with `cmd.NewRootCommand(cmd.Dependencies)`.
-Tests can supply an `azcli.Runner`, an `afero.Fs`, a config directory, a picker,
+Tests can supply an `azcli.Runner`, a read-only `io/fs.FS` rooted at the Azure
+config directory, a config directory, a picker,
 and an update-check function without resolving a real `az` or accessing a tenant.
 
 The internal packages separate Azure CLI execution (`azcli`), the read-only
 `io/fs` profile parser (`profile`), subscription search (`match`), the existing
-picker (`ui`), and update checks (`update`). `state` and `config` contain only
-package documentation until their release layers.
+picker (`ui`), update checks (`update`), private previous-subscription state
+(`state`) and atomic private-file storage (`storage`). `config` remains a
+placeholder for a later release layer.
 
 `azcli.Runner.Run` captures stdout, stderr, and the exit code by default.
 Supplying `azcli.Options.Terminal` attaches the supplied streams (or the process
 terminal) and tees stderr into the result. `Options.Env` overrides inherited
 environment entries. The production runner resolves `az` once with `LookPath`.
-Login remains captured in this refactor; authentication output changes come later.
+Login uses this attached mode: device codes on stdout or stderr are visible
+immediately, and stderr remains captured for authentication diagnostics.
+
+Search matches subscription names, tenant names and subscription IDs without
+collapsing duplicate names. `azctx -` swaps the current and previous subscription
+across processes. The previous ID is stored privately in
+`os.UserConfigDir()/azctx/state.json`, never in the Azure configuration directory.
+Switch diagnostics and optional update-check failures are silent unless
+`--verbose` is supplied. Login progress and actionable warnings remain visible.
+
+Interactive runs check for a stable CalVer update at most once per 24 hours,
+with a two-second network deadline and a private cache at
+`os.UserCacheDir()/azctx/update.json`. Update failures never fail a switch.
+Set `AZCTX_NO_UPDATE_CHECK=1` to disable checks; they are also skipped when `CI`
+is set (even to an empty value) or stdout is not a terminal. State and cache
+destinations that overlap Azure configuration are rejected, including symlinks.
 
 `internal/testutil.FakeRunner` records argv and environment overrides and consumes
 canned responses. Tests also build the portable `internal/testutil/fakeaz`

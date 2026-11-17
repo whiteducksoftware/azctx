@@ -1,4 +1,4 @@
-// Package match implements the existing subscription-name search.
+// Package match implements subscription search without losing subscription IDs.
 package match
 
 import (
@@ -10,25 +10,34 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/profile"
 )
 
-// Find retains legacy matching, including first-match resolution of duplicate
-// names. Duplicate-name selection changes belong to the bug-fix layer.
-func Find(subscriptions []profile.Subscription, name string) ([]profile.Subscription, error) {
-	names := make([]string, len(subscriptions))
+// Find matches names, tenant names and IDs, preserving source order and identity.
+func Find(subscriptions []profile.Subscription, query string) ([]profile.Subscription, error) {
+	names, tenants, ids := make([]string, len(subscriptions)), make([]string, len(subscriptions)), make([]string, len(subscriptions))
 	for i, subscription := range subscriptions {
+		if strings.EqualFold(subscription.Id, query) {
+			return []profile.Subscription{subscription}, nil
+		}
 		names[i] = strings.ToLower(subscription.Name)
+		tenants[i] = strings.ToLower(subscription.TenantName)
+		ids[i] = strings.ToLower(subscription.Id)
 	}
-	results := fuzzy.FindNoSort(strings.ToLower(name), names)
-	if len(results) == 0 {
-		return nil, fmt.Errorf("no azure subscription found for '%s'", name)
+	matched := make([]bool, len(subscriptions))
+	for _, field := range [][]string{names, tenants, ids} {
+		for _, result := range fuzzy.FindNoSort(strings.ToLower(query), field) {
+			matched[result.Index] = true
+		}
 	}
 	var found []profile.Subscription
-	for _, result := range results {
-		for _, subscription := range subscriptions {
-			if strings.EqualFold(subscription.Name, result.Str) {
-				found = append(found, subscription)
-				break
-			}
+	seen := make(map[string]bool)
+	for i, subscription := range subscriptions {
+		id := strings.ToLower(subscription.Id)
+		if matched[i] && !seen[id] {
+			found = append(found, subscription)
+			seen[id] = true
 		}
+	}
+	if len(found) == 0 {
+		return nil, fmt.Errorf("no azure subscription found for '%s'", query)
 	}
 	return found, nil
 }

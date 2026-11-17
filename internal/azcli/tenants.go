@@ -3,8 +3,6 @@ package azcli
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/whiteducksoftware/azctx/log"
 )
 
 // Tenants returns all tenants
@@ -33,7 +31,7 @@ func (cli *CLI) UpdateTenants() error {
 	}
 	err = json.Unmarshal([]byte(output), &apiResponse)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal az account list output: %s", err.Error())
+		return fmt.Errorf("failed to unmarshal az account list output: %w", err)
 	}
 
 	// Copy the tenants to the CLI instance
@@ -43,7 +41,7 @@ func (cli *CLI) UpdateTenants() error {
 	// Persist the tenants to the json file
 	err = cli.writeTenants()
 	if err != nil {
-		return fmt.Errorf("failed to write tenants to json file: %s", err.Error())
+		return fmt.Errorf("failed to write tenants to json file: %w", err)
 	}
 
 	return nil
@@ -68,6 +66,8 @@ func (cli *CLI) MapTenantIdsToNames() {
 			cli.profile.Subscriptions[i].TenantName = subscription.Tenant
 		}
 	} else {
-		log.Info("If you want to fetch the tenant names, please authenticate the azure cli again using the wraper command: `azctx login`")
+		for i := range cli.profile.Subscriptions {
+			cli.profile.Subscriptions[i].TenantName = cli.profile.Subscriptions[i].Tenant
+		}
 	}
 }
