@@ -6,7 +6,7 @@ requires merging, tagging or publishing.
 
 ## Build and checks
 
-Use `go.mod`: Go 1.26 minimum, preferred toolchain Go 1.27.3. Allow automatic
+Use `go.mod`: Go 1.26 minimum, preferred toolchain Go 1.27.4. Allow automatic
 selection unless that exact supported toolchain is already active.
 Use golangci-lint v2.15.0 and Python 3.10+ as described in CONTRIBUTING.
 
@@ -70,7 +70,7 @@ govulncheck, zizmor, GoReleaser, Syft and Go) manually. When upgrading one:
    change them or leave pins inconsistent. With authorization, update every
    occurrence together.
 2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
-   are spelled differently, such as "Go 1.27.3" or "GoReleaser 2.19.0". Leave
+   are spelled differently, such as "Go 1.27.4" or "GoReleaser 2.19.0". Leave
    released upgrade-guide history unchanged.
 3. Run `make check` and `make ci-check`.
 
@@ -78,7 +78,7 @@ Compatibility floors are not upgrade targets. The Go 1.26.0 `go` directive,
 Azure CLI 2.61.0 and its immutable minimum image digest stay fixed for the
 manual minimum-versus-latest matrix in [integration tests](integration-tests.md).
 The maintained latest pins are the seven tool pins above, including the
-preferred Go 1.27.3 toolchain and golangci-lint v2.15.0.
+preferred Go 1.27.4 toolchain and golangci-lint v2.15.0.
 GoReleaser owns the generated package and winget manifest schema versions
 (currently 1.12.0); `check_winget.ps1` fetches Microsoft's schema matching each
 generated `ManifestVersion`. Runner-provided Python, Ruby, PowerShell,
@@ -254,14 +254,12 @@ Stable/RC snapshot checks generate packages without publication; Windows uses
 real native `choco pack` and official winget schemas, macOS normalizes and
 checks its generated cask natively.
 
-**Release readiness remains blocked.** Pinned Harden-Runner has no hosted
-Windows/macOS block-mode enforcement. The credential-free readiness job
-deliberately fails before every publisher, including RCs. Review and actually
-accept a supported native enforcement design before changing that blocker.
-A green package/schema run, an environment approval or these instructions
-cannot substitute for endpoint enforcement.
+Pinned Harden-Runner has no hosted Windows/macOS block-mode enforcement. The
+native Windows build and Homebrew style jobs therefore run audit-only and hold
+no credentials; see [accepted audit-only native jobs](releasing.md#accepted-audit-only-native-jobs).
+Chocolatey is not published for 2026.11.
 
-After that blocker is resolved and a separately authorized release is ready,
+When a separately authorized release is ready,
 the reviewed workflow uses the protected `release` environment and scoped,
 short-lived App tokens. Environment reviewers, App installation, secrets,
 federated identities, repository settings and tap migration were not provisioned
@@ -282,8 +280,8 @@ gh pr create --repo microsoft/winget-pkgs \
 ```
 
 This example is not run by any test and no PR was opened here. Wait for upstream
-acceptance and real package installation/upgrade checks. Chocolatey moderation,
-Homebrew trust/migration, observed native egress, live attestations and broker/
+acceptance and real package installation/upgrade checks. Homebrew
+trust/migration, live attestations and broker/
 OIDC/MFA acceptance remain separate manual/hosted gates.
 Latest promotion remains manual, only after package availability is verified;
 `RELEASE_MAKE_LATEST` defaults to `false`. No tag, release, merge or promotion

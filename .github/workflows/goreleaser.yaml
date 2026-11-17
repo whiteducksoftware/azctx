@@ -12,21 +12,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-readiness:
-    if: github.repository == 'whiteducksoftware/azctx'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Block release until native publishing has supported egress enforcement
-        shell: bash
-        run: |
-          echo '::error::BLOCKED (#98): native Chocolatey publishing has audit-only egress on hosted Windows. Native macOS style also has audit-only egress. A reviewed, supported enforcement design and native acceptance are required before release.' >&2
-          exit 1
-
   goreleaser-linux:
     name: goreleaser-linux
-    needs: release-readiness
     if: github.repository == 'whiteducksoftware/azctx'
     runs-on: ubuntu-latest
     environment: release
@@ -122,7 +109,7 @@ jobs:
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           # Harden-Runner v2.22.2 supports audit only on hosted macOS.
-          # Native enforcement acceptance remains blocked by release-readiness.
+          # Accepted: no credentials here; homebrew-publish re-verifies the cask.
           egress-policy: audit
 
       - name: Checkout
@@ -213,7 +200,6 @@ jobs:
     needs: goreleaser-linux
     if: github.repository == 'whiteducksoftware/azctx'
     runs-on: windows-latest
-    environment: release
     timeout-minutes: 60
     permissions:
       contents: read
@@ -225,7 +211,7 @@ jobs:
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           # Harden-Runner v2.22.2 supports audit only on hosted Windows.
-          # Native enforcement acceptance remains blocked by release-readiness.
+          # Accepted: no credentials here; windows-publish re-verifies the output.
           egress-policy: audit
 
       - name: Checkout
@@ -240,14 +226,12 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Validate latest policy and native Chocolatey
+      - name: Validate latest policy
         shell: pwsh
         run: |
           if ($env:RELEASE_MAKE_LATEST -notin @('true', 'false')) {
             throw 'RELEASE_MAKE_LATEST must be true or false'
           }
-          choco --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Download Syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -259,7 +243,8 @@ jobs:
         with:
           distribution: goreleaser
           version: v2.19.0
-          args: release --clean --skip=publish --config .goreleaser-windows.yaml ${{ contains(github.ref_name, '-') && '--skip=chocolatey' || '' }}
+          # Chocolatey is not published for 2026.11 (#100).
+          args: release --clean --skip=publish --skip=chocolatey --config .goreleaser-windows.yaml
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -272,15 +257,6 @@ jobs:
             dist/*_Windows_checksums.txt
             dist/*.sbom.json
             dist/winget/**/*.yaml
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Transfer the same-run stable Chocolatey package without pushing it
-        if: ${{ !contains(github.ref_name, '-') }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: chocolatey-package
-          path: dist/azctx.*.nupkg
           if-no-files-found: error
           retention-days: 1
 
@@ -354,48 +330,3 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-
-  chocolatey-publish:
-    name: chocolatey-publish
-    needs: windows-publish
-    if: ${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}
-    runs-on: windows-latest
-    environment: release
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
-        with:
-          # Harden-Runner v2.22.2 supports audit only on hosted Windows.
-          # Native enforcement acceptance remains blocked by release-readiness.
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Download the Chocolatey package from this run
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: chocolatey-package
-          path: .release-check/chocolatey
-          digest-mismatch: error
-
-      - name: Verify the embedded checksum against the uploaded Windows archive
-        run: python -B .github/scripts/verify_chocolatey.py .release-check/chocolatey
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-
-      - name: Push the verified native Chocolatey package
-        shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)) { throw 'Chocolatey publishing requires its explicit API key' }
-          $packages = @(Get-ChildItem .release-check/chocolatey/azctx.*.nupkg)
-          if ($packages.Count -ne 1) { throw 'Expected exactly one native Chocolatey package' }
-          choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        env:
-          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}

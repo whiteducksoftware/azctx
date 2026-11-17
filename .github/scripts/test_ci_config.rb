@@ -162,8 +162,8 @@ end
 
 go_mod = File.read('go.mod')
 assert(go_mod.match?(/^go 1\.26(?:\.0)?$/), 'the minimum Go version must remain 1.26')
-assert(go_mod.match?(/^toolchain go1\.27\.3$/),
-       'the preferred toolchain must include the GO-2026-6809 fix in Go 1.27.3')
+assert(go_mod.match?(/^toolchain go1\.27\.4$/),
+       'the preferred toolchain must include the GO-2026-6809 and GO-2026-6859 fixes in Go 1.27.4')
 lint_steps = ci.fetch('jobs').fetch('lint').fetch('steps')
 assert(lint_steps.any? { |step| step['run'] == 'make ci-check' },
        'CI must run these configuration regressions')

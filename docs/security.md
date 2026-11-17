@@ -203,14 +203,14 @@ Do not globally disable Gatekeeper.
 ## Release infrastructure is not accepted yet
 
 Portable publishers are configured for Ubuntu block-mode endpoint enforcement.
-Pinned Harden-Runner on hosted Windows/macOS supports audit only, including
-native Chocolatey push and native Homebrew style verification. The unmet
-native enforcement requirement is an explicit **release blocker**; the
-credential-free readiness job fails before all publishers, including RCs.
-Passing package/schema checks does not remove it.
+Pinned Harden-Runner on hosted Windows/macOS supports audit only. The native
+Windows build and native Homebrew style verification run in audit mode without
+credentials or the `release` environment, and Ubuntu publishers re-verify their
+output before minting a token. Chocolatey is not published for 2026.11, so no
+native job holds a publisher credential.
 
 No App installation, environment reviewer settings, secret rotation, live
-attestation, package availability or native network enforcement is established
+attestation or package availability is established
 by these docs. The upstream winget PR remains manual.
 See [release configuration](releasing.md) for the exact boundary and required
-reviewed enforcement/hosted acceptance before go-live.
+hosted acceptance before go-live.

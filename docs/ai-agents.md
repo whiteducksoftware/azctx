@@ -10,7 +10,7 @@ Authentication is configured separately by the user.
 
 Review the skill and hook before enabling them. Use a reviewed source build
 on PATH until a trusted 2026.11 binary is actually published and verified;
-[release readiness is blocked](releasing.md).
+see [release configuration](releasing.md).
 The plugin does not download it or access credentials.
 
 ### Claude Code

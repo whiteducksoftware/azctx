@@ -58,11 +58,12 @@ Windows, install with your platform's package manager:
 ```sh
 # macOS, fully qualified cask
 brew install --cask whiteducksoftware/tap/azctx
-# Windows, Chocolatey
-choco install azctx --version=2026.11.0
 # Windows, winget
 winget install --exact --id whiteducksoftware.azctx --version 2026.11.0
 ```
+
+2026.11 is not published to Chocolatey; Chocolatey users can switch to winget
+as described in the [upgrade guide](docs/upgrade.md#windows-chocolatey).
 
 The macOS cask depends on Homebrew's `azure-cli` cask and installs Azure CLI
 through Homebrew if it is missing.
@@ -91,7 +92,7 @@ provenance limits and unsigned macOS binaries. A checksum alone is not an
 independent proof of origin.
 
 To build from source, use Go as declared in `go.mod` (minimum 1.26, preferred
-1.27.3), review the source and run `make build`. Run the resulting `./azctx`
+1.27.4), review the source and run `make build`. Run the resulting `./azctx`
 (`./azctx.exe` on Windows) from the checkout or copy it onto PATH.
 
 ## 3. Quickstart
@@ -208,7 +209,7 @@ brew uninstall --formula azctx
 brew install --cask whiteducksoftware/tap/azctx
 ```
 
-The [upgrade guide](docs/upgrade.md) also gives Chocolatey, winget and
+The [upgrade guide](docs/upgrade.md) also gives Chocolatey migration, winget and
 release-binary steps.
 
 ## 8. Authentication
