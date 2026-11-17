@@ -48,6 +48,15 @@ func NewPicker(subscriptions []profile.Subscription, width, height int) Picker {
 	return newOrderedPicker(subscriptions, width, height)
 }
 
+// NewTenantPicker preserves ranked rows and prioritizes GUIDs over domain text.
+func NewTenantPicker(tenants []profile.Subscription, width, height int) Picker {
+	picker := newOrderedPicker(tenants, width, height)
+	picker.delegate.tenants = true
+	picker.list.SetDelegate(picker.delegate)
+	picker.resize(width, height)
+	return picker
+}
+
 // SortSubscriptions establishes the deterministic base order before priorities.
 func SortSubscriptions(subscriptions []profile.Subscription) {
 	slices.SortFunc(subscriptions, func(a, b profile.Subscription) int {
@@ -142,6 +151,9 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (picker *Picker) resize(width, height int) {
 	picker.list.SetSize(max(1, width), max(1, height))
 	picker.list.Title = "  " + picker.delegate.row(width, "Name", "Subscription ID", "Tenant")
+	if picker.delegate.tenants {
+		picker.list.Title = "  " + picker.delegate.row(width, "Tenant", "Tenant ID", "Domain")
+	}
 }
 
 func (picker Picker) View() string { return picker.list.View() }
@@ -156,6 +168,15 @@ func Select(subscriptions []profile.Subscription) (int, error) {
 
 // SelectOrdered preserves caller ranking and returns an index into that slice.
 func SelectOrdered(subscriptions []profile.Subscription) (int, error) {
+	return selectOrdered(subscriptions, false)
+}
+
+// SelectTenantsOrdered accepts rows whose Id is the tenant GUID and Name its label.
+func SelectTenantsOrdered(tenants []profile.Subscription) (int, error) {
+	return selectOrdered(tenants, true)
+}
+
+func selectOrdered(subscriptions []profile.Subscription, tenants bool) (int, error) {
 	_, noColor := os.LookupEnv("NO_COLOR")
 	if noColor || !term.IsTerminal(int(os.Stderr.Fd())) {
 		previous := lipgloss.ColorProfile()
@@ -171,7 +192,11 @@ func SelectOrdered(subscriptions []profile.Subscription) (int, error) {
 		// Hide the fd so Windows readers consume redirected stdin, not CONIN$.
 		input = struct{ io.Reader }{os.Stdin}
 	}
-	result, err := tea.NewProgram(newOrderedPicker(subscriptions, width, height), tea.WithInput(input), tea.WithOutput(os.Stderr)).Run()
+	picker := newOrderedPicker(subscriptions, width, height)
+	if tenants {
+		picker = NewTenantPicker(subscriptions, width, height)
+	}
+	result, err := tea.NewProgram(picker, tea.WithInput(input), tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return -1, ErrInterrupted
 	}
@@ -184,6 +209,7 @@ func SelectOrdered(subscriptions []profile.Subscription) (int, error) {
 type subscriptionDelegate struct {
 	nameWidth   int
 	tenantWidth int
+	tenants     bool
 }
 
 func (subscriptionDelegate) Height() int                         { return 1 }
@@ -202,6 +228,14 @@ func (delegate subscriptionDelegate) Render(writer io.Writer, model list.Model, 
 }
 
 func (delegate subscriptionDelegate) row(width int, name, id, tenant string) string {
+	if delegate.tenants {
+		nameWidth := min(delegate.nameWidth, max(1, width-2-3-36))
+		line := lipgloss.NewStyle().Width(nameWidth).MaxWidth(nameWidth).Render(name) + " | " + id
+		if width >= 2+nameWidth+3+36+3+delegate.tenantWidth {
+			line += " | " + tenant
+		}
+		return lipgloss.NewStyle().MaxWidth(max(1, width-2)).Render(line)
+	}
 	nameWidth := min(delegate.nameWidth, max(1, width-2))
 	line := lipgloss.NewStyle().Width(nameWidth).MaxWidth(nameWidth).Render(name)
 	tenantWidth := delegate.tenantWidth

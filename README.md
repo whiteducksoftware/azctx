@@ -38,8 +38,10 @@ Available Commands:
   config      Print effective configuration or its path
   doctor      Show safe, offline Azure CLI diagnostics
   help        Help about any command
-  login       Login to Azure
+  history     Show the last 100 completed subscription switches
   list        List subscriptions
+  login       Login to Azure
+  tenant      Choose a tenant, then a subscription
   version     Print the CLI version
 
 Flags:
@@ -114,6 +116,18 @@ Protected switches require confirmation or `--yes`; configured hidden entries
 require `--all`. `AZCTX_CONFIG_DIR` isolates azctx configuration and state.
 See [configuration and completion](docs/configuration.md) for the version-1
 schema, deterministic ranking and offline shell completion.
+
+`azctx tenant [query]` chooses a GUID-distinct tenant first, then a subscription
+within it; a unique tenant with one subscription switches directly. No-input
+ambiguities never switch arbitrarily. Configure `picker: fzf` to use an optional
+fzf on `PATH`; missing fzf falls back with one stderr notice. Protection and
+no-input gates apply to both backends.
+
+`azctx history [-o json]` reads the last 100 completed switches from private
+`history.json` next to state (also honoring `AZCTX_CONFIG_DIR`). It records UTC
+timestamps, previous/new GUID+cloud identities and terminal/script source, never
+raw user or credential fields. History warnings go to stderr and cannot fail a
+completed switch. See [the format and limitations](docs/configuration.md#completed-switch-history).
 
 ### Homebrew (macOS)
 
