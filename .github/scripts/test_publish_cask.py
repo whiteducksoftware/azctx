@@ -12,12 +12,12 @@ import publish_cask
 
 
 TESTDATA = Path(__file__).resolve().parent / "testdata" / "homebrew"
-# Exact real outputs: GoReleaser 2.19.0 `release_snapshot.rb unix stable` (publisher
+# Exact real outputs: GoReleaser 2.20.2 `release_snapshot.rb unix stable` (publisher
 # disabled), and that file after native `brew style --fix` (strict `brew style`: no offenses).
 ORIGINAL = (TESTDATA / "goreleaser-azctx.rb").read_text(encoding="utf-8")
 CASK = (TESTDATA / "brew-style-azctx.rb").read_text(encoding="utf-8")
-ARM = "d5f72de39f5a312261a8174957f876628411ca1fde36d39ad2725abfa4d0c57d"
-INTEL = "8f9d8c59166dc08ee6cd9105dc8eace6a558d25179c3a10e70006db6b0b7e20e"
+ARM = "34e08860556f5c7935f52c5cc1a55142e3dab63ab2c91d886abffa280f89ecc3"
+INTEL = "efd28bb10cec8e59165a7a3d3609f7f52e688b7f824208ea7492e0071944b6ac"
 ARM_URL = "https://github.com/whiteducksoftware/azctx/releases/download/#{version}/azctx_Darwin_arm64.tar.gz"
 INTEL_URL = ARM_URL.replace("arm64", "x86_64")
 RUN = 'run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{staged_path}}/azctx"]'
@@ -55,7 +55,7 @@ class PublishCaskTest(unittest.TestCase):
                     publish_cask.payload(cask, "2026.11.0", None)
 
     def test_homebrew_no_zap_marker_is_inert_but_other_cleanup_is_rejected(self):
-        self.assertIn("# No zap stanza required", ORIGINAL)
+        self.assertIn("  zap :not_required\n", ORIGINAL)
         self.assertIn("  zap :not_required\n", CASK)
         publish_cask.verify_normalized(ORIGINAL, CASK)
         for replacement in (
@@ -79,13 +79,15 @@ class PublishCaskTest(unittest.TestCase):
         # Exact publisher-disabled GoReleaser 2.19.0 output and Homebrew 7.0.12 normalization.
         original = (TESTDATA / "goreleaser-2.19-azctx.rb").read_text(encoding="utf-8")
         normalized = (TESTDATA / "brew-style-2.19-azctx.rb").read_text(encoding="utf-8")
+        # GoReleaser 2.19 emitted a no-zap comment that Homebrew normalizes to the marker.
+        self.assertIn("# No zap stanza required", original)
+        self.assertIn("  zap :not_required\n", normalized)
         publish_cask.verify_normalized(original, normalized)
         self.assertEqual(normalized, base64.b64decode(
             publish_cask.payload(normalized, "2026.11.0", None)["content"]).decode())
         self.assertEqual([], self.invoke([], casks=(original, normalized), argv=("--check",)))
         with self.assertRaises(ValueError):
             publish_cask.verify_normalized(original, normalized.replace("  depends_on :macos\n", ""))
-        publish_cask.verify_normalized(ORIGINAL, normalized)
         for replacement in ("depends_on :linux", "depends_on :macosx", "depends_on :macos_foo",
                             "depends_on cask: :macos", "depends_on :macos if false",
                             "depends_on :macos\n  depends_on :macos"):

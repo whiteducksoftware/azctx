@@ -140,11 +140,11 @@ def cask_semantics(cask):
             result.append((path, "do", stanza))
             path += (stanza,)
         elif path == ("cask",) and words == ["depends_on", ":macos"]:
-            # GoReleaser 2.19 marks macOS-only casks explicitly; retain this
+            # GoReleaser 2.19 and later mark macOS-only casks explicitly; retain this
             # constraint in the comparison without accepting general Ruby symbols.
             result.append((path, "depends_on_macos", ()))
         elif path == ("cask",) and words == ["zap", ":not_required"]:
-            # Homebrew replaces GoReleaser's no-zap comment with this inert marker.
+            # GoReleaser 2.20 emits this inert marker; Homebrew normalized 2.19's no-zap comment to it.
             if no_zap:
                 raise ValueError(f"duplicate cask no-zap marker on line {line}")
             no_zap = True

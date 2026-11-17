@@ -8,7 +8,7 @@ class PublishWingetTest < Minitest::Test
   def setup
     @checksums = { 'azctx_Windows_x86_64.zip' => 'a' * 64, 'azctx_Windows_arm64.zip' => 'b' * 64 }
     common = { 'PackageIdentifier' => 'whiteducksoftware.azctx', 'PackageVersion' => '2026.11.0',
-               'ManifestVersion' => '1.12.0' }
+               'ManifestVersion' => '1.28.0' }
     documents = {
       'whiteducksoftware.azctx.yaml' => common.merge('ManifestType' => 'version', 'DefaultLocale' => 'en-US'),
       'whiteducksoftware.azctx.locale.en-US.yaml' => common.merge('ManifestType' => 'defaultLocale', 'PackageLocale' => 'en-US'),

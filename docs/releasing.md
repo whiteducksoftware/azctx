@@ -40,7 +40,7 @@ their output before any token exists. See
   Snapshots never exercise a real publisher.
 - Conventional commit types form changelog groups, with breaking changes first.
   Mark breaking subjects with `!:` (for example `feat(auth)!: ...`):
-  GoReleaser 2.19.0 groups commit **subjects**, not `BREAKING CHANGE` body footers.
+  GoReleaser 2.20.2 groups commit **subjects**, not `BREAKING CHANGE` body footers.
   Static builds retain `CGO_ENABLED=0`, `-trimpath`, `.CommitTimestamp` and the
   commit-derived binary `BuildDate`.
 
@@ -93,7 +93,7 @@ with its API key, so it needs a new decision on #98 first.
 
 ### Why there is a separate native Homebrew job
 
-GoReleaser 2.19.0 supports `custom_block`, but places it before `version`. Its
+GoReleaser 2.20.2 supports `custom_block`, but places it before `version`. Its
 raw cask output is **not** Homebrew-style-clean. The Linux job therefore renders
 a derived configuration changing only cask `skip_upload` to `true`. It transfers
 only the generated cask, not metadata or environment files, to a stable-only
@@ -117,20 +117,22 @@ or blocks like `on_linux`, fails closed instead of being ignored. Every core
 stanza must occur exactly once, each architecture's `url` must name its own
 release archive with a lowercase SHA-256, and `postflight_steps` must contain
 only the quarantine-removal `run`. The exact root-level `depends_on :macos`
-declaration is permitted because GoReleaser 2.19 emits it for a
+declaration is permitted because GoReleaser 2.19 and later emit it for a
 macOS-only cask; it may appear at most once and is part of the compared
 statements, so native style can neither add nor remove it. The dependency must
 be exactly `depends_on cask: "azure-cli"` or its one-element array form;
 formula dependencies, other casks and extra dependencies are rejected.
-Homebrew 7.0.12 also normalizes GoReleaser's no-zap comment to
-`zap :not_required`; this exact root-level no-cleanup marker is accepted at
-most once and is semantically equivalent to omitting cleanup. Real cleanup
-stanzas, other symbols, platforms and contexts are still rejected.
+GoReleaser 2.20 emits `zap :not_required` directly; Homebrew 7.0.12 normalized
+GoReleaser 2.19's no-zap comment to the same marker. This exact root-level
+no-cleanup marker is accepted at most once and is semantically equivalent to
+omitting cleanup. Real cleanup stanzas, other symbols, platforms and contexts
+are still rejected.
 All actionable statements, including their
 architecture block, must then equal the original Linux artifact's; native style
 may only reorder or reformat them. The four fixtures are regenerated from real
-publisher-disabled GoReleaser 2.19.0 output and current native Homebrew
-normalization, not hand-edited.
+publisher-disabled GoReleaser output and native Homebrew
+normalization, not hand-edited: the current pair from GoReleaser 2.20.2 and
+Homebrew 7.0.14, and the retained 2.19.0 pair from Homebrew 7.0.12.
 A new GoReleaser or Homebrew output shape therefore needs a reviewed parser
 update. Only after that comparison does it mint the
 single-tap contents-write App token and run the Python standard-library
@@ -176,7 +178,7 @@ workflow for future publishing. No latest promotion is automated; keep
 
 ## Publisher-disabled verification
 
-With the existing Go, GoReleaser 2.19.0, Ruby and Syft installed:
+With the existing Go, GoReleaser 2.20.2, Ruby and Syft installed:
 
 ```sh
 goreleaser check --config .goreleaser.yaml
