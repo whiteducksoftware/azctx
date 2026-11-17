@@ -49,10 +49,8 @@ func LoginPrompt(info BrokerInfo, args []string) string {
 	if UsesDeviceCode(args) {
 		return "Follow the Azure CLI device code instructions."
 	}
-	for _, arg := range args {
-		if arg == "--service-principal" || arg == "--identity" {
-			return "Follow the Azure CLI sign-in instructions."
-		}
+	if UsesWorkloadIdentity(args) {
+		return "Follow the Azure CLI sign-in instructions."
 	}
 	if info.Available && info.Enabled {
 		if info.Platform == platformWindows {
@@ -81,7 +79,7 @@ func SetBroker(ctx context.Context, runner Runner, platform string, enabled bool
 			return fmt.Errorf("az %s failed; broker change stopped (account/config changes may already have applied): %w", strings.Join(args[:2], " "), err)
 		}
 	}
-	if err := cli.execLogin(nil); err != nil {
+	if _, err := cli.execLogin(nil); err != nil {
 		return fmt.Errorf("broker setting persisted but sign-in did not complete; retry azctx login: %w", err)
 	}
 	return nil

@@ -47,16 +47,14 @@ func (r firstLoginRunner) Run(ctx context.Context, args []string, options azcli.
 func TestAzureCLIFirstLogin(t *testing.T) {
 	for _, existingDir := range []bool{false, true} {
 		for _, version := range []string{"2.60.0", supportedAzureVersion} {
-			for _, force := range []bool{false, true} {
-				t.Run(strings.Join([]string{map[bool]string{false: "missing-dir", true: "missing-profile"}[existingDir], version, map[bool]string{false: "normal", true: "force-mfa"}[force]}, "/"), func(t *testing.T) {
-					testFirstLogin(t, existingDir, version, force)
-				})
-			}
+			t.Run(strings.Join([]string{map[bool]string{false: "missing-dir", true: "missing-profile"}[existingDir], version}, "/"), func(t *testing.T) {
+				testFirstLogin(t, existingDir, version)
+			})
 		}
 	}
 }
 
-func testFirstLogin(t *testing.T, existingDir bool, version string, force bool) {
+func testFirstLogin(t *testing.T, existingDir bool, version string) {
 	t.Helper()
 	fake := &testutil.FakeRunner{Responses: []testutil.Response{
 		{Result: azcli.Result{Stdout: `{"azure-cli":"` + version + `"}`}}, {},
@@ -71,9 +69,6 @@ func testFirstLogin(t *testing.T, existingDir bool, version string, force bool) 
 	}
 	deps.Runner = firstLoginRunner{fake: fake, configDir: deps.ConfigDir, exists: existingDir}
 	args := []string{loginCommand}
-	if force {
-		args = append(args, "--force-mfa")
-	}
 	args = append(args, argumentDelimiter, deviceCodeFlag)
 	var stdout, stderr bytes.Buffer
 	code := cmd.Run(args, deps, bytes.NewReader(nil), &stdout, &stderr)

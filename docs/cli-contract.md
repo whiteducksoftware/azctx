@@ -18,7 +18,7 @@ Azure files. The sole configuration-write exception is an explicitly confirmed
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
 | `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
 | `azctx version [-o text\|json]` | Print version information, without loading the Azure profile or checking for updates. Its existing version JSON is unchanged. |
-| `azctx login [--use-device-code] [--tenant <name\|id>] [--force-mfa] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, then attach login streams including live stderr capture. Disable Azure CLI's subscription picker only in the login child's environment. Supports default/text output, not subscription JSON. |
+| `azctx login [--use-device-code] [--tenant <name\|id> \| --all-tenants] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, attach login streams including live stderr capture, then offer one confirmation for failed MFA tenants. `--all-tenants` explicitly discovers tenant GUIDs and signs in individually. Disable Azure CLI's subscription picker only in login children. Supports default/text output, not subscription JSON. |
 | `azctx auth broker status` | Read effective platform broker settings and check Azure CLI availability, without a profile or mutations. Default/text output only. |
 | `azctx auth broker enable\|disable [--yes]` | Require a supported platform/version and explicit confirmation, then `az account clear`, `az config set` for the platform broker key, attached `az login`. Default/text output only; stops on the first failure. |
 | `azctx doctor [-o text\|json]` | Offline, profile-independent diagnostics, including cached update status. Default: text. Missing dependencies/broken configuration are report findings, not fatal command errors. |
@@ -74,9 +74,19 @@ profile or Azure configuration directory.
 Friendly login tenant selectors resolve case-insensitive fuzzy names/domains
 against distinct active-cloud profile tenants (including tenant-level records).
 No match or ambiguity fails before any subprocess; a validated GUID can be used
-on first login. `--tenant` cannot be combined with `--force-mfa` or another
-passthrough tenant flag. Other flags still pass after `--`; the existing
-multi-tenant MFA behavior is unchanged.
+on first login. `--tenant` cannot be combined with `--all-tenants` or another
+passthrough tenant flag. Other flags still pass after `--`.
+
+Login classifies documented per-tenant stderr warnings: 50076/50079 can be
+retried once, after one default-yes confirmation; 53003 is explained as a
+Conditional Access block and never retried; other codes are shown verbatim.
+Without azctx interactive input, initial failures are listed on stderr and exit
+3 without retries/discovery. Partial or declined sign-ins also exit 3, not
+success; completed attempts strictly reload the profile for the count summary.
+`--all-tenants` uses `az account tenant list -o json`, validates/deduplicates
+GUIDs, and does not repeat known non-retryable failures. Explicit non-user
+`--identity`/`-i` and `--service-principal` passthrough skip all tenant discovery
+and MFA retry logic. `--force-mfa` is removed.
 
 Broker capability and confirmation details, headless hints, the diagnostic
 schema and safety boundaries are in [authentication](authentication.md).
@@ -93,8 +103,8 @@ schema and safety boundaries are in [authentication](authentication.md).
   JSON mode is non-interactive: bare `azctx -o json` lists; ambiguous switches
   fail with candidates even with a TTY. Successful `azctx -o json <query>`
   and `azctx -o json -` remain quiet (there is no switch-success JSON payload).
-- Input gating covers azctx-owned pickers/prompts. This layer does not redesign
-  authentication: `login` still attaches Azure CLI to the supplied streams and
+- Input gating covers azctx-owned pickers/prompts. MFA recovery follows the
+  rules above; `login` still attaches Azure CLI to the supplied streams and
   forwards arguments after `--`. Azure CLI owns its authentication interaction;
   `--no-input` does not introduce an Azure CLI unattended-authentication mode.
 - Data goes to stdout; diagnostics and picker rendering go to stderr.
@@ -120,9 +130,9 @@ boundary for handler failures, Cobra flag/argument errors and interruptions.
 | Code | Meaning |
 | --- | --- |
 | 0 | Success |
-| 1 | Error, including invalid arguments/formats, profile/state failures and Azure subprocess errors |
+| 1 | Error, including invalid arguments/formats, profile/state failures, login preflight/discovery errors and non-login Azure subprocess errors |
 | 2 | No subscription match, unavailable previous subscription, or ambiguous match when input is disabled |
-| 3 | Reserved: sign-in failed for one or more tenants (layer 10) |
+| 3 | Azure sign-in failed, or one or more tenant sign-ins remain unresolved (including partial success, no-input, declined/unreadable confirmation) |
 | 4 | Reserved: guard found a different context (layer 13) |
 | 130 | Canceled with Ctrl+C or an explicitly canceled command context |
 

@@ -12,13 +12,11 @@ import (
 )
 
 func TestFriendlyTenantRejectsConflictingPassthrough(t *testing.T) {
-	for _, extra := range [][]string{{tenantFlag, tenantID}, {"-t", tenantID}, {"--tenant=" + tenantID}, {"-t" + tenantID}, {forceMFAFlag}, {"--force-mfa=false"}} {
+	for _, extra := range [][]string{{tenantFlag, tenantID}, {"-t", tenantID}, {"--tenant=" + tenantID}, {"-t" + tenantID}} {
 		fake := &testutil.FakeRunner{}
 		deps := commandDependencies(t, fake)
 		args := []string{loginCommand, tenantFlag, tenantID}
-		if !strings.HasPrefix(extra[0], forceMFAFlag) {
-			args = append(args, argumentDelimiter)
-		}
+		args = append(args, argumentDelimiter)
 		args = append(args, extra...)
 		var stdout, stderr bytes.Buffer
 		code := cmd.Run(args, deps, strings.NewReader(""), &stdout, &stderr)
