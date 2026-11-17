@@ -1,11 +1,10 @@
-package azurecli
+package azcli
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/whiteducksoftware/azctx/log"
-	"github.com/whiteducksoftware/azctx/utils"
 )
 
 // Tenants returns all tenants
@@ -23,7 +22,7 @@ func (cli *CLI) UpdateTenants() error {
 		"--output", "json",
 	}
 
-	output, err := utils.ExecuteCommand(AZ_COMMAND, args...)
+	output, err := cli.capture(args)
 	if err != nil {
 		return err
 	}

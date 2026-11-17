@@ -107,6 +107,31 @@ make test  # Run tests with the race detector and coverage
 make check # Run lint and tests
 ```
 
+### Internal boundaries
+
+`cmd` constructs Cobra commands with `cmd.NewRootCommand(cmd.Dependencies)`.
+Tests can supply an `azcli.Runner`, an `afero.Fs`, a config directory, a picker,
+and an update-check function without resolving a real `az` or accessing a tenant.
+
+The internal packages separate Azure CLI execution (`azcli`), the read-only
+`io/fs` profile parser (`profile`), subscription search (`match`), the existing
+picker (`ui`), and update checks (`update`). `state` and `config` contain only
+package documentation until their release layers.
+
+`azcli.Runner.Run` captures stdout, stderr, and the exit code by default.
+Supplying `azcli.Options.Terminal` attaches the supplied streams (or the process
+terminal) and tees stderr into the result. `Options.Env` overrides inherited
+environment entries. The production runner resolves `az` once with `LookPath`.
+Login remains captured in this refactor; authentication output changes come later.
+
+`internal/testutil.FakeRunner` records argv and environment overrides and consumes
+canned responses. Tests also build the portable `internal/testutil/fakeaz`
+executable and put it on `PATH`. Its `FAKEAZ_FIXTURES` JSON array contains
+`args`, `stdout`, `stderr`, and `exitCode` per call; `FAKEAZ_RECORD` receives JSON
+lines with argv and only environment names listed in `FAKEAZ_ENV_KEYS`.
+Test scratch files live below the package working directory and are cleaned up.
+No real Azure CLI or credentials are needed.
+
 -----
 
 ## Migrate from stiviik/azctx
