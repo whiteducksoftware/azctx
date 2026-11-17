@@ -23,13 +23,13 @@ azctx [query | -] [flags]
 ### Options
 
 ```
-      --all             Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
-  -c, --current         Display the current active subscription
-  -h, --help            help for azctx
-      --no-input        Never open a picker or prompt (also AZCTX_NO_INPUT=1)
-  -o, --output string   Output format (depends on command)
-      --verbose         Enable debug diagnostics
-      --yes             Confirm switching to a protected subscription without prompting
+      --all[=true|false]        Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
+  -c, --current[=true|false]    Display the current active subscription
+  -h, --help[=true|false]       help for azctx
+      --no-input[=true|false]   Never open a picker or prompt (also AZCTX_NO_INPUT=1)
+  -o, --output string           Output format (depends on command)
+      --verbose[=true|false]    Enable debug diagnostics
+      --yes[=true|false]        Confirm switching to a protected subscription without prompting
 ```
 
 ### SEE ALSO

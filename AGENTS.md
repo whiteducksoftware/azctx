@@ -5,7 +5,7 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 ## Start and validate
 
 - Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and stacked PR delivery.
-- Use `go.mod`: Go 1.26 minimum, preferred toolchain Go 1.27.4; allow automatic toolchain selection.
+- Use `go.mod`: Go 1.26.7 minimum, preferred toolchain Go 1.27.4; allow automatic toolchain selection.
 - `make check` runs lint and tests; pass it before a PR leaves draft.
 - `make test` runs race-enabled tests with coverage; `make build` builds azctx.
 - `make golden` updates the picker screens at 60, 100 and 160 columns; review the diff.

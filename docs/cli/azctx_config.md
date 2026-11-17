@@ -20,16 +20,16 @@ azctx config [path] [flags]
 ### Options
 
 ```
-  -h, --help   help for config
+  -h, --help[=true|false]   help for config
 ```
 
 ### Options inherited from parent commands
 
 ```
-      --all             Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
-      --no-input        Never open a picker or prompt (also AZCTX_NO_INPUT=1)
-  -o, --output string   Output format (depends on command)
-      --verbose         Enable debug diagnostics
+      --all[=true|false]        Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
+      --no-input[=true|false]   Never open a picker or prompt (also AZCTX_NO_INPUT=1)
+  -o, --output string           Output format (depends on command)
+      --verbose[=true|false]    Enable debug diagnostics
 ```
 
 ### SEE ALSO

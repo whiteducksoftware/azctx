@@ -91,7 +91,7 @@ See [security](docs/security.md#verify-a-release) for macOS/Windows checks,
 provenance limits and unsigned macOS binaries. A checksum alone is not an
 independent proof of origin.
 
-To build from source, use Go as declared in `go.mod` (minimum 1.26, preferred
+To build from source, use Go as declared in `go.mod` (minimum 1.26.7, preferred
 1.27.4), review the source and run `make build`. Run the resulting `./azctx`
 (`./azctx.exe` on Windows) from the checkout or copy it onto PATH.
 
