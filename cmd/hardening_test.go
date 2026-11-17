@@ -10,8 +10,56 @@ import (
 
 	"github.com/whiteducksoftware/azctx/cmd"
 	"github.com/whiteducksoftware/azctx/internal/azcli"
+	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
+
+func TestAmbiguityDiagnosticsRedactCandidatesWithoutMutatingData(t *testing.T) {
+	const redactedValue = "[REDACTED]"
+	original := cmd.SubscriptionOutput{
+		ID: "ghp_synthetic-id", Name: "access_token=synthetic-secret",
+		TenantID: "ghp_synthetic-tenant", TenantName: "Bearer synthetic-secret",
+		TenantDomain: "ghp_synthetic-domain", State: "password=synthetic-secret",
+		User:        profile.User{Name: "ghp_synthetic-user", Type: "client_secret=synthetic-secret"},
+		Environment: "ghp_synthetic-cloud", IsDefault: true, Delegated: true,
+	}
+	failure := &cmd.ExitError{
+		Code: cmd.CodeAmbiguousMatch, Status: cmd.ExitNoMatch, Message: "ambiguous subscription",
+		Candidates: []cmd.SubscriptionOutput{original},
+	}
+	for _, format := range []string{textFormat, jsonFormat} {
+		t.Run(format, func(t *testing.T) {
+			var output bytes.Buffer
+			if status := cmd.WriteError(&output, format, failure); status != cmd.ExitNoMatch {
+				t.Fatalf("ambiguity status=%d", status)
+			}
+			if strings.Contains(output.String(), "ghp_") || strings.Contains(output.String(), "synthetic-secret") {
+				t.Fatalf("candidate leaked a recognized secret: %s", &output)
+			}
+			if format == jsonFormat {
+				var got struct {
+					Candidates []cmd.SubscriptionOutput `json:"candidates"`
+				}
+				if err := json.Unmarshal(output.Bytes(), &got); err != nil {
+					t.Fatal(err)
+				}
+				want := cmd.SubscriptionOutput{
+					ID: redactedValue, Name: "access_token=" + redactedValue,
+					TenantID: redactedValue, TenantName: "Bearer " + redactedValue,
+					TenantDomain: redactedValue, State: "password=" + redactedValue,
+					User:        profile.User{Name: redactedValue, Type: "client_secret=" + redactedValue},
+					Environment: redactedValue, IsDefault: true, Delegated: true,
+				}
+				if len(got.Candidates) != 1 || got.Candidates[0] != want {
+					t.Fatalf("redacted candidates=%+v", got.Candidates)
+				}
+			}
+			if failure.Candidates[0] != original {
+				t.Fatalf("diagnostic rendering mutated subscription data: %+v", failure.Candidates)
+			}
+		})
+	}
+}
 
 type tokenPathRunner struct{ *testutil.FakeRunner }
 
