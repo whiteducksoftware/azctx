@@ -3,7 +3,7 @@
 ## Setup and checks
 
 Install Git, Make and Go as declared in [go.mod](go.mod): the source minimum is
-Go 1.26 and the preferred toolchain is **Go 1.27.3**. Keep automatic toolchain
+Go 1.26 and the preferred toolchain is **Go 1.27.4**. Keep automatic toolchain
 selection enabled (the default, `GOTOOLCHAIN=auto`). The preferred patch supersedes
 the release plan's original 1.27.2 pin for a security fix; see
 [the upgrade guide](docs/upgrade.md).
@@ -115,7 +115,7 @@ updates grouped per ecosystem and major updates as individual PRs. Review them
 like any other change. Dependabot cannot update tool versions embedded in
 workflows, the contributor install command or the preferred Go toolchain;
 update those manually, changing every occurrence together, then update version
-mentions in README, AGENTS, CONTRIBUTING and `docs/` (such as "Go 1.27.3").
+mentions in README, AGENTS, CONTRIBUTING and `docs/` (such as "Go 1.27.4").
 Before updating pins in protected release workflows or GoReleaser publishers,
 obtain explicit maintainer authorization for narrowly scoped dependency/tool pin
 maintenance in those files. It does not authorize changes to publication behavior,

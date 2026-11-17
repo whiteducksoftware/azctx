@@ -6,7 +6,7 @@ requires merging, tagging or publishing.
 
 ## Build and checks
 
-Use `go.mod`: Go 1.26 minimum, preferred toolchain Go 1.27.3. Allow automatic
+Use `go.mod`: Go 1.26 minimum, preferred toolchain Go 1.27.4. Allow automatic
 selection unless that exact supported toolchain is already active.
 Use golangci-lint v2.15.0 and Python 3.10+ as described in CONTRIBUTING.
 
@@ -70,7 +70,7 @@ govulncheck, zizmor, GoReleaser, Syft and Go) manually. When upgrading one:
    change them or leave pins inconsistent. With authorization, update every
    occurrence together.
 2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
-   are spelled differently, such as "Go 1.27.3" or "GoReleaser 2.19.0". Leave
+   are spelled differently, such as "Go 1.27.4" or "GoReleaser 2.19.0". Leave
    released upgrade-guide history unchanged.
 3. Run `make check` and `make ci-check`.
 
@@ -78,7 +78,7 @@ Compatibility floors are not upgrade targets. The Go 1.26.0 `go` directive,
 Azure CLI 2.61.0 and its immutable minimum image digest stay fixed for the
 manual minimum-versus-latest matrix in [integration tests](integration-tests.md).
 The maintained latest pins are the seven tool pins above, including the
-preferred Go 1.27.3 toolchain and golangci-lint v2.15.0.
+preferred Go 1.27.4 toolchain and golangci-lint v2.15.0.
 GoReleaser owns the generated package and winget manifest schema versions
 (currently 1.12.0); `check_winget.ps1` fetches Microsoft's schema matching each
 generated `ManifestVersion`. Runner-provided Python, Ruby, PowerShell,
