@@ -67,7 +67,11 @@ func TestBinaryPreviousSubscriptionAcrossProcesses(t *testing.T) {
 		command := exec.CommandContext(ctx, binary, args...)
 		output, err := command.CombinedOutput()
 		cancel()
-		if err != nil || len(output) != 0 {
+		name, id := developmentName, developmentID
+		if i == 1 {
+			name, id = productionName, productionID
+		}
+		if err != nil || string(output) != switchFeedback(name, id, tenantID, tenantID) {
 			t.Fatalf("switch %d: %v, %s", i, err, output)
 		}
 		after, err := os.ReadFile(profilePath)
@@ -104,6 +108,16 @@ func cleanProcess(t *testing.T, command *exec.Cmd, cancel context.CancelFunc) {
 	})
 }
 
+func readDevicePrompt(reader io.Reader, expected string, visible chan<- string, finished chan<- struct{}) {
+	defer func() { finished <- struct{}{} }()
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		if scanner.Text() == expected {
+			visible <- expected
+		}
+	}
+}
+
 func TestBinaryDeviceCodeVisibleBeforeAZExits(t *testing.T) {
 	binary, _, _ := fakeBinary(t, `[
 		{"args":["version","-o","json"],"stdout":"{\"azure-cli\":\"2.61.0\"}"},
@@ -130,25 +144,17 @@ func TestBinaryDeviceCodeVisibleBeforeAZExits(t *testing.T) {
 	cleanProcess(t, command, cancel)
 	visible := make(chan string, 2)
 	finished := make(chan struct{}, 2)
-	readPrompt := func(reader io.Reader, expected string) {
-		defer func() { finished <- struct{}{} }()
-		scanner := bufio.NewScanner(reader)
-		for scanner.Scan() {
-			if scanner.Text() == expected {
-				visible <- expected
-			}
+	go readDevicePrompt(stdout, "stdout device code ABCD", visible, finished)
+	go readDevicePrompt(stderr, "stderr device code EFGH", visible, finished)
+	select {
+	case prompt := <-visible:
+		if prompt != "stderr device code EFGH" {
+			t.Fatalf("login stdout was not suppressed: %q", prompt)
 		}
-	}
-	go readPrompt(stdout, "stdout device code ABCD")
-	go readPrompt(stderr, "stderr device code EFGH")
-	for range 2 {
-		select {
-		case <-visible:
-		case <-ctx.Done():
-			_ = stdin.Close()
-			_ = command.Wait()
-			t.Fatal("device code was not streamed before az waited for input")
-		}
+	case <-ctx.Done():
+		_ = stdin.Close()
+		_ = command.Wait()
+		t.Fatal("stderr device code was not streamed before az waited for input")
 	}
 	if _, err := io.WriteString(stdin, "acknowledge\n"); err != nil {
 		t.Fatal(err)
@@ -164,6 +170,9 @@ func TestBinaryDeviceCodeVisibleBeforeAZExits(t *testing.T) {
 	}
 	if err := command.Wait(); err != nil {
 		t.Fatal(err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("unexpected login output: %q", <-visible)
 	}
 }
 

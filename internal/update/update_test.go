@@ -47,6 +47,7 @@ func TestDailyCachedReleaseRedirect(t *testing.T) {
 		if r.Method != http.MethodHead {
 			t.Errorf("method = %s", r.Method)
 		}
+
 		if strings.HasSuffix(r.URL.Path, "/latest") {
 			requests.Add(1)
 			http.Redirect(w, r, "/owner/repo/releases/tag/"+latestTag, http.StatusFound)
@@ -70,6 +71,39 @@ func TestDailyCachedReleaseRedirect(t *testing.T) {
 	now = now.Add(24 * time.Hour)
 	if err := checker.Check("owner", "repo"); err != nil || requests.Load() != 2 {
 		t.Fatalf("next-day requests=%d error=%v", requests.Load(), err)
+	}
+}
+
+func TestFreshLookupIgnoresCacheAndUpdatesOfflineStatus(t *testing.T) {
+	server, requests := futureReleaseServer(false)
+	defer server.Close()
+	var output bytes.Buffer
+	checker := testChecker(t, server, &output)
+	if err := checker.Check("owner", "repo"); err != nil {
+		t.Fatal(err)
+	}
+	output.Reset()
+	if err := checker.CheckFresh("owner", "repo"); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 2 || strings.Count(output.String(), "A new version") != 1 ||
+		!strings.Contains(output.String(), "v2026.12.0") {
+		t.Fatalf("requests=%d notice=%q", requests.Load(), &output)
+	}
+	status, err := checker.CachedStatus()
+	if err != nil || status.State != "available" || status.LatestVersion != "2026.12.0" || status.Stale {
+		t.Fatalf("offline status=%+v err=%v", status, err)
+	}
+	name, err := storage.Path(checker.CacheDir, checker.AzureDir, "update.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A fresh lookup must not even decode the previous cache.
+	if err := os.WriteFile(name, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checker.CheckFresh("owner", "repo"); err != nil || requests.Load() != 3 {
+		t.Fatalf("fresh lookup with corrupt cache: requests=%d err=%v", requests.Load(), err)
 	}
 }
 
@@ -158,6 +192,9 @@ func TestUpdateEnvironmentAndTerminalGates(t *testing.T) {
 			if err := checker.Check("owner", "repo"); err != nil {
 				t.Fatal(err)
 			}
+			if err := checker.CheckFresh("owner", "repo"); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := os.Stat(filepath.Join(checker.CacheDir, "azctx")); !os.IsNotExist(err) {
 				t.Fatalf("gated check touched cache: %v", err)
 			}
@@ -187,6 +224,24 @@ func TestUpdateDeadlineAndFailedAttemptCache(t *testing.T) {
 	if err := checker.Check("owner", "repo"); err != nil || requests != 1 || output.Len() != 0 {
 		t.Fatalf("failed-attempt cache: requests=%d error=%v notice=%q", requests, err, output.String())
 	}
+	if err := checker.CheckFresh("owner", "repo"); !errors.Is(err, context.DeadlineExceeded) || requests != 2 || output.Len() != 0 {
+		t.Fatalf("fresh failed attempt: requests=%d error=%v notice=%q", requests, err, output.String())
+	}
+}
+
+func TestFreshLookupDeadlineBoundsNetwork(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+	var output bytes.Buffer
+	checker := testChecker(t, server, &output)
+	start := time.Now()
+	err := checker.CheckFresh("owner", "repo")
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) || elapsed < 1500*time.Millisecond || elapsed > 4*time.Second || output.Len() != 0 {
+		t.Fatalf("fresh deadline: elapsed=%s err=%v notice=%q", elapsed, err, &output)
+	}
 }
 
 func TestConcurrentUpdateCheckDoesNotDuplicateRequest(t *testing.T) {
@@ -207,6 +262,9 @@ func TestConcurrentUpdateCheckDoesNotDuplicateRequest(t *testing.T) {
 	defer release()
 	if err := checker.Check("owner", "repo"); err != nil || output.Len() != 0 {
 		t.Fatalf("concurrent check: %v, %q", err, output.String())
+	}
+	if err := checker.CheckFresh("owner", "repo"); err != nil || output.Len() != 0 {
+		t.Fatalf("concurrent fresh check: %v, %q", err, output.String())
 	}
 }
 

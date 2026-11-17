@@ -68,9 +68,18 @@ func (c Checker) cachePath() (string, error) {
 	return storage.Path(c.CacheDir, c.AzureDir, "update.json")
 }
 
-// Check returns diagnostics for debug logging only; callers must not fail a
-// successful subscription switch because an optional update check failed.
+// Check reuses a recent cache. Errors are diagnostics for debug logging only.
 func (c Checker) Check(owner, repo string) error {
+	return c.check(owner, repo, false)
+}
+
+// CheckFresh skips reading the cache, but records the lookup under its lock.
+// Like Check, it applies terminal and environment opt-outs and a two-second deadline.
+func (c Checker) CheckFresh(owner, repo string) error {
+	return c.check(owner, repo, true)
+}
+
+func (c Checker) check(owner, repo string, fresh bool) error {
 	if !c.enabled() {
 		return nil
 	}
@@ -87,15 +96,17 @@ func (c Checker) Check(owner, repo string) error {
 		return err
 	}
 	defer release()
-	cached, err := readCache(name, false)
-	if err != nil {
-		return err
+	if !fresh {
+		cached, err := readCache(name, false)
+		if err != nil {
+			return err
+		}
+		if !cached.CheckedAt.IsZero() && !cached.CheckedAt.After(now) && now.Sub(cached.CheckedAt) < interval {
+			return c.notice(owner, repo, cached.Tag)
+		}
 	}
-	if !cached.CheckedAt.IsZero() && !cached.CheckedAt.After(now) && now.Sub(cached.CheckedAt) < interval {
-		return c.notice(owner, repo, cached.Tag)
-	}
-	// Cache attempts too, so offline/proxy failures do not recur every run.
-	cached = cachedRelease{CheckedAt: now}
+	// Record failed attempts too for offline status and cached-mode callers.
+	cached := cachedRelease{CheckedAt: now}
 	if err := save(name, c.AzureDir, cached); err != nil {
 		return err
 	}
@@ -181,7 +192,8 @@ func (c Checker) notice(owner, repo, tag string) error {
 	}
 	if newerRelease(current, tag) {
 		releaseURL := "https://github.com/" + owner + "/" + repo + "/releases/tag/" + url.PathEscape(tag)
-		if _, err := fmt.Fprintf(output, "A new version of azctx is available: %s → %s\n%s\n", current, tag, releaseURL); err != nil {
+		notice := fmt.Sprintf("A new version of azctx is available: %s → %s\n%s", current, tag, releaseURL)
+		if _, err := fmt.Fprintln(output, log.Yellow(output, notice)); err != nil {
 			return fmt.Errorf("failed to print update notice: %w", err)
 		}
 	}

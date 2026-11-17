@@ -140,7 +140,23 @@ func TestProtectedSwitchConfirmation(t *testing.T) {
 			if tc.wantStatus != 0 {
 				assertNoSwitchRecorded(t, deps)
 			}
+			if tc.wantStatus == 0 {
+				assertProtectedSwitchFeedback(t, tc.name, messages.String())
+			}
 		})
+	}
+}
+
+func assertProtectedSwitchFeedback(t *testing.T, name, messages string) {
+	t.Helper()
+	want := strings.TrimSuffix(switchFeedback(productionName, productionID, tenantID, tenantID), "\n") + " [protected]\n"
+	if name == "JSON yes" {
+		want = ""
+	} else if name == "confirm" {
+		want = "Switch to protected subscription " + tenantID + "/Production (" + productionID + ")? [y/N] " + want
+	}
+	if messages != want {
+		t.Fatalf("protected success feedback=%q want=%q", messages, want)
 	}
 }
 

@@ -4,7 +4,9 @@ Print azctx version and build information
 
 ### Synopsis
 
-Print version, build date, commit and Go version in text (default) or JSON. Missing metadata is unknown. No profile, Azure CLI or update check is needed; version JSON is separate from subscription schema-1 output.
+Print version, build date, commit and Go version in text (default) or JSON. Missing metadata is unknown. No profile or Azure CLI is needed; version JSON is separate from subscription schema-1 output and stays offline.
+
+Text output makes a fresh stable-release lookup without reading the cache (two-second network deadline), and writes the result to the private cache for offline doctor status. A newer release produces a yellow stderr notice; failures are debug-only and do not fail version output. Skipped with updateCheck: false, AZCTX_NO_UPDATE_CHECK=1, CI present or non-TTY stdout. Switching never checks for updates.
 
 ```
 azctx version [flags]

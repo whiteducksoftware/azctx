@@ -40,14 +40,17 @@ func TestBuildConcurrentFirstUseWithIsolatedEnvironment(t *testing.T) {
 	t.Chdir(dir)
 	var ready sync.WaitGroup
 	for i := range 4 {
-		output := filepath.Join(dir, testutil.ExecutableName("first-use-"+strconv.Itoa(i)))
 		ready.Go(func() {
-			testutil.Build(t, output, source)
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			result, err := exec.CommandContext(ctx, output).CombinedOutput()
-			if err != nil || string(result) != "isolated fixture\n" {
-				t.Errorf("concurrent fixture build: error=%v output=%q", err, result)
+			for attempt := range 16 {
+				output := filepath.Join(dir, testutil.ExecutableName("first-use-"+strconv.Itoa(i)+"-"+strconv.Itoa(attempt)))
+				testutil.Build(t, output, source)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				result, err := exec.CommandContext(ctx, output).CombinedOutput()
+				cancel()
+				if err != nil || string(result) != "isolated fixture\n" {
+					t.Errorf("concurrent fixture build: error=%v output=%q", err, result)
+					return
+				}
 			}
 		})
 	}

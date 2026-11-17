@@ -67,7 +67,7 @@ func TestVerboseOnlyEnablesDebugDiagnostics(t *testing.T) {
 		if err := root.Execute(); err != nil {
 			t.Fatal(err)
 		}
-		if stdout.Len() != 0 || strings.Contains(stderr.String(), "offline diagnostic") != verbose ||
+		if stdout.Len() != 0 || strings.Contains(stderr.String(), "offline diagnostic") ||
 			strings.Contains(stderr.String(), "Setting active subscription") != verbose {
 			t.Fatalf("verbose=%v stdout=%q stderr=%q", verbose, stdout.String(), stderr.String())
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -63,7 +64,7 @@ func (cli CLI) capture(args []string) error {
 	return nil
 }
 
-func (cli CLI) execLogin(extraArgs []string) (LoginResult, error) {
+func (cli CLI) execLogin(extraArgs []string, keepOutput bool) (LoginResult, error) {
 	if err := cli.context().Err(); err != nil {
 		return LoginResult{}, err
 	}
@@ -77,9 +78,13 @@ func (cli CLI) execLogin(extraArgs []string) (LoginResult, error) {
 	if terminal == nil {
 		terminal = &Terminal{}
 	}
+	childTerminal := *terminal
+	if !keepOutput && !loginOutputSelected(extraArgs) {
+		childTerminal.Stdout = io.Discard
+	}
 	login := LoginResult{Attempted: true}
 	result, err := cli.runner.Run(cli.context(), args, Options{
-		Terminal: terminal, Env: []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"},
+		Terminal: &childTerminal, Env: []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"},
 		ObserveTenantFailure: func(failure TenantFailure) {
 			login.Failures = append(login.Failures, failure)
 		},
@@ -127,7 +132,17 @@ func (cli CLI) LoginTenant(id string, extraArgs []string) (LoginResult, error) {
 		}
 		args = append(args, extraArgs[i])
 	}
-	return cli.execLogin(args)
+	return cli.execLogin(args, false)
+}
+
+func loginOutputSelected(args []string) bool {
+	for _, arg := range args {
+		flag, _, _ := strings.Cut(arg, "=")
+		if flag == "--output" || flag == "--query" || strings.HasPrefix(flag, "-o") {
+			return true
+		}
+	}
+	return false
 }
 
 func (cli CLI) context() context.Context {

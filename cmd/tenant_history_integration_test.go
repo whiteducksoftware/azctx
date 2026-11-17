@@ -16,7 +16,7 @@ func TestBinaryTenantSwitchAndHistoryIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, messages := runContractBinary(t, binary, []string{tenantSubcommand, tenantID}, "")
-	if code != 0 || out != "" || messages != "" {
+	if code != 0 || out != "" || messages != switchFeedback(developmentName, developmentID, tenantID, tenantID) {
 		t.Fatalf("tenant switch exit=%d stdout=%q stderr=%q", code, out, messages)
 	}
 	code, out, messages = runContractBinary(t, binary, []string{historyCommand, outputFlag, jsonFormat}, "")

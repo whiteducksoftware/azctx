@@ -54,6 +54,9 @@ func TestContractCurrentPlainFormats(t *testing.T) {
 }
 
 func TestContractListAllAndFormats(t *testing.T) {
+	const plainTable = "NAME         ID                                    TENANT                                STATE  DEFAULT  ACCOUNT  CLOUD       ACCESS\n" +
+		"Production   11111111-1111-1111-1111-111111111111  aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa         true              AzureCloud  \n" +
+		"Development  22222222-2222-2222-2222-222222222222  aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa         false             AzureCloud  \n"
 	for _, format := range []string{"table", jsonFormat} {
 		for _, all := range []bool{false, true} {
 			fake := &testutil.FakeRunner{}
@@ -69,6 +72,9 @@ func TestContractListAllAndFormats(t *testing.T) {
 			if err := root.Execute(); err != nil || strings.Contains(stdout.String(), "N/A(tenant level account)") != all ||
 				stderr.Len() != 0 || len(fake.Calls) != 0 {
 				t.Fatalf("args=%v err=%v stdout=%q stderr=%q calls=%+v", args, err, stdout.String(), stderr.String(), fake.Calls)
+			}
+			if format != jsonFormat && !all && stdout.String() != plainTable {
+				t.Fatalf("plain table bytes changed: got=%q want=%q", &stdout, plainTable)
 			}
 		}
 	}

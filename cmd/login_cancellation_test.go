@@ -61,7 +61,7 @@ func TestLoginPreservesCancellationAtEveryStage(t *testing.T) {
 			command.SetErr(&stderr)
 			err := command.Execute()
 			if cmd.ExitCode(err) != 130 || !errors.Is(err, context.Canceled) || len(fake.Calls) != atCall ||
-				strings.Contains(stderr.String(), "Successfully fetched") {
+				strings.Contains(stderr.String(), "✓ Signed in:") {
 				t.Fatalf("error=%v calls=%+v stdout=%q stderr=%q", err, fake.Calls, stdout.String(), stderr.String())
 			}
 		})

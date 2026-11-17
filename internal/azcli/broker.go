@@ -79,7 +79,7 @@ func SetBroker(ctx context.Context, runner Runner, platform string, enabled bool
 			return fmt.Errorf("az %s failed; broker change stopped (account/config changes may already have applied): %w", strings.Join(args[:2], " "), err)
 		}
 	}
-	if _, err := cli.execLogin(nil); err != nil {
+	if _, err := cli.execLogin(nil, true); err != nil {
 		return fmt.Errorf("broker setting persisted but sign-in did not complete; retry azctx login: %w", err)
 	}
 	return nil

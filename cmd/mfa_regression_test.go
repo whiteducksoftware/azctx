@@ -155,7 +155,7 @@ func TestMFASummaryStrictlyReloadsAfterLastLogin(t *testing.T) {
 	deps.Runner = refreshedLoginRunner{fake: fake, files: files}
 	var stdout, stderr bytes.Buffer
 	if code := cmd.Run([]string{loginCommand}, deps, strings.NewReader("yes\n"), &stdout, &stderr); code != 0 ||
-		!strings.Contains(stderr.String(), "Successfully fetched 2 tenants and 2 subscriptions.") {
+		!strings.Contains(stderr.String(), "✓ Signed in: 2 tenants, 2 subscriptions\n") {
 		t.Fatalf("code=%d calls=%+v stdout=%q stderr=%q", code, fake.Calls, stdout.String(), stderr.String())
 	}
 }
