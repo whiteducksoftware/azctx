@@ -8,15 +8,18 @@ harness. Each process has isolated Azure/profile, user/state and fixture paths,
 bounded execution, synthetic GUIDs and disabled update checks. No installed
 Azure CLI, sign-in or tenant is needed.
 
-The CI `test` matrix runs `make test` and `make e2e` natively on Linux, macOS and
-Windows. Compilation for another OS is not a substitute for those native jobs.
+The CI `test` matrix runs this suite once through `make test` natively on Linux,
+macOS and Windows; it does not repeat the `make e2e` subset. Race/coverage
+instrumentation applies to the Go test harness, not the separately built
+subprocess binaries. Compilation for another OS is not a substitute for those
+native jobs.
 
 | Command surface | Real-binary coverage |
 | --- | --- |
 | Bare command, list and current (`-c`) | `TestBinaryContractMatrix`, `TestBinaryContractNoninteractiveVariants`, `TestBinaryFakeAZRoundTrip` |
 | Query and previous (`-`) | `TestBinaryPreviousSubscriptionAcrossProcesses`, `TestBinaryContractCommandNamesAndDelimiter` |
 | Tenant and history | `TestBinaryTenantSwitchAndHistoryIsolation` |
-| Login | `TestBinaryDeviceCodeVisibleBeforeAZExits` (live attached synthetic prompts) |
+| Login | `TestBinaryLoginRejectsUndelimitedArguments` (exit 1 without Azure calls), `TestBinaryDeviceCodeVisibleBeforeAZExits` (live attached synthetic prompts) |
 | Auth broker status, enable and disable | `TestBinaryDiagnosticsAndBroker` (confirmed fake calls on macOS/Windows; rejection on Linux) |
 | Doctor text/JSON | `TestBinaryDiagnosticsAndBroker` |
 | Config and alias set/list/rm | `TestBinaryConfigAliasRoundTrip`, `TestBinaryConfigAliasProtectedSelection` |

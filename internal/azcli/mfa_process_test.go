@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -67,7 +68,9 @@ func TestRunnerDiscardsOversizedTenantFailureLines(t *testing.T) {
 	const secret = "synthetic-overflow-secret"
 	const warning = "WARNING: Authentication failed against tenant " + ignoredID + " 'Token': AADSTS50076: "
 	const valid = "WARNING: Authentication failed against tenant " + validID + " 'Directory': AADSTS50079: MFA required"
-	long := strings.Repeat("pending ", 160000)
+	// Stream twice the 128 KiB observation bound so discarding spans pipe
+	// reads, without making the instrumented test a megabyte throughput check.
+	long := strings.Repeat("pending ", (256<<10)/len("pending "))
 	for _, tc := range []struct {
 		name, input string
 		want        int
@@ -99,6 +102,64 @@ func TestRunnerDiscardsOversizedTenantFailureLines(t *testing.T) {
 				t.Fatal("overflow changed redacted forwarding or swallowed the following diagnostic")
 			}
 		})
+	}
+}
+
+func TestRunnerTenantFailureObservationBoundary(t *testing.T) {
+	dir := testutil.BuildFakeAZ(t)
+	const validID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	const valid = "WARNING: Authentication failed against tenant " + validID + " 'Directory': AADSTS50079: MFA required"
+	for _, tc := range []struct {
+		name string
+		size int
+		want int
+	}{
+		{"at limit", 128 << 10, 1},
+		{"one byte over limit", (128 << 10) + 1, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := valid + strings.Repeat(" ", tc.size-len(valid))
+			runner := fakeLoginProcess(t, dir, []loginFixture{{Args: []string{loginCommand}, Stderr: input}})
+			var failures []azcli.TenantFailure
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			result, err := runner.Run(ctx, []string{loginCommand}, azcli.Options{
+				Terminal: &azcli.Terminal{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard},
+				ObserveTenantFailure: func(failure azcli.TenantFailure) {
+					failures = append(failures, failure)
+				},
+			})
+			if err != nil || result.ExitCode != 0 || len(failures) != tc.want || result.Stderr != input {
+				t.Fatalf("size=%d exit=%d err=%v failure count=%d; want %d; forwarded=%v",
+					tc.size, result.ExitCode, err, len(failures), tc.want, result.Stderr == input)
+			}
+			if tc.want == 1 && (failures[0].ID != validID || failures[0].Code != "50079" || failures[0].Name != "Directory") {
+				t.Fatalf("boundary warning not classified: %+v", failures)
+			}
+		})
+	}
+}
+
+func TestRunnerPreservesCancellationAfterTenantFailureEOF(t *testing.T) {
+	dir := testutil.BuildFakeAZ(t)
+	const warning = "WARNING: Authentication failed against tenant bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb 'Directory': AADSTS50079: MFA required"
+	runner := fakeLoginProcess(t, dir, []loginFixture{{Args: []string{loginCommand}, Stderr: warning}})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var failures []azcli.TenantFailure
+	var output bytes.Buffer
+	result, err := runner.Run(ctx, []string{loginCommand}, azcli.Options{
+		Terminal: &azcli.Terminal{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: &output},
+		ObserveTenantFailure: func(failure azcli.TenantFailure) {
+			failures = append(failures, failure)
+			// EOF observation runs after the child has exited successfully.
+			cancel()
+		},
+	})
+	if !errors.Is(err, context.Canceled) || result.ExitCode != 0 || len(failures) != 1 ||
+		result.Stderr != warning || output.String() != warning {
+		t.Fatalf("exit=%d err=%v failure count=%d; captured=%v forwarded=%v",
+			result.ExitCode, err, len(failures), result.Stderr == warning, output.String() == warning)
 	}
 }
 

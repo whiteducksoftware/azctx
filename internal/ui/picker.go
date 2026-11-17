@@ -9,10 +9,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/sahilm/fuzzy"
 	"golang.org/x/term"
 
@@ -81,10 +82,19 @@ func newOrderedPicker(subscriptions []profile.Subscription, width, height int) P
 	picker.list.Filter = filterSubscriptions
 	picker.list.DisableQuitKeybindings()
 	picker.list.SetShowStatusBar(false)
-	picker.list.Styles.Title = lipgloss.NewStyle().Bold(true)
-	picker.list.Styles.TitleBar = lipgloss.NewStyle().PaddingBottom(1)
+	picker.setStyles(true)
 	picker.resize(width, height)
 	return picker
+}
+
+func (picker *Picker) setStyles(isDark bool) {
+	picker.list.Styles = list.DefaultStyles(isDark)
+	picker.list.Styles.Title = lipgloss.NewStyle().Bold(true)
+	picker.list.Styles.TitleBar = lipgloss.NewStyle().PaddingBottom(1)
+	picker.list.FilterInput.SetStyles(picker.list.Styles.Filter)
+	picker.list.Help.Styles = help.DefaultStyles(isDark)
+	picker.list.Paginator.ActiveDot = picker.list.Styles.ActivePaginationDot.String()
+	picker.list.Paginator.InactiveDot = picker.list.Styles.InactivePaginationDot.String()
 }
 
 // Rank each field independently so a query cannot accidentally span a name,
@@ -116,10 +126,17 @@ func (picker Picker) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.WindowSizeMsg:
 		picker.resize(message.Width, message.Height)
+	case tea.ColorProfileMsg:
+		if message.Profile >= colorprofile.ANSI {
+			// ST avoids a BEL byte, including on terminals without OSC support.
+			return picker, tea.Raw("\x1b]11;?\x1b\\")
+		}
+	case tea.BackgroundColorMsg:
+		picker.setStyles(message.IsDark())
 	case list.FilterMatchesMsg:
 		// Bubbles' asynchronous results carry no query identity and can arrive stale.
 		return picker, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch message.String() {
 		case "ctrl+c":
 			picker.err = ErrInterrupted
@@ -158,7 +175,7 @@ func (picker *Picker) resize(width, height int) {
 	}
 }
 
-func (picker Picker) View() string { return picker.list.View() }
+func (picker Picker) View() tea.View { return tea.NewView(picker.list.View()) }
 
 // Selection reports the chosen sorted index, or cancellation/interruption.
 func (picker Picker) Selection() (int, error) { return picker.selected, picker.err }
@@ -179,11 +196,10 @@ func SelectTenantsOrdered(tenants []profile.Subscription) (int, error) {
 }
 
 func selectOrdered(subscriptions []profile.Subscription, tenants bool) (int, error) {
+	options := []tea.ProgramOption{tea.WithOutput(os.Stderr)}
 	_, noColor := os.LookupEnv("NO_COLOR")
 	if noColor || !term.IsTerminal(int(os.Stderr.Fd())) {
-		previous := lipgloss.ColorProfile()
-		lipgloss.SetColorProfile(termenv.Ascii)
-		defer lipgloss.SetColorProfile(previous)
+		options = append(options, tea.WithColorProfile(colorprofile.NoTTY))
 	}
 	width, height, err := term.GetSize(int(os.Stderr.Fd()))
 	if err != nil {
@@ -198,7 +214,8 @@ func selectOrdered(subscriptions []profile.Subscription, tenants bool) (int, err
 	if tenants {
 		picker = NewTenantPicker(subscriptions, width, height)
 	}
-	result, err := tea.NewProgram(picker, tea.WithInput(input), tea.WithOutput(os.Stderr)).Run()
+	options = append(options, tea.WithInput(input))
+	result, err := tea.NewProgram(picker, options...).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return -1, ErrInterrupted
 	}

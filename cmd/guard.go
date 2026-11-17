@@ -23,7 +23,7 @@ func newGuardCommand(deps Dependencies) *cobra.Command {
 	command := &cobra.Command{
 		Use: "guard", Short: "Check the active context against flags or the nearest .azctx.yaml",
 		Args: cobra.NoArgs,
-		RunE: commandHandler(func(command *cobra.Command, _ []string) error {
+		RunE: func(command *cobra.Command, _ []string) error {
 			if err := command.Context().Err(); err != nil {
 				return err
 			}
@@ -52,7 +52,7 @@ func newGuardCommand(deps Dependencies) *cobra.Command {
 				return &ExitError{Code: CodeContextMismatch, Message: contextMismatchMessage, Status: ExitContextDiffers}
 			}
 			return nil
-		}),
+		},
 	}
 	command.Flags().String(guardSubscriptionKey, "", "Expected subscription query or GUID")
 	command.Flags().String("tenant", "", "Expected tenant query or GUID")

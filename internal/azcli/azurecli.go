@@ -77,12 +77,6 @@ func (cli *CLI) reload(allowMissing bool) error {
 	return cli.resolveDefault(remembered)
 }
 
-// InteractiveLogin executes the az login command
-func (cli CLI) InteractiveLogin(extraArgs []string) error {
-	_, err := cli.Login(extraArgs)
-	return err
-}
-
 // Login checks Azure CLI capabilities, then runs one attached sign-in and
 // returns its per-tenant warnings independently of the process exit status.
 func (cli CLI) Login(extraArgs []string) (LoginResult, error) {
@@ -153,8 +147,3 @@ func (cli CLI) tenantSubscriptions() []profile.Subscription {
 
 // TenantCount counts distinct token tenants in the active cloud profile.
 func (cli CLI) TenantCount() int { return len(cli.tenantSubscriptions()) }
-
-// LegacyProfile reports missing tenant metadata in the visible profile.
-func (cli CLI) LegacyProfile() bool {
-	return profile.HasLegacyTenantMetadata(cli.Subscriptions())
-}

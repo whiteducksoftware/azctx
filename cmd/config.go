@@ -22,7 +22,7 @@ func newConfigCommand(deps Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use: "config [path]", Short: "Print effective configuration or its path",
 		Args: cobra.MaximumNArgs(1),
-		RunE: commandHandler(func(command *cobra.Command, args []string) error {
+		RunE: func(command *cobra.Command, args []string) error {
 			if err := validateOutput(outputFormat(command), "config", formatText); err != nil {
 				return err
 			}
@@ -45,7 +45,7 @@ func newConfigCommand(deps Dependencies) *cobra.Command {
 				return err
 			}
 			return yaml.NewEncoder(command.OutOrStdout()).Encode(value)
-		}),
+		},
 	}
 }
 
@@ -61,7 +61,7 @@ func newAliasCommand(deps Dependencies) *cobra.Command {
 		}
 		parent.AddCommand(&cobra.Command{
 			Use: use, Short: "Alias " + action, Args: cobra.ExactArgs(count),
-			RunE: commandHandler(func(command *cobra.Command, args []string) error {
+			RunE: func(command *cobra.Command, args []string) error {
 				if err := validateOutput(outputFormat(command), "alias "+action, formatText); err != nil {
 					return err
 				}
@@ -88,7 +88,7 @@ func newAliasCommand(deps Dependencies) *cobra.Command {
 					return fmt.Errorf("alias %q does not exist", args[0])
 				}
 				return config.Save(deps.ConfigDir, value)
-			}),
+			},
 		})
 	}
 	return parent

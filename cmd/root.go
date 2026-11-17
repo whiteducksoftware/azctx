@@ -89,9 +89,9 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 			log.InitLogger(output)
 			log.SetVerbose(verbose && outputFormat(command) != formatJSON)
 		},
-		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			return rootRunE(cmd, args, loadCLI, deps)
-		}),
+		},
 	}
 	rootCmd.AddCommand(newVersionCommand())
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug diagnostics")

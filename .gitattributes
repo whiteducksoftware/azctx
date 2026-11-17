@@ -16,3 +16,5 @@
 
 # Exact real GoReleaser and brew style release fixtures are compared byte for byte.
 /.github/scripts/testdata/** text eol=lf
+
+/assets/img/azctx-demo.gif binary

@@ -18,7 +18,7 @@ func newExecCommand(deps Dependencies) *cobra.Command {
 			}
 			return nil
 		},
-		RunE: commandHandler(func(command *cobra.Command, args []string) error {
+		RunE: func(command *cobra.Command, args []string) error {
 			if err := command.Context().Err(); err != nil {
 				return err
 			}
@@ -46,6 +46,6 @@ func newExecCommand(deps Dependencies) *cobra.Command {
 				return err
 			}
 			return nil
-		}),
+		},
 	}
 }

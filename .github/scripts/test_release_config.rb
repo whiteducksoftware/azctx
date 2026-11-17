@@ -625,7 +625,7 @@ class ReleaseConfigurationTest < Minitest::Test
       if step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@')
         raise 'snapshot GoReleaser pin' unless
           step.fetch('uses') == 'goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de' &&
-          step.fetch('with').values_at('distribution', 'version') == %w[goreleaser v2.18.3]
+          step.fetch('with').values_at('distribution', 'version') == %w[goreleaser v2.19.0]
         # The pinned action exports PATH only in install-only mode, not when running args.
         if [true, 'true'].include?(step.fetch('with')['install-only'])
           raise 'snapshot GoReleaser setup must be unconditional and required' if

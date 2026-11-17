@@ -26,3 +26,6 @@ dist/
 
 /azctx
 /.release-check/
+
+# Package-local test scratch directories, removed after tests
+.test-work/

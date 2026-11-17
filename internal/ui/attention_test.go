@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/ui"
@@ -29,8 +29,8 @@ func TestPickerAttentionColumns(t *testing.T) {
 				{Id: attentionID, Name: "Billing", State: "PastDue", TenantName: pickerCustomer},
 			}
 			model := teatest.NewTestModel(t, ui.NewPicker(subs, width, 15), teatest.WithInitialTermSize(width, 15))
-			model.Send(tea.KeyMsg{Type: tea.KeyDown})
-			model.Send(tea.KeyMsg{Type: tea.KeyEnter})
+			model.Send(tea.KeyPressMsg{Code: tea.KeyDown})
+			model.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 			final, ok := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
 			if !ok {
 				t.Fatal("final model is not a picker")
@@ -38,7 +38,7 @@ func TestPickerAttentionColumns(t *testing.T) {
 			if index, err := final.Selection(); err != nil || index != 1 || subs[index].Id != productionID {
 				t.Fatalf("labeled identity index=%d err=%v", index, err)
 			}
-			view := final.View()
+			view := pickerView(final)
 			for _, marker := range []string{"[delegated]", "[Warned]", "[PastDue]"} {
 				if !strings.Contains(view, marker) {
 					t.Fatalf("missing %s at %d: %s", marker, width, view)

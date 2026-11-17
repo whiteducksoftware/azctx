@@ -10,7 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 
 	"github.com/whiteducksoftware/azctx/internal/redact"
@@ -25,7 +26,10 @@ func newLogger(output io.Writer) *slog.Logger {
 	file, terminal := output.(interface{ Fd() uintptr })
 	_, noColor := os.LookupEnv("NO_COLOR")
 	color := terminal && term.IsTerminal(int(file.Fd())) && !noColor
-	return slog.New(&handler{output: output, renderer: lipgloss.NewRenderer(output), color: color, mutex: &sync.Mutex{}})
+	if color {
+		output = colorprofile.NewWriter(output, os.Environ())
+	}
+	return slog.New(&handler{output: output, color: color, mutex: &sync.Mutex{}})
 }
 
 func InitLogger(output io.Writer) { logger = newLogger(output) }
@@ -42,12 +46,11 @@ func Warn(format string, values ...any)  { logger.Warn(fmt.Sprintf(format, value
 func Error(format string, values ...any) { logger.Error(fmt.Sprintf(format, values...)) }
 
 type handler struct {
-	output   io.Writer
-	renderer *lipgloss.Renderer
-	color    bool
-	mutex    *sync.Mutex
-	attrs    []slog.Attr
-	group    string
+	output io.Writer
+	color  bool
+	mutex  *sync.Mutex
+	attrs  []slog.Attr
+	group  string
 }
 
 func (*handler) Enabled(_ context.Context, recordLevel slog.Level) bool {
@@ -64,7 +67,7 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 		prefix = "Warning: "
 	}
 	if h.color {
-		prefix = h.renderer.NewStyle().Foreground(color).Render(prefix)
+		prefix = lipgloss.NewStyle().Foreground(color).Render(prefix)
 	}
 	line.WriteString(prefix)
 	line.WriteString(record.Message)

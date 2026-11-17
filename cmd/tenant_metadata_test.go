@@ -121,11 +121,11 @@ func TestAzureCLIDomainOnlyProjectionAndLegacyDetection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cli.LegacyProfile() {
+	if profile.HasLegacyTenantMetadata(cli.Subscriptions()) {
 		t.Fatal("domain-only profile is modern")
 	}
 	cli.IncludeAll = true
-	if !cli.LegacyProfile() {
+	if !profile.HasLegacyTenantMetadata(cli.Subscriptions()) {
 		t.Fatal("inspection of displayed legacy foreign records must report missing metadata")
 	}
 	output := cmd.SubscriptionOutputs(cli.Subscriptions())

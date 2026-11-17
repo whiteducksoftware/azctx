@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/ui"
@@ -18,7 +18,7 @@ func TestPickerMarksProfileStateAndIdentity(t *testing.T) {
 		User:         profile.User{Name: "systemAssignedIdentity", Type: "servicePrincipal"},
 	}}
 	picker := ui.NewPicker(subscriptions, 160, 20)
-	view := picker.View()
+	view := pickerView(picker)
 	for _, label := range []string{"Synthetic [Warned]", "system-assigned identity", "delegated", "Example", subscriptions[0].Id} {
 		if !strings.Contains(view, label) {
 			t.Fatalf("picker missing %q:\n%s", label, view)
@@ -36,12 +36,12 @@ func TestTenantPickerAlwaysShowsGUIDForDuplicateNames(t *testing.T) {
 	}
 	picker := ui.NewTenantPicker(rows, 60, 15)
 	for _, row := range rows {
-		if !strings.Contains(picker.View(), row.Id) {
-			t.Fatalf("duplicate tenant label hides GUID:\n%s", picker.View())
+		if !strings.Contains(pickerView(picker), row.Id) {
+			t.Fatalf("duplicate tenant label hides GUID:\n%s", pickerView(picker))
 		}
 	}
-	if !strings.Contains(picker.View(), "Tenant ID") || strings.Contains(picker.View(), "Subscription ID") {
-		t.Fatalf("tenant header=%s", picker.View())
+	if !strings.Contains(pickerView(picker), "Tenant ID") || strings.Contains(pickerView(picker), "Subscription ID") {
+		t.Fatalf("tenant header=%s", pickerView(picker))
 	}
 }
 
@@ -55,16 +55,16 @@ func TestPickerTenantDomainFallbackAndFiltering(t *testing.T) {
 				{Id: "22222222-2222-2222-2222-222222222222", Name: "Development", TenantDomain: "domain-only.invalid"},
 			}
 			picker := ui.NewPicker(subscriptions, 160, 15)
-			if !strings.Contains(picker.View(), "domain-only.invalid") {
-				t.Fatalf("domain-only label missing: %s", picker.View())
+			if !strings.Contains(pickerView(picker), "domain-only.invalid") {
+				t.Fatalf("domain-only label missing: %s", pickerView(picker))
 			}
-			updated, _ := picker.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-			updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(query)})
-			updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
-			updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			updated, _ := picker.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+			updated, _ = updated.Update(tea.KeyPressMsg{Code: []rune(query)[0], Text: query})
+			updated, _ = updated.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			updated, _ = updated.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 			index, err := requirePicker(t, updated).Selection()
 			if err != nil || index < 0 || subscriptions[index].Id != productionID {
-				t.Fatalf("tenant filter: index=%d err=%v view=%s", index, err, updated.View())
+				t.Fatalf("tenant filter: index=%d err=%v view=%s", index, err, pickerView(updated))
 			}
 		})
 	}

@@ -79,7 +79,7 @@ func validateRootOutput(command *cobra.Command, current, query bool) error {
 func newListCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 	command := &cobra.Command{
 		Use: "list", Short: "List subscriptions", Args: cobra.NoArgs,
-		RunE: commandHandler(func(command *cobra.Command, _ []string) error {
+		RunE: func(command *cobra.Command, _ []string) error {
 			if err := validateOutput(outputFormat(command), "list", formatTable, formatJSON); err != nil {
 				return err
 			}
@@ -90,7 +90,7 @@ func newListCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 			all, _ := command.Flags().GetBool("all")
 			cli.IncludeAll = all
 			return listSubscriptions(command, cli)
-		}),
+		},
 	}
 	return command
 }

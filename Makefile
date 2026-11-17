@@ -17,10 +17,10 @@ completion-perf:
 check: lint test
 
 docs:
-	go run ./tools/gendocs
+	go run ./internal/cmd/gendocs
 
 docs-check:
-	go run ./tools/gendocs -check
+	go run ./internal/cmd/gendocs -check
 
 agent-check:
 	python3 -B -m unittest discover -s plugins/azctx/tests -p 'test_*.py' -v
@@ -39,6 +39,7 @@ ci-check:
 live-test: build
 	python3 -B scripts/live-azure-test.py --binary ./azctx$(shell go env GOEXE) $(LIVE_TEST_ARGS)
 
+# Standalone subset; make test/check already includes these tests.
 e2e:
 	go test ./cmd -run '^TestBinary' -count=1
 

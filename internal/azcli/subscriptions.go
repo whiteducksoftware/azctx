@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/whiteducksoftware/azctx/internal/match"
 	"github.com/whiteducksoftware/azctx/internal/profile"
 )
 
@@ -30,11 +29,6 @@ func (cli CLI) ActiveSubscription() (profile.Subscription, error) {
 		}
 	}
 	return profile.Subscription{}, errors.New("no active subscription found")
-}
-
-func (cli CLI) TryFindSubscription(name string) ([]profile.Subscription, error) {
-	cli.IncludeAll = false
-	return match.Find(cli.Subscriptions(), name)
 }
 
 // The profile's active-cloud isDefault is authoritative. Azure CLI remembers
