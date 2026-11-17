@@ -25,6 +25,9 @@ func newLoginCommand(newCLI func() (azcli.CLI, error)) *cobra.Command {
 }
 
 func loginRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error)) error {
+	if err := validateOutput(outputFormat(cmd), "login", formatText); err != nil {
+		return err
+	}
 	// Ensure that the azure cli is installed
 	cli, err := newCLI()
 	if err != nil {

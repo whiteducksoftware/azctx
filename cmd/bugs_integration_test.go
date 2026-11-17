@@ -36,6 +36,15 @@ func fakeBinary(t *testing.T, fixtures string) (string, string, string) {
 	t.Setenv("FAKEAZ_RECORD", record)
 	t.Setenv("FAKEAZ_ENV_KEYS", "")
 	t.Setenv("AZCTX_NO_UPDATE_CHECK", "1")
+	t.Setenv("AZCTX_NO_INPUT", "")
+	t.Setenv("CI", "")
+	if err := os.Unsetenv("CI"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:0")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:0")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 	return binary, config, record
 }
 

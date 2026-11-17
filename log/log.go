@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 var (
@@ -19,7 +20,10 @@ var (
 )
 
 func newLogger(output io.Writer) *slog.Logger {
-	return slog.New(&handler{output: output, renderer: lipgloss.NewRenderer(output), mutex: &sync.Mutex{}})
+	file, terminal := output.(interface{ Fd() uintptr })
+	_, noColor := os.LookupEnv("NO_COLOR")
+	color := terminal && term.IsTerminal(int(file.Fd())) && !noColor
+	return slog.New(&handler{output: output, renderer: lipgloss.NewRenderer(output), color: color, mutex: &sync.Mutex{}})
 }
 
 func InitLogger(output io.Writer) { logger = newLogger(output) }
@@ -38,6 +42,7 @@ func Error(format string, values ...any) { logger.Error(fmt.Sprintf(format, valu
 type handler struct {
 	output   io.Writer
 	renderer *lipgloss.Renderer
+	color    bool
 	mutex    *sync.Mutex
 	attrs    []slog.Attr
 	group    string
@@ -49,12 +54,17 @@ func (*handler) Enabled(_ context.Context, recordLevel slog.Level) bool {
 
 func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	var line strings.Builder
+	prefix, color := "", lipgloss.Color("3")
 	switch {
 	case record.Level >= slog.LevelError:
-		line.WriteString(h.renderer.NewStyle().Foreground(lipgloss.Color("1")).Render("Error: "))
+		prefix, color = "Error: ", lipgloss.Color("1")
 	case record.Level >= slog.LevelWarn:
-		line.WriteString(h.renderer.NewStyle().Foreground(lipgloss.Color("3")).Render("Warning: "))
+		prefix = "Warning: "
 	}
+	if h.color {
+		prefix = h.renderer.NewStyle().Foreground(color).Render(prefix)
+	}
+	line.WriteString(prefix)
 	line.WriteString(record.Message)
 	writeAttr := func(attr slog.Attr) bool {
 		_, _ = fmt.Fprintf(&line, " %s%s=%s", h.group, attr.Key, attr.Value.Resolve())

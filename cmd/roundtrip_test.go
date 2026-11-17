@@ -30,7 +30,8 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		{"args":["rest","--method","get","--url","/tenants?api-version=2020-01-01","--output","json"],"stdout":"{\"value\":[]}"},
 		{"args":["login","--use-device-code"]},
 		{"args":["rest","--method","get","--url","/tenants?api-version=2020-01-01","--output","json"],"stdout":"{\"value\":[]}"},
-		{"args":["login"],"stderr":"ERROR: denied\n","exitCode":7}
+		{"args":["login"],"stderr":"ERROR: denied\n","exitCode":7},
+		{"args":["account","set","--subscription","`+productionID+`"]}
 	]`)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("AZURE_CONFIG_DIR", config)
@@ -54,9 +55,10 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		{args: []string{versionCommand, outputFlag, jsonFormat}, text: `"goVersion":"go`, data: true},
 		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 0 tenants and 2 subscriptions."},
 		{args: []string{loginCommand}, code: 1, text: "failed to login: denied"},
-		{args: []string{productionName}, code: 1, text: "Error: unknown command \"Production\" for \"azctx\"\nRun 'azctx --help' for usage.\n"},
+		{args: []string{productionName}},
 		{args: []string{"-"}, code: 1, text: "no previous subscription found"},
-		{input: "\x03", code: 130},
+		// A Ctrl+C byte in a pipe is data, not an interactive cancellation.
+		{input: "\x03", text: "NAME", data: true},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -94,7 +96,7 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		t.Fatalf("profile changed: %q, %v", got, err)
 	}
 	calls, err := os.ReadFile(record)
-	if err != nil || strings.Count(string(calls), "\n") != 4 {
+	if err != nil || strings.Count(string(calls), "\n") != 5 {
 		t.Fatalf("recorded calls = %s, %v", calls, err)
 	}
 }

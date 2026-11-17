@@ -3,7 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,6 +35,8 @@ type Dependencies struct {
 	ConfigDir    string
 	Select       func([]profile.Subscription) (int, error)
 	CheckUpdates func(string, string) error
+	StdinTTY     func() bool // Nil probes Cobra stdin; input opt-outs still take precedence.
+	StdoutTTY    func() bool // Nil probes Cobra stdout for optional update checks.
 }
 
 // NewRootCommand constructs an independent command tree, including flag state.
@@ -40,7 +44,6 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	if deps.Select == nil {
 		deps.Select = ui.Select
 	}
-	filterTenantLevel := true
 	verbose := false
 	newCLI := func() (azcli.CLI, error) {
 		if deps.Runner == nil {
@@ -50,22 +53,26 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 			}
 			deps.Runner = runner
 		}
-		cli, err := azcli.New(deps.FS, deps.Runner, deps.ConfigDir)
-		cli.FilterTenantLevelAccount = filterTenantLevel
-		return cli, err
+		return azcli.New(deps.FS, deps.Runner, deps.ConfigDir)
 	}
 	rootCmd := &cobra.Command{
-		Use:   "azctx [- / -- NAME]",
+		Use:   "azctx [query | -]",
 		Short: "azctx is a CLI tool for managing azure cli subscriptions",
 		Long: `azctx is a CLI tool for managing azure cli subscriptions.
 	It is a helper for the azure cli and provides a simple interface for managing subscriptions.
-	Pass a subscription name, tenant name or subscription ID to select a subscription.
-	Pass - to switch to the previous subscription.`,
+	Pass a subscription name, tenant/subscription or subscription ID to switch.
+	Use -- before names that equal a command. Pass - for the previous subscription.
+	Without interactive input, the bare command lists subscriptions.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.MaximumNArgs(1),
 		PersistentPreRun: func(command *cobra.Command, _ []string) {
-			log.InitLogger(command.ErrOrStderr())
-			log.SetVerbose(verbose)
+			output := command.ErrOrStderr()
+			if outputFormat(command) == formatJSON {
+				output = io.Discard
+			}
+			log.InitLogger(output)
+			log.SetVerbose(verbose && outputFormat(command) != formatJSON)
 		},
 		RunE: commandHandler(func(cmd *cobra.Command, args []string) error {
 			return rootRunE(cmd, args, newCLI, deps)
@@ -73,11 +80,11 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	}
 	rootCmd.AddCommand(newVersionCommand())
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug diagnostics")
+	rootCmd.PersistentFlags().Bool("no-input", false, "Never open a picker or prompt (also AZCTX_NO_INPUT=1)")
+	rootCmd.PersistentFlags().StringP("output", "o", "", "Output format (depends on command)")
 
 	rootCmd.Flags().BoolP("current", "c", false, "Display the current active subscription")
-	rootCmd.Flags().BoolP("short", "s", false, `Use a short prompt.
-	Deprecated. Size is now automatically determined.`)
-	rootCmd.Flags().BoolVar(&filterTenantLevel, "filter-tenant-level", true, "Filter tenant level accounts with no available subscriptions")
+	rootCmd.AddCommand(newListCommand(newCLI))
 	rootCmd.AddCommand(newLoginCommand(newCLI))
 	return rootCmd
 }
@@ -92,52 +99,86 @@ func Execute() error {
 }
 
 func rootRunE(cmd *cobra.Command, args []string, newCLI func() (azcli.CLI, error), deps Dependencies) error {
+	current, _ := cmd.Flags().GetBool("current")
+	if current && len(args) != 0 {
+		return errors.New("--current does not accept a query")
+	}
+	if err := validateRootOutput(cmd, current, len(args) != 0); err != nil {
+		return err
+	}
 	// Initialize the CLI
 	cli, err := newCLI()
 	if err != nil {
 		return err
 	}
 
-	// check deprecated flags
-	if cmd.Flags().Changed("short") {
-		log.Warn("Deprecated flag --short/-s used. Size is now automatically determined.")
-	}
-
 	// check the flags
 	switch {
-	case cmd.Flags().Changed("current"):
+	case current:
 		return getActiveSubscription(cmd, cli)
 	case len(args) == 1:
 		// check if the user passed -
 		if args[0] == "-" {
 			err = selectPreviousSubscription(cli)
 		} else {
-			err = selectSubscriptionByName(cli, args[0], deps.Select)
+			err = selectSubscriptionByName(cli, args[0], deps.Select, inputIsTerminal(cmd, deps) && outputFormat(cmd) != formatJSON)
 		}
 		if err != nil {
 			return err
 		}
 	default:
+		if outputFormat(cmd) != "" || !inputIsTerminal(cmd, deps) {
+			return listSubscriptions(cmd, cli)
+		}
 		err = interactivelySelectSubscription(cli, deps.Select)
 		if err != nil {
 			return err
 		}
 	}
 
+	checkForUpdates(cmd, deps, cli.ConfigDir())
+	return nil
+}
+
+func checkForUpdates(cmd *cobra.Command, deps Dependencies, azureDir string) {
+	_, ci := os.LookupEnv("CI")
+	if !outputIsTerminal(cmd, deps) || ci || os.Getenv("AZCTX_NO_UPDATE_CHECK") == "1" || outputFormat(cmd) == formatJSON {
+		return
+	}
 	check := deps.CheckUpdates
 	if check == nil {
 		check = (update.Checker{
-			AzureDir: cli.ConfigDir(), Output: cmd.ErrOrStderr(),
-			IsTerminal: func() bool {
-				file, ok := cmd.OutOrStdout().(interface{ Fd() uintptr })
-				return ok && term.IsTerminal(int(file.Fd()))
-			},
+			AzureDir: azureDir, Output: cmd.ErrOrStderr(),
+			IsTerminal: func() bool { return outputIsTerminal(cmd, deps) },
 		}).Check
 	}
 	if err := check(owner, repo); err != nil {
 		log.Debug("Update check failed: %v", err)
 	}
-	return nil
+}
+
+func streamIsTerminal(stream any) bool {
+	file, ok := stream.(interface{ Fd() uintptr })
+	return ok && term.IsTerminal(int(file.Fd()))
+}
+
+func outputIsTerminal(command *cobra.Command, deps Dependencies) bool {
+	if deps.StdoutTTY != nil {
+		return deps.StdoutTTY()
+	}
+	return streamIsTerminal(command.OutOrStdout())
+}
+
+func inputIsTerminal(command *cobra.Command, deps Dependencies) bool {
+	noInput, _ := command.Flags().GetBool("no-input")
+	_, ci := os.LookupEnv("CI")
+	if noInput || os.Getenv("AZCTX_NO_INPUT") == "1" || ci {
+		return false
+	}
+	if deps.StdinTTY != nil {
+		return deps.StdinTTY()
+	}
+	return streamIsTerminal(command.InOrStdin())
 }
 
 func interactivelySelectSubscription(cli azcli.CLI, selectItem func([]profile.Subscription) (int, error)) error {
@@ -155,16 +196,22 @@ func interactivelySelectSubscription(cli azcli.CLI, selectItem func([]profile.Su
 	return switchSubscription(cli, subscriptions[idx])
 }
 
-func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]profile.Subscription) (int, error)) error {
+func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]profile.Subscription) (int, error), interactive bool) error {
 	subscriptions, err := cli.TryFindSubscription(name)
 	if err != nil {
-		return err
+		return &ExitError{Code: CodeNoMatch, Message: err.Error(), Status: ExitNoMatch, Cause: err}
 	}
 
 	// Check if we found more than one subscription
 	var subscription profile.Subscription
 	switch length := len(subscriptions); {
 	case length > 1:
+		if !interactive {
+			return &ExitError{
+				Code: CodeAmbiguousMatch, Message: fmt.Sprintf("multiple subscriptions match %q; use a subscription ID or tenant/subscription", name),
+				Status: ExitNoMatch, Candidates: SubscriptionOutputs(subscriptions),
+			}
+		}
 		// Run the prompt
 		idx, err := selectItem(subscriptions)
 		if err != nil {
@@ -178,7 +225,7 @@ func selectSubscriptionByName(cli azcli.CLI, name string, selectItem func([]prof
 	case length == 1:
 		subscription = subscriptions[0]
 	default:
-		return errors.New("no subscription found")
+		return &ExitError{Code: CodeNoMatch, Message: "no subscription found", Status: ExitNoMatch}
 	}
 
 	// Set the selected subscription as the default
@@ -195,7 +242,7 @@ func selectPreviousSubscription(cli azcli.CLI) error {
 			return switchSubscription(cli, subscription)
 		}
 	}
-	return fmt.Errorf("previous subscription %s is no longer available", id)
+	return &ExitError{Code: CodeNoMatch, Message: fmt.Sprintf("previous subscription %s is no longer available", id), Status: ExitNoMatch}
 }
 
 func switchSubscription(cli azcli.CLI, subscription profile.Subscription) error {
@@ -227,7 +274,5 @@ func getActiveSubscription(command *cobra.Command, cli azcli.CLI) error {
 		return err
 	}
 
-	// Print the active subscription
-	_, err = fmt.Fprintf(command.OutOrStdout(), "Active subscription: %s/%s (%s/%s)\n", subscription.TenantName, subscription.Name, subscription.Tenant, subscription.Id)
-	return err
+	return writeCurrent(command, subscription)
 }
