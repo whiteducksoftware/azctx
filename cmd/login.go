@@ -4,12 +4,12 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
+
 	"github.com/whiteducksoftware/azctx/azurecli"
 	"github.com/whiteducksoftware/azctx/log"
 	"github.com/whiteducksoftware/azctx/utils"
-
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 var loginCmd = &cobra.Command{
@@ -53,15 +53,15 @@ func refreshData(cmd *cobra.Command, cli azurecli.CLI, extraArgs []string) error
 	// Fetch all available tenants
 	err := cli.UpdateTenants()
 	if err != nil {
-		log.Warn(`
-` +
-			strings.Repeat("-", 80) + `
+		log.Warn("%s", `
+`+
+			strings.Repeat("-", 80)+`
 Failed fetching available tenants, only tenants which do not require explicit MFA / Individual Authentication will be available.
 This may be due to the azure cli being completely logged out or due to a network error.
 Subsequent logins should no longer have this issue.
 
-Feel free to open an issue at ` + color.New(color.FgCyan).Sprint("https://github.com/whiteducksoftware/azctx/issues") + ` if this issue persists.
-` + strings.Repeat("-", 80))
+Feel free to open an issue at `+color.New(color.FgCyan).Sprint("https://github.com/whiteducksoftware/azctx/issues")+` if this issue persists.
+`+strings.Repeat("-", 80))
 	}
 
 	// Try to refresh the subscriptions
