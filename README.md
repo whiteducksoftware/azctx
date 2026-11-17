@@ -58,11 +58,12 @@ Windows, install with your platform's package manager:
 ```sh
 # macOS, fully qualified cask
 brew install --cask whiteducksoftware/tap/azctx
-# Windows, Chocolatey
-choco install azctx --version=2026.11.0
 # Windows, winget
 winget install --exact --id whiteducksoftware.azctx --version 2026.11.0
 ```
+
+2026.11 is not published to Chocolatey; Chocolatey users can switch to winget
+as described in the [upgrade guide](docs/upgrade.md#windows-chocolatey).
 
 The macOS cask depends on Homebrew's `azure-cli` cask and installs Azure CLI
 through Homebrew if it is missing.
@@ -208,7 +209,7 @@ brew uninstall --formula azctx
 brew install --cask whiteducksoftware/tap/azctx
 ```
 
-The [upgrade guide](docs/upgrade.md) also gives Chocolatey, winget and
+The [upgrade guide](docs/upgrade.md) also gives Chocolatey migration, winget and
 release-binary steps.
 
 ## 8. Authentication

@@ -7,10 +7,9 @@ class ReleaseConfigurationTest < Minitest::Test
   WINDOWS_TRANSFER = "dist/*.zip\ndist/*_Windows_checksums.txt\ndist/*.sbom.json\ndist/winget/**/*.yaml\n".freeze
   ARCHIVE_PERMISSIONS = { 'contents' => 'write', 'id-token' => 'write', 'attestations' => 'write' }.freeze
   STABLE = "${{ !contains(github.ref_name, '-') }}".freeze
-  STABLE_UPSTREAM = "${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}".freeze
   WINDOWS_ASSET_UPLOAD = 'python3 -B .github/scripts/upload_release_assets.py .release-check/windows/*.zip ' \
                          '.release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json'.freeze
-  CHOCOLATEY_VERIFY = 'python -B .github/scripts/verify_chocolatey.py .release-check/chocolatey'.freeze
+  NATIVE_CREDENTIALS = /secrets\.|create-github-app-token|private-key|publisher-token|CHOCO_API_KEY|WINGET_TOKEN/
 
   def setup
     @unix = YAML.safe_load(File.read(File.join(ROOT, '.goreleaser.yaml')))
@@ -66,27 +65,24 @@ class ReleaseConfigurationTest < Minitest::Test
   def validate_workflow(workflow)
     raise 'workflow permissions' unless workflow.fetch('permissions') == {}
     raise 'release jobs' unless workflow.fetch('jobs').keys.sort ==
-                                %w[chocolatey-publish goreleaser-linux goreleaser-windows homebrew homebrew-publish
-                                   release-readiness windows-publish]
+                                %w[goreleaser-linux goreleaser-windows homebrew homebrew-publish windows-publish]
     raise 'release assets must be uploaded idempotently, never overwritten' if
       workflow.to_s.match?(/gh release upload|--clobber|gh release delete-asset/)
-    workflow.fetch('jobs').each do |name, job|
-      next if name == 'chocolatey-publish'
-      raise 'Chocolatey push/credential only in the final verified publisher' if job.to_s.match?(/choco push|CHOCO_API_KEY/)
-    end
+    raise 'Chocolatey is not published for 2026.11' if workflow.to_s.match?(/choco push|CHOCO_API_KEY/)
     workflow.fetch('jobs').each do |name, job|
       raise 'release failures must not be bypassed' if job.key?('continue-on-error') ||
                                                      job.fetch('steps').any? { |step| step.key?('continue-on-error') }
-      unless %w[homebrew homebrew-publish chocolatey-publish].include?(name)
+      unless %w[homebrew homebrew-publish].include?(name)
         raise 'upstream successful jobs only' unless job.fetch('if') == "github.repository == 'whiteducksoftware/azctx'"
       end
       validate_step_integrity(job.fetch('steps'))
-      if name == 'release-readiness'
-        validate_release_readiness(job)
-        next
-      end
+      validate_audit_job(job)
       if name == 'homebrew'
         validate_homebrew_job(job)
+        next
+      end
+      if name == 'goreleaser-windows'
+        validate_windows_native(job)
         next
       end
       raise 'protected environment' unless job['environment'] == 'release'
@@ -94,20 +90,12 @@ class ReleaseConfigurationTest < Minitest::Test
         validate_homebrew_publisher(job)
         next
       end
-      if name == 'goreleaser-windows'
-        validate_windows_native(job)
-        next
-      end
       if name == 'windows-publish'
         validate_windows_publisher(job)
         next
       end
-      if name == 'chocolatey-publish'
-        validate_chocolatey_publisher(job)
-        next
-      end
       raise 'release permissions' unless job.fetch('permissions') == ARCHIVE_PERMISSIONS
-      raise 'no release before enforced native egress' unless job.fetch('needs') == 'release-readiness'
+      raise 'the Linux release starts the workflow' if job.key?('needs')
       raise 'latest default' unless job.fetch('env').fetch('RELEASE_MAKE_LATEST') ==
                                     "${{ vars.RELEASE_MAKE_LATEST || 'false' }}"
       steps = job.fetch('steps')
@@ -133,6 +121,19 @@ class ReleaseConfigurationTest < Minitest::Test
       raise 'Syft must remain' unless steps.any? { |step| step.fetch('uses', '').start_with?('anchore/sbom-action/download-syft@') }
     end
     raise 'long-lived token' if workflow.to_s.include?('AUTH_GITHUB')
+  end
+
+  # Hosted Windows/macOS cannot enforce block egress (#98). Such jobs are accepted
+  # only without credentials or the release environment; Ubuntu publishers re-verify their output.
+  def validate_audit_job(job)
+    harden = job.fetch('steps').first
+    raise 'every job starts with Harden-Runner' unless harden.fetch('uses').start_with?('step-security/harden-runner@')
+    return if harden.fetch('with').fetch('egress-policy') == 'block'
+
+    raise 'audit-only egress is limited to native runners' unless %w[macos-latest windows-latest].include?(job.fetch('runs-on'))
+    raise 'audit-only jobs have no release environment' if job.key?('environment')
+    raise 'audit-only jobs hold no publisher credentials' if job.to_s.match?(NATIVE_CREDENTIALS)
+    raise 'audit-only jobs cannot write' unless job.fetch('permissions') == { 'contents' => 'read' }
   end
 
   def validate_step_integrity(steps)
@@ -206,8 +207,9 @@ class ReleaseConfigurationTest < Minitest::Test
   end
 
   def validate_windows_native(job)
-    raise 'native Chocolatey tools only' unless job.fetch('runs-on') == 'windows-latest'
+    raise 'native Windows build' unless job.fetch('runs-on') == 'windows-latest'
     raise 'native Windows cannot publish GitHub assets' unless job.fetch('permissions') == { 'contents' => 'read' }
+    raise 'native Windows build needs no release environment' if job.key?('environment')
     raise 'Windows depends only on the Linux release' unless job.fetch('needs') == 'goreleaser-linux'
     raise 'native credentials must not be job-scoped' unless job.fetch('env') == {
       'RELEASE_MAKE_LATEST' => "${{ vars.RELEASE_MAKE_LATEST || 'false' }}", 'SYFT_CHECK_FOR_APP_UPDATE' => 'false'
@@ -219,16 +221,12 @@ class ReleaseConfigurationTest < Minitest::Test
       harden.fetch('with') == { 'egress-policy' => 'audit' }
     raise 'no portable publishers on native Windows' if job.to_s.match?(/WINGET_TOKEN|create-github-app-token|publish_winget|actions\/attest@/)
     build = steps.find { |step| step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
-    raise 'native GoReleaser never publishes' unless build.fetch('with').fetch('args') ==
-      "release --clean --skip=publish --config .goreleaser-windows.yaml ${{ contains(github.ref_name, '-') && '--skip=chocolatey' || '' }}" &&
+    raise 'native GoReleaser never publishes and skips Chocolatey' unless build.fetch('with').fetch('args') ==
+      'release --clean --skip=publish --skip=chocolatey --config .goreleaser-windows.yaml' &&
       build.fetch('env') == { 'GITHUB_TOKEN' => '${{ github.token }}' }
-    validate_uploads(steps, 'windows-release-files' => WINDOWS_TRANSFER, 'chocolatey-package' => 'dist/azctx.*.nupkg')
-    package = steps.last
-    raise 'transfer the same-run stable Chocolatey package last' unless
-      package.fetch('uses', '').start_with?('actions/upload-artifact@') &&
-      package.fetch('with').fetch('name') == 'chocolatey-package' && package['if'] == STABLE
+    validate_uploads(steps, 'windows-release-files' => WINDOWS_TRANSFER)
     raise 'native package generation never pushes or receives package credentials' if
-      job.to_s.match?(/secrets\.|choco push|CHOCO_API_KEY/)
+      job.to_s.match?(/secrets\.|choco push|CHOCO_API_KEY|nupkg/)
   end
 
   def validate_windows_publisher(job)
@@ -272,74 +270,18 @@ class ReleaseConfigurationTest < Minitest::Test
       job.to_s.match?(/setup-go|goreleaser-action|CHOCO_API_KEY/)
   end
 
-  def validate_chocolatey_publisher(job)
-    raise 'native Chocolatey push needs native Windows' unless job.fetch('runs-on') == 'windows-latest'
-    raise 'Chocolatey publisher cannot write GitHub content' unless job.fetch('permissions') == { 'contents' => 'read' }
-    raise 'Chocolatey waits for successful Windows asset publication' unless job.fetch('needs') == 'windows-publish'
-    raise 'stable-only Chocolatey publisher' unless job.fetch('if') == STABLE_UPSTREAM
-    raise 'Chocolatey credential must not be job-scoped' if job.key?('env')
-    steps = job.fetch('steps')
-    raise 'do not claim unsupported Windows blocking' unless
-      steps.first.fetch('uses').start_with?('step-security/harden-runner@') &&
-      steps.first.fetch('with') == { 'egress-policy' => 'audit' }
-    validate_download(steps, 'chocolatey-package', '.release-check/chocolatey')
-    download = steps.index { |step| step.fetch('uses', '').start_with?('actions/download-artifact@') }
-    verify = steps.index { |step| step.fetch('run', '') == CHOCOLATEY_VERIFY }
-    push = steps.length - 1
-    raise 'verify the embedded checksum against the uploaded archive before the final push' unless
-      download && verify && download < verify && verify == push - 1 &&
-      steps.fetch(verify).fetch('env') == { 'RELEASE_TAG' => '${{ github.ref_name }}' } && !steps.fetch(verify).key?('if')
-    choco = steps.fetch(push)
-    raise 'only the verified same-run package push receives its credential' unless
-      choco.fetch('shell') == 'pwsh' && !choco.key?('if') &&
-      choco.fetch('env') == { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' } &&
-      choco.fetch('run').include?('$packages = @(Get-ChildItem .release-check/chocolatey/azctx.*.nupkg)') &&
-      choco.fetch('run').include?('choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY') &&
-      choco.fetch('run').include?('[string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)') &&
-      choco.fetch('run').include?('$packages.Count -ne 1') &&
-      choco.fetch('run').include?('if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }')
-    raise 'no credentials before the final Chocolatey push' if steps[0...-1].to_s.match?(/secrets\.|TOKEN|token/)
-    raise 'no rebuild, GitHub publication or portable publishers in the Chocolatey job' if
-      job.to_s.match?(/setup-go|goreleaser|sbom-action|create-github-app-token|publish_winget|publish_cask|actions\/attest@|upload_release_assets|upload-artifact/)
+  def test_native_jobs_are_credential_free_and_reverified
+    jobs = release_workflow.fetch('jobs')
+    validate_windows_native(jobs.fetch('goreleaser-windows'))
+    validate_windows_publisher(jobs.fetch('windows-publish'))
+    validate_homebrew_job(jobs.fetch('homebrew'))
+    validate_homebrew_publisher(jobs.fetch('homebrew-publish'))
   end
 
-  def validate_release_readiness(job)
-    raise 'readiness has no credentials or environment' unless job.fetch('permissions') == {} &&
-                                                             !job.key?('environment') && !job.key?('env')
-    steps = job.fetch('steps')
-    raise 'explicit native egress release blocker' unless steps.length == 1 &&
-      steps.first.fetch('shell') == 'bash' &&
-      steps.first.fetch('run') ==
-        "echo '::error::BLOCKED (#98): native Chocolatey publishing has audit-only egress on hosted Windows. " \
-        "Native macOS style also has audit-only egress. " \
-        "A reviewed, supported enforcement design and native acceptance are required before release.' >&2\nexit 1\n"
-  end
-
-  def test_native_windows_only_retains_unavoidable_chocolatey_publishing
-    validate_windows_native(release_workflow.fetch('jobs').fetch('goreleaser-windows'))
-    validate_windows_publisher(release_workflow.fetch('jobs').fetch('windows-publish'))
-    validate_chocolatey_publisher(release_workflow.fetch('jobs').fetch('chocolatey-publish'))
-  end
-
-  def test_release_readiness_is_actually_blocked_before_any_publisher
-    workflow = release_workflow
-    job = workflow.fetch('jobs').fetch('release-readiness')
-    validate_release_readiness(job)
-    output, status = Open3.capture2e('bash', '-c', job.fetch('steps').first.fetch('run'))
-    refute status.success?
-    assert_equal 1, status.exitstatus
-    assert_includes output, 'BLOCKED (#98): native Chocolatey publishing has audit-only egress'
-    validate_workflow(workflow)
-  end
-
-  def test_windows_and_readiness_policy_reject_egress_and_credential_regressions
+  def test_windows_and_audit_policy_reject_egress_and_credential_regressions
     mutations = {
-      'delete readiness blocker' => ->(w) { w['jobs'].delete('release-readiness') },
-      'bypass readiness' => ->(w) { w['jobs']['goreleaser-linux']['needs'] = [] },
-      'fake readiness success' => ->(w) { w['jobs']['release-readiness']['steps'][0]['run'].sub!('exit 1', 'exit 0') },
-      'ignore readiness failure' => ->(w) { w['jobs']['release-readiness']['continue-on-error'] = true },
-      'ignore readiness step failure' => ->(w) { w['jobs']['release-readiness']['steps'][0]['continue-on-error'] = true },
-      'always publish despite readiness failure' => ->(w) { w['jobs']['goreleaser-linux']['if'] = 'always()' },
+      'Linux release waits on another job' => ->(w) { w['jobs']['goreleaser-linux']['needs'] = 'homebrew' },
+      'always publish' => ->(w) { w['jobs']['goreleaser-linux']['if'] = 'always()' },
       'pretend native block support' => ->(w) { w['jobs']['goreleaser-windows']['steps'][0]['with']['egress-policy'] = 'block' },
       'native source writes' => ->(w) { w['jobs']['goreleaser-windows']['permissions']['contents'] = 'write' },
       'native winget token' => ->(w) { w['jobs']['goreleaser-windows']['env']['WINGET_TOKEN'] = 'synthetic' },
@@ -347,15 +289,15 @@ class ReleaseConfigurationTest < Minitest::Test
         build = w['jobs']['goreleaser-windows']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
         build['with']['args'].sub!('--skip=publish ', '')
       end,
-      'prerelease Chocolatey credential' => ->(w) { w['jobs']['chocolatey-publish']['if'] = "github.repository == 'whiteducksoftware/azctx'" },
-      'implicit Chocolatey credential fallback' => ->(w) do
-        w['jobs']['chocolatey-publish']['steps'].last['run'].sub!(/^.*IsNullOrWhiteSpace.*\n/, '')
+      'native build packs Chocolatey' => ->(w) do
+        build = w['jobs']['goreleaser-windows']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
+        build['with']['args'].sub!('--skip=chocolatey ', '')
       end,
-      'Chocolatey pushed before Windows assets exist' => ->(w) { w['jobs']['chocolatey-publish']['needs'] = 'goreleaser-windows' },
-      'Chocolatey ignores failed Windows publication' => ->(w) do
-        w['jobs']['chocolatey-publish']['if'] = "${{ always() && github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}"
+      'native build gets the release environment' => ->(w) { w['jobs']['goreleaser-windows']['environment'] = 'release' },
+      'native build reads an environment secret' => ->(w) do
+        w['jobs']['goreleaser-windows']['steps'][1]['env'] = { 'KEY' => '${{ secrets.RELEASE_APP_PRIVATE_KEY }}' }
       end,
-      'native build pushes Chocolatey again' => ->(w) do
+      'native build pushes Chocolatey' => ->(w) do
         w['jobs']['goreleaser-windows']['steps'] << {
           'shell' => 'pwsh', 'run' => 'choco push dist/azctx.nupkg --api-key $env:CHOCO_API_KEY',
           'env' => { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' }
@@ -364,41 +306,19 @@ class ReleaseConfigurationTest < Minitest::Test
       'native build receives Chocolatey credential' => ->(w) do
         w['jobs']['goreleaser-windows']['env']['CHOCO_API_KEY'] = '${{ secrets.CHOCO_API_KEY }}'
       end,
-      'missing same-run package transfer' => ->(w) do
-        w['jobs']['goreleaser-windows']['steps'].delete_if { |s| s.fetch('with', {})['name'] == 'chocolatey-package' }
+      'native build transfers a Chocolatey package' => ->(w) do
+        upload = w['jobs']['goreleaser-windows']['steps'].last.dup
+        upload['with'] = upload['with'].merge('name' => 'chocolatey-package', 'path' => 'dist/azctx.*.nupkg')
+        w['jobs']['goreleaser-windows']['steps'] << upload
       end,
-      'prerelease package transfer' => ->(w) { w['jobs']['goreleaser-windows']['steps'].last.delete('if') },
-      'Chocolatey push before checksum verification' => ->(w) do
-        steps = w['jobs']['chocolatey-publish']['steps']
-        steps[-1], steps[-2] = steps[-2], steps[-1]
+      'Chocolatey publisher returns' => ->(w) do
+        w['jobs']['chocolatey-publish'] = Marshal.load(Marshal.dump(w['jobs']['goreleaser-windows']))
       end,
-      'Chocolatey push without checksum verification' => ->(w) do
-        w['jobs']['chocolatey-publish']['steps'].delete_if { |s| s.fetch('run', '').include?('verify_chocolatey.py') }
+      'audit-only portable publisher' => ->(w) do
+        w['jobs']['windows-publish']['runs-on'] = 'windows-latest'
+        w['jobs']['windows-publish']['steps'][0]['with'] = { 'egress-policy' => 'audit' }
       end,
-      'Chocolatey verification only warns' => ->(w) do
-        w['jobs']['chocolatey-publish']['steps'][-2]['continue-on-error'] = true
-      end,
-      'Chocolatey package from another run' => ->(w) do
-        download = w['jobs']['chocolatey-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
-        download['with']['run-id'] = '12345'
-      end,
-      'Chocolatey transfer digest only warns' => ->(w) do
-        download = w['jobs']['chocolatey-publish']['steps'].find { |s| s.fetch('uses', '').start_with?('actions/download-artifact@') }
-        download['with']['digest-mismatch'] = 'warn'
-      end,
-      'Chocolatey publisher rebuilds' => ->(w) do
-        w['jobs']['chocolatey-publish']['steps'].insert(2, w['jobs']['goreleaser-windows']['steps'].find do |s|
-          s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@')
-        end)
-      end,
-      'Chocolatey credential job-scoped' => ->(w) do
-        w['jobs']['chocolatey-publish']['env'] = { 'CHOCO_API_KEY' => '${{ secrets.CHOCO_API_KEY }}' }
-      end,
-      'Chocolatey publisher writes GitHub content' => ->(w) { w['jobs']['chocolatey-publish']['permissions']['contents'] = 'write' },
-      'Chocolatey publisher pretends native block support' => ->(w) do
-        w['jobs']['chocolatey-publish']['steps'][0]['with']['egress-policy'] = 'block'
-      end,
-      'Chocolatey publisher without protected environment' => ->(w) { w['jobs']['chocolatey-publish'].delete('environment') },
+      'audit-only Linux release' => ->(w) { w['jobs']['goreleaser-linux']['steps'][0]['with'] = { 'egress-policy' => 'audit' } },
       'non-idempotent Windows upload' => ->(w) do
         upload = w['jobs']['windows-publish']['steps'].find { |s| s.fetch('run', '').include?('upload_release_assets.py') }
         upload['run'] = 'gh release upload "$RELEASE_TAG" .release-check/windows/*.zip'

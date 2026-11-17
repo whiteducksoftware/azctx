@@ -6,7 +6,7 @@ image or devcontainer. Replace the synthetic GUIDs and connection names.
 No live OIDC, workload-identity or deployment acceptance has been performed.
 Identities, federated credentials, permissions and service connections must be
 provisioned separately by an authorized maintainer. They were not created by
-this stack. [Release readiness remains blocked](releasing.md).
+this stack. See [release configuration](releasing.md).
 
 ## Context is not authentication
 
