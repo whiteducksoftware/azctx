@@ -2,8 +2,10 @@
 
 This contract applies to azctx 2026.11. Subscription JSON has schema version
 **1**. Commands read only `azureProfile.json`, INI `config` and `clouds.config`
-in the Azure configuration root. They never read credentials/MSAL caches or
-write anything there. Authentication remains delegated to Azure CLI.
+in the Azure configuration root. Doctor may stat, but never read, a leftover
+`azctxTenants.json`. They never access credentials/MSAL caches or directly write
+Azure files. The sole configuration-write exception is an explicitly confirmed
+`auth broker` change delegated to Azure CLI. Authentication remains delegated to it.
 
 ## Commands and formats
 
@@ -11,12 +13,15 @@ write anything there. Authentication remains delegated to Azure CLI.
 | --- | --- |
 | `azctx` | Open the subscription picker when input is interactive; otherwise print the same table as `azctx list`. |
 | `azctx <query>` | Switch by subscription name, subscription ID or `tenant/subscription`. Successful switches are quiet. |
-| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `login`, `version`, `help`, `completion` or starts with `-`. |
+| `azctx -- <query>` | Treat the query literally as a positional argument, even when it equals `list`, `login`, `auth`, `doctor`, `version`, `help`, `completion` or starts with `-`. |
 | `azctx -` | Switch to the previous subscription, preserving the layer-06 private-state/rollback behavior. |
 | `azctx -c [-o text\|json\|id\|name\|tenant]` | Print the current subscription. Default `text` preserves the human-readable active-subscription line. `id`, `name` and `tenant` print only the corresponding subscription ID, name or tenant ID and a newline. |
 | `azctx list [--all] [-o table\|json]` | List subscriptions in profile order. Default: `table`. Disabled, tenant-level and other/unknown-cloud accounts are hidden unless `--all` is present. |
 | `azctx version [-o text\|json]` | Print version information, without loading the Azure profile or checking for updates. Its existing version JSON is unchanged. |
-| `azctx login [--force-mfa] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, then attach login streams including live stderr capture. Disable Azure CLI's subscription picker only in the login child's environment. Supports default/text output, not subscription JSON. |
+| `azctx login [--use-device-code] [--tenant <name\|id>] [--force-mfa] [-- <Azure CLI arguments>]` | Require Azure CLI >=2.61.0, then attach login streams including live stderr capture. Disable Azure CLI's subscription picker only in the login child's environment. Supports default/text output, not subscription JSON. |
+| `azctx auth broker status` | Read effective platform broker settings and check Azure CLI availability, without a profile or mutations. Default/text output only. |
+| `azctx auth broker enable\|disable [--yes]` | Require a supported platform/version and explicit confirmation, then `az account clear`, `az config set` for the platform broker key, attached `az login`. Default/text output only; stops on the first failure. |
+| `azctx doctor [-o text\|json]` | Offline, profile-independent diagnostics, including cached update status. Default: text. Missing dependencies/broken configuration are report findings, not fatal command errors. |
 
 `-o`/`--output`, `--verbose` and `--no-input` are persistent flags, accepted before
 or after a subcommand. Formats are case-sensitive. Unsupported formats and
@@ -66,6 +71,16 @@ list/current/switch initialization still requires a readable profile and reports
 missing files with an `az login` hint. `azcli.CheckVersion` itself requires no
 profile or Azure configuration directory.
 
+Friendly login tenant selectors resolve case-insensitive fuzzy names/domains
+against distinct active-cloud profile tenants (including tenant-level records).
+No match or ambiguity fails before any subprocess; a validated GUID can be used
+on first login. `--tenant` cannot be combined with `--force-mfa` or another
+passthrough tenant flag. Other flags still pass after `--`; the existing
+multi-tenant MFA behavior is unchanged.
+
+Broker capability and confirmation details, headless hints, the diagnostic
+schema and safety boundaries are in [authentication](authentication.md).
+
 ## Input, color and streams
 
 - An azctx picker/prompt is permitted only when **stdin is a TTY**, `CI` is
@@ -94,6 +109,8 @@ profile or Azure configuration directory.
   `CI` absent and `AZCTX_NO_UPDATE_CHECK` not `1`. JSON mode also suppresses them.
   The inherited daily cache and two-second deadline remain; a check failure
   cannot fail a successful switch. Listing/current/version never check updates.
+  Doctor only reads an existing private update cache; it never checks the
+  network, creates cache files or acquires update locks.
 
 ## Exit statuses
 
@@ -107,7 +124,7 @@ boundary for handler failures, Cobra flag/argument errors and interruptions.
 | 2 | No subscription match, unavailable previous subscription, or ambiguous match when input is disabled |
 | 3 | Reserved: sign-in failed for one or more tenants (layer 10) |
 | 4 | Reserved: guard found a different context (layer 13) |
-| 130 | Cancelled with Ctrl+C |
+| 130 | Canceled with Ctrl+C or an explicitly canceled command context |
 
 Statuses 3 and 4 are supported/tested through the typed `cmd.ExitError` boundary;
 this layer does not add future sign-in or guard behavior. Missing previous state
@@ -181,7 +198,7 @@ Tokens after `--` are never output flags, including forwarded login arguments.
 
 | Variable | Effect |
 | --- | --- |
-| `AZURE_CONFIG_DIR` | Read-only Azure configuration root; unset uses `~/.azure`. Credentials/MSAL caches are never read. |
+| `AZURE_CONFIG_DIR` | Azure configuration root; unset uses `~/.azure`. azctx only reads/stat-checks allowlisted files; explicitly confirmed broker changes delegate persistence to Azure CLI. Credentials/MSAL caches are never read. |
 | `AZURE_{SECTION}_{NAME}` | Azure CLI setting overrides, in uppercase; environment wins over INI `config`. Section names are case-sensitive, keys are not. Booleans accept `1/yes/true/on` and `0/no/false/off`, ignoring case. Missing files use defaults; malformed files/booleans are errors when read. |
 | `AZURE_CORE_LOGIN_EXPERIENCE_V2` | Caller value is preserved; each wrapped login child alone overrides it to `off`. |
 | `AZCTX_NO_INPUT=1` | Disable azctx-owned pickers/prompts. Other values do not enable this gate. |

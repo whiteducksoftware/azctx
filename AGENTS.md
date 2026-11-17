@@ -29,9 +29,18 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 ## Invariants and boundaries
 
 - Never read or write credentials or the MSAL token cache.
-- Only read Azure `azureProfile.json`, `config` and `clouds.config`; never write anything in `AZURE_CONFIG_DIR`.
+- Only read Azure `azureProfile.json`, `config` and `clouds.config`; doctor may
+  stat (never read) a leftover `azctxTenants.json`. Never directly write Azure
+  files. The sole configuration-write exception is an explicitly confirmed
+  `auth broker enable|disable` invoking `az account clear`, `az config set` for
+  the platform broker key, then attached `az login` through the runner.
 - Tenant metadata comes only from the profile; do not add tenant-cache or REST fallbacks.
 - Check Azure CLI >=2.61.0 on login, not on switching; disable its picker only in the login child environment.
+- Broker changes require >=2.61.0 on Windows or >=2.91.0 on macOS and explicit
+  terminal confirmation or `--yes`; unsupported platforms, conflicting
+  environment overrides and unconfirmed non-interactive runs never mutate.
+- Doctor is profile-independent and offline: only `az version`, allowlisted
+  settings and account-type counts; never raw process diagnostics or identities.
 - Validate subscription and tenant IDs as GUIDs before passing them to `az`.
 - Tests use injected runners or the fake `az`, isolated filesystems and fixtures; never a real tenant.
 - Injected `io/fs.FS` values are read-only and rooted at the Azure config directory.

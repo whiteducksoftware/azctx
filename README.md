@@ -32,7 +32,9 @@ Usage:
   azctx [command]
 
 Available Commands:
+  auth        Manage Azure CLI authentication
   completion  Generate the autocompletion script for the specified shell
+  doctor      Show safe, offline Azure CLI diagnostics
   help        Help about any command
   login       Login to Azure
   list        List subscriptions
@@ -58,8 +60,10 @@ Usage:
   azctx login [flags]
 
 Flags:
-      --force-mfa   force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)
-  -h, --help        help for login
+      --force-mfa         force individual authentication for each tenant separately (required for tenants which enforce explicit MFA)
+  -h, --help              help for login
+      --tenant string     Tenant GUID or fuzzy profile tenant name/domain
+      --use-device-code   Sign in using a device code
 ```
 
 -----
@@ -72,9 +76,19 @@ operating system requirements. Azure CLI **2.61.0 or newer** is required.
 Tenant names and domains come directly from Azure CLI's subscription profile,
 even after plain `az login`. Labels prefer display names, then default domains,
 then tenant IDs. A displayed record missing both modern fields gets a one-line
-hint to refresh with `az login`. azctx reads Azure's profile/settings but never writes
-anything in `AZURE_CONFIG_DIR`. Wrapped login disables Azure CLI's subscription
-selector only for that child process, without changing your environment.
+hint to refresh with `az login`. azctx never directly writes Azure files or
+accesses credentials/token caches. The sole configuration-write exception is
+`azctx auth broker enable|disable`: after explicit confirmation it delegates
+account clearing, the persisted broker setting and attached sign-in to Azure CLI.
+Wrapped login disables Azure CLI's subscription selector only for that child
+process, without changing your environment.
+
+Use `azctx login --use-device-code` over SSH or without a display, and
+`azctx login --tenant <GUID-or-profile-name>` to choose a tenant. Progress
+messages follow the effective browser, Windows WAM or macOS broker setting.
+`azctx doctor [-o json]` diagnoses missing/old Azure CLI, missing or broken
+profiles, settings and leftover tenant files without signing in or contacting
+Azure. See the draft [authentication guide](docs/authentication.md).
 
 `azctx list` shows active-cloud subscriptions by default. Disabled and
 tenant-level accounts, and records from other/unknown clouds, are hidden;

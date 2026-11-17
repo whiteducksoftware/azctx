@@ -9,16 +9,30 @@ import (
 	"github.com/whiteducksoftware/azctx/log"
 )
 
+// UsesDeviceCode reports whether the effective passthrough flag requests a code.
+func UsesDeviceCode(args []string) bool {
+	enabled := false
+	for _, arg := range args {
+		switch arg {
+		case "--use-device-code", "--use-device-code=true":
+			enabled = true
+		case "--use-device-code=false":
+			enabled = false
+		}
+	}
+	return enabled
+}
+
 // capture preserves the legacy command error text for existing callers.
-func (cli CLI) capture(args []string) (string, error) {
-	result, err := cli.runner.Run(context.Background(), args, Options{})
+func (cli CLI) capture(args []string) error {
+	result, err := cli.runner.Run(cli.context(), args, Options{})
 	if err != nil {
 		if result.Stderr != "" {
-			return "", fmt.Errorf("Error executing command: %s: %w", result.Stderr, err)
+			return fmt.Errorf("Error executing command: %s: %w", result.Stderr, err)
 		}
-		return "", err
+		return err
 	}
-	return result.Stdout, nil
+	return nil
 }
 
 func (cli CLI) execLogin(extraArgs []string) error {
@@ -30,7 +44,7 @@ func (cli CLI) execLogin(extraArgs []string) error {
 	if terminal == nil {
 		terminal = &Terminal{}
 	}
-	result, err := cli.runner.Run(context.Background(), args, Options{
+	result, err := cli.runner.Run(cli.context(), args, Options{
 		Terminal: terminal, Env: []string{"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"},
 	})
 	if err != nil {
@@ -53,6 +67,13 @@ func (cli CLI) execLogin(extraArgs []string) error {
 		log.Error("%s", strings.Repeat("-", 80))
 	}
 	return nil
+}
+
+func (cli CLI) context() context.Context {
+	if cli.Context != nil {
+		return cli.Context
+	}
+	return context.Background()
 }
 
 func validateLoginIDs(args []string) error {

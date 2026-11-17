@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -37,6 +38,7 @@ type Dependencies struct {
 	CheckUpdates func(string, string) error
 	StdinTTY     func() bool // Nil probes Cobra stdin; input opt-outs still take precedence.
 	StdoutTTY    func() bool // Nil probes Cobra stdout for optional update checks.
+	Platform     string      // Empty uses runtime.GOOS; tests can exercise broker capabilities.
 }
 
 // NewRootCommand constructs an independent command tree, including flag state.
@@ -44,19 +46,29 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 	if deps.Select == nil {
 		deps.Select = ui.Select
 	}
+	if deps.Platform == "" {
+		deps.Platform = runtime.GOOS
+	}
 	verbose := false
-	newCLI := func(forLogin bool) (azcli.CLI, error) {
+	resolveRunner := func() (azcli.Runner, error) {
 		if deps.Runner == nil {
 			runner, err := azcli.NewRunner()
 			if err != nil {
-				return azcli.CLI{}, fmt.Errorf("azure cli is not installed. please install it and try again. See here: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli: %w", err)
+				return nil, fmt.Errorf("azure cli is not installed. please install it and try again. See here: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli: %w", err)
 			}
 			deps.Runner = runner
 		}
-		if forLogin {
-			return azcli.NewForLogin(deps.FS, deps.Runner, deps.ConfigDir)
+		return deps.Runner, nil
+	}
+	newCLI := func(forLogin bool) (azcli.CLI, error) {
+		runner, err := resolveRunner()
+		if err != nil {
+			return azcli.CLI{}, err
 		}
-		return azcli.New(deps.FS, deps.Runner, deps.ConfigDir)
+		if forLogin {
+			return azcli.NewForLogin(deps.FS, runner, deps.ConfigDir)
+		}
+		return azcli.New(deps.FS, runner, deps.ConfigDir)
 	}
 	loadCLI := func() (azcli.CLI, error) { return newCLI(false) }
 	rootCmd := &cobra.Command{
@@ -89,7 +101,9 @@ func NewRootCommand(deps Dependencies) *cobra.Command {
 
 	rootCmd.Flags().BoolP("current", "c", false, "Display the current active subscription")
 	rootCmd.AddCommand(newListCommand(loadCLI))
-	rootCmd.AddCommand(newLoginCommand(func() (azcli.CLI, error) { return newCLI(true) }))
+	rootCmd.AddCommand(newLoginCommand(func() (azcli.CLI, error) { return newCLI(true) }, deps))
+	rootCmd.AddCommand(newAuthCommand(resolveRunner, deps))
+	rootCmd.AddCommand(newDoctorCommand(resolveRunner, deps))
 	return rootCmd
 }
 
