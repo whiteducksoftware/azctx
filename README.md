@@ -1,258 +1,267 @@
-# <img src='assets/img/DB-WD-Iconsazctx-1200px.png' height=40> &nbsp; `azctx`: Power tool for the Azure CLI 
+# azctx
 
-![azctx promo](assets/img/DB-WD-azctx-TW-440x220px@2x.png)
+![azctx](assets/img/DB-WD-azctx-TW-440x220px@2x.png)
 
-![Proudly written in Go](https://img.shields.io/badge/written%20in-go-29BEB0.svg)
-![Latest GitHub release](https://img.shields.io/github/v/release/whiteducksoftware/azctx.svg)
-![GitHub stars](https://img.shields.io/github/stars/whiteducksoftware/azctx.svg?label=github%20stars)
-![GitHub contributors](https://img.shields.io/github/contributors/whiteducksoftware/azctx.svg?label=github%20contributors)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/whiteducksoftware/azctx/badge)](https://scorecard.dev/viewer/?uri=github.com/whiteducksoftware/azctx)
+[![CI](https://github.com/whiteducksoftware/azctx/actions/workflows/ci.yaml/badge.svg)](https://github.com/whiteducksoftware/azctx/actions/workflows/ci.yaml)
+[![Latest published release](https://img.shields.io/github/v/release/whiteducksoftware/azctx)](https://github.com/whiteducksoftware/azctx/releases)
 
-**`azctx`** helps you switch between azure cli subscriptions back and forth:
+## 1. What azctx is
 
-![azctx demo GIF](assets/img/azctx-demo.png)
+azctx is a context tool for the Azure CLI. Pick subscriptions by fuzzy name,
+alias, GUID or tenant, return to the previous subscription, export a context
+for one process and check a project's expected context before work.
+Authentication always stays in Azure CLI; azctx never handles credentials or
+MSAL token caches.
 
-## Collaborate with us 👋
+**This branch documents the unreleased 2026.11 contract.** It does not mean
+2026.11 packages are published or installable. Release readiness is blocked on
+supported native Windows/macOS egress enforcement. The release workflow fails
+closed before publishing. See [release status](docs/releasing.md).
+Badges describe public default-branch services, not acceptance of this branch.
+The Scorecard workflow keeps results in GitHub; its public badge may have no
+score until public results exist.
 
-* Feel free to give us your **feedback**, make **suggestions** or let us discuss in our 📢 [**discussions tab**](../../discussions/).
-* To report **issues** or search for existing issues go to the 🔎 [**issues tab**](../../issues/).
+![Static capture of the new built-in picker with synthetic subscriptions](assets/img/picker-2026.11.svg)
 
-_And please star this repo ⭐_
+The [static capture](docs/development.md#picker-capture) uses the real picker
+renderer with synthetic identities. It is not a recording of a live account.
 
-## azctx
+## 2. Why azctx
 
-```bash
-azctx is a CLI tool for managing azure cli subscriptions.
-        It is a helper for the azure cli and provides a simple interface for managing subscriptions.
-        Pass a subscription name, tenant/subscription or subscription ID to switch.
-        Use -- before names that equal a command. Pass - for the previous subscription.
-        Without interactive input, the bare command lists subscriptions.
+Azure CLI 2.61 added a picker during login. azctx adds context management
+throughout the day:
 
-Usage:
-  azctx [query | -] [flags]
-  azctx [command]
+| Task | Azure CLI | azctx |
+| --- | --- | --- |
+| Switch later in the day | `az account set --subscription <id or exact name>` | Fuzzy picker, `azctx prod`, `azctx contoso/prod`, GUIDs |
+| Same name in several tenants | Exact-name ambiguity | Candidates with tenant names and GUID identities |
+| Previous subscription | No built-in shortcut | `azctx -` |
+| Short names | No built-in aliases | Aliases, pinned and recent subscriptions |
+| Many tenants with MFA | Manual sign-in per failed tenant | One confirmation to retry only eligible failed tenants |
+| Broker sign-in | Clear accounts, change setting, sign in | Explicitly confirmed `azctx auth broker enable` |
+| Diagnostics | Several commands and files | Offline `azctx doctor` |
+| Terraform, azd, pipelines | Set context variables yourself | `azctx env`, `azctx exec`, pipeline formats |
+| Wrong subscription | Not checked against project expectations | `azctx guard`, `.azctx.yaml`, protected switching |
+| AI agents | Shared default can change across terminals | Skill, JSON errors, input controls, optional Claude Bash hook, history |
 
-Available Commands:
-  alias       Manage subscription aliases
-  auth        Manage Azure CLI authentication
-  completion  Generate the autocompletion script for the specified shell
-  config      Print effective configuration or its path
-  doctor      Show safe, offline Azure CLI diagnostics
-  env         Export a context without changing the Azure CLI default
-  exec        Run a command with a context environment, without switching Azure CLI
-  guard       Check the active context against flags or the nearest .azctx.yaml
-  help        Help about any command
-  history     Show the last 100 completed subscription switches
-  list        List subscriptions
-  login       Login to Azure
-  tenant      Choose a tenant, then a subscription
-  version     Print the CLI version
+Guard and protection reduce mistakes. Azure RBAC, PIM and Conditional Access
+remain the authorization boundary.
 
-Flags:
-      --all             Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
-  -c, --current         Display the current active subscription
-  -h, --help            help for azctx
-      --no-input        Never open a picker or prompt (also AZCTX_NO_INPUT=1)
-  -o, --output string   Output format (depends on command)
-      --verbose         Enable debug diagnostics
-      --yes             Confirm switching to a protected subscription without prompting
+## 3. Install
 
-Use "azctx [command] --help" for more information about a command.
+Prerequisites: Azure CLI **2.61.0+**, macOS **13+** or Windows **10+** where
+applicable. macOS broker preview requires Azure CLI **2.91.0+** and enrollment.
+Linux binaries support amd64, arm64 and armv6; macOS and Windows support amd64
+and arm64. The old 32-bit Windows ARM build is gone.
+
+**After a stable 2026.11 release and package acceptance**, the intended commands
+are:
+
+```sh
+# macOS, fully qualified cask
+brew install --cask whiteducksoftware/tap/azctx
+# Windows, Chocolatey
+choco install azctx --version=2026.11.0
+# Windows, winget, after its manual upstream PR is accepted
+winget install --exact --id whiteducksoftware.azctx --version 2026.11.0
 ```
 
-```bash
-Login to Azure (wrapped around 'az login')
-        Requires Azure CLI 2.61.0 or newer; tenant metadata comes from its profile.
-        Azure CLI's subscription selector is disabled only for this login process.
-        All args after -- are directly passed to the 'az login' command.
+These are post-publication instructions, not evidence of current availability.
+Homebrew Linux publication is discontinued. For Linux, download a matching
+archive and checksum file from an explicitly reviewed
+[GitHub release](https://github.com/whiteducksoftware/azctx/releases), never
+assume `latest` is 2026.11. Example for a future stable Linux amd64 release:
 
-Usage:
-  azctx login [flags]
-
-Flags:
-      --all-tenants       Discover Azure tenants and sign in to each separately
-  -h, --help              help for login
-      --tenant string     Tenant GUID or fuzzy profile tenant name/domain
-      --use-device-code   Sign in using a device code
+```sh
+set -eu
+gh release download 2026.11.0 --repo whiteducksoftware/azctx \
+  --pattern azctx_Linux_x86_64.tar.gz \
+  --pattern azctx_2026.11.0_Darwin_Linux_checksums.txt
+grep '  azctx_Linux_x86_64.tar.gz$' azctx_2026.11.0_Darwin_Linux_checksums.txt | sha256sum --check --strict -
+gh attestation verify azctx_Linux_x86_64.tar.gz --repo whiteducksoftware/azctx
+tar -xzf azctx_Linux_x86_64.tar.gz azctx
+install -m 0755 azctx "$HOME/.local/bin/azctx"
 ```
 
------
+Create `$HOME/.local/bin` first if necessary and add it to PATH. Stop if
+verification fails or an expected attestation is absent.
+See [security](docs/security.md#verify-a-release) for macOS/Windows checks,
+provenance limits and unsigned macOS binaries. A checksum alone is not an
+independent proof of origin.
 
-## Installation
+To evaluate **this source branch** instead, use Go as declared in `go.mod`
+(minimum 1.26, preferred 1.27.3), review the source and run `make build`.
+This builds locally; it does not install or publish a package.
 
-See the [2026.11 upgrade guide](docs/upgrade.md) for breaking changes and minimum
-operating system requirements. Azure CLI **2.61.0 or newer** is required.
+## 4. Upgrading from earlier versions
 
-Tenant names and domains come directly from Azure CLI's subscription profile,
-even after plain `az login`. Labels prefer display names, then default domains,
-then tenant IDs. A displayed record missing both modern fields gets a one-line
-hint to refresh with `az login`. azctx never directly writes Azure files or
-accesses credentials/token caches. The sole configuration-write exception is
-`azctx auth broker enable|disable`: after explicit confirmation it delegates
-account clearing, the persisted broker setting and attached sign-in to Azure CLI.
-Wrapped login disables Azure CLI's subscription selector only for that child
-process, without changing your environment.
+Read [every breaking change and package migration](docs/upgrade.md) before
+upgrading. The post-publication Homebrew migration is explicit:
 
-Use `azctx login --use-device-code` over SSH or without a display, and
-`azctx login --tenant <GUID-or-profile-name>` to choose a tenant. Progress
-messages follow the effective browser, Windows WAM or macOS broker setting.
-Failed MFA/registration tenants are listed and offered one confirmation before
-targeted sign-ins; Conditional Access blocks are explained, not retried.
-Unresolved tenant failures exit 3, including in no-input/CI/piped runs.
-Use `azctx login --all-tenants` to discover tenant GUIDs through
-`az account tenant list` and sign in individually. Explicit managed-identity
-and service-principal passthrough logins skip tenant discovery and MFA retries.
-`azctx doctor [-o json]` diagnoses missing/old Azure CLI, missing or broken
-profiles, settings and leftover tenant files without signing in or contacting
-Azure. See the draft [authentication guide](docs/authentication.md).
-
-`azctx list` shows active-cloud subscriptions by default. Disabled and
-tenant-level accounts, and records from other/unknown clouds, are hidden;
-`azctx list --all` exposes them for inspection. Change clouds with Azure CLI
-before switching to a subscription in another cloud. Tables/pickers label
-account types, delegation and attention states. See the
-[CLI contract](docs/cli-contract.md) for JSON, matching and per-cloud defaults.
-
-Use `azctx alias set dev SUBSCRIPTION_GUID` for a short name, `azctx config`
-for effective YAML or `azctx config path` for its location. Configuration can
-pin, hide or protect subscription/tenant IDs and disable update checks.
-Protected switches require confirmation or `--yes`; configured hidden entries
-require `--all`. `AZCTX_CONFIG_DIR` isolates azctx configuration and state.
-See [configuration and completion](docs/configuration.md) for the version-1
-schema, deterministic ranking and offline shell completion.
-
-`azctx env [query] --shell bash|zsh|fish|powershell` exports the current or
-explicitly queried subscription/tenant as `ARM_*` and `AZURE_*` context variables.
-`azctx exec QUERY -- COMMAND [ARGS]` sets those variables for one attached
-child without changing Azure CLI's default or the parent environment.
-`az` itself ignores these context variables: always pass `--subscription`.
-`azctx guard` checks the nearest strict `.azctx.yaml`, or explicit
-`--subscription`/`--tenant` flags, and exits 4 on a mismatch. Project files
-never trigger switching or login. Human `azctx -c` warns on mismatches;
-JSON/plain-field output stays unchanged. See the draft
-[CI/CD guide](docs/ci-cd.md) for pipeline exports, OIDC, workload identity,
-device-code devcontainers and process/guard contracts.
-
-`azctx tenant [query]` chooses a GUID-distinct tenant first, then a subscription
-within it; a unique tenant with one subscription switches directly. No-input
-ambiguities never switch arbitrarily. Configure `picker: fzf` to use an optional
-fzf on `PATH`; missing fzf falls back with one stderr notice. Protection and
-no-input gates apply to both backends.
-
-`azctx history [-o json]` reads the last 100 completed switches from private
-`history.json` next to state (also honoring `AZCTX_CONFIG_DIR`). It records UTC
-timestamps, previous/new GUID+cloud identities and terminal/script source, never
-raw user or credential fields. History warnings go to stderr and cannot fail a
-completed switch. See [the format and limitations](docs/configuration.md#completed-switch-history).
-
-### AI agent guidance (2026.11 draft)
-
-The portable [azctx skill and optional Claude Bash hook](docs/ai-agents.md)
-help agents inspect context without switching the user's shared default.
-For Claude Code 2.1.275+, after the release is published:
-
-```text
-/plugin install azctx --marketplace whiteducksoftware/azctx
+```sh
+brew uninstall --formula azctx
+brew install --cask whiteducksoftware/tap/azctx
 ```
 
-See the guide for the two-step marketplace installation, Copilot/Codex/Cursor
-skill directories, Python requirements and limitations. These tools reduce
-mistakes, not Azure authorization requirements.
+Do not uninstall a working version in anticipation of an unpublished cask.
+The [upgrade guide](docs/upgrade.md#package-manager-commands-after-publication)
+also gives Chocolatey, winget and release-binary steps.
 
-### Homebrew (macOS)
+## 5. Quickstart
 
-* Install `azctx` with `brew install whiteducksoftware/tap/azctx`
+With a reviewed binary and Azure CLI installed:
 
-### Chocolatey (Windows)
-
-* Install `azctx` with `choco install azctx`
-
-### Binary (Windows, Linux, macOS)
-
-* Install the `azctx` binary from the [repository](https://github.com/whiteducksoftware/azctx/releases)
-* Add the `azctx` binary to your PATH
-
------
-
-## Troubleshooting
-
-### Missing Azure configuration or `azureProfile.json`
-
-Run `az login` or `azctx login` to let Azure CLI create the subscription profile,
-even when the Azure directory does not exist yet. azctx itself never creates
-Azure configuration files. An unset `AZURE_CONFIG_DIR` silently uses the default
-`~/.azure` directory.
-
-Check the [Microsoft Documentation](https://docs.microsoft.com/en-us/cli/azure/azure-cli-configuration?view=azure-cli-latest#cli-configuration-file) for the correct path to the azure cli config directory and export it as AZURE_CONFIG_DIR environment variable.  
-
-```bash
-export AZURE_CONFIG_DIR=$HOME/.azure
+```sh
+azctx login
+azctx
+azctx prod
+azctx -
 ```
 
------
+Press `/` to filter, arrows to move, Enter to accept the filter, then Enter to
+select. Escape cancels with exit 1; Ctrl+C restores the cursor and exits 130.
+Use `azctx contoso/prod` for an exact tenant selector and a subscription query,
+or a GUID to disambiguate. Names equal to commands require `azctx -- list`.
+Previous context exists only after an azctx switch and is stored privately.
 
-## Development
-
-Use the Go version and toolchain declared in `go.mod`, and install
-`golangci-lint` v2.15.0 on your PATH.
-
-```bash
-make build # Build the azctx binary
-make lint  # Run golangci-lint
-make test  # Run tests with the race detector and coverage
-make check # Run lint and tests
+```sh
+azctx -c -o json
+azctx list --all -o json
+azctx help
 ```
 
-### Internal boundaries
+Bare azctx lists when input is disabled. Successful switches are quiet.
+`--all` permits inspection, not switching to disabled or other-cloud accounts.
+See [the generated command reference](docs/cli/azctx.md) and
+[the CLI contract](docs/cli-contract.md) for all formats and exit statuses.
 
-`cmd` constructs Cobra commands with `cmd.NewRootCommand(cmd.Dependencies)`.
-Tests can supply an `azcli.Runner`, a read-only `io/fs.FS` rooted at the Azure
-config directory, a config directory, a picker,
-and an update-check function without resolving a real `az` or accessing a tenant.
+## 6. Authentication
 
-The internal packages separate Azure CLI execution (`azcli`), the read-only
-`io/fs` profile parser (`profile`), subscription search (`match`), the existing
-picker (`ui`), update checks (`update`), private previous/recent-subscription state
-(`state`), strict YAML configuration (`config`) and atomic private-file storage
-(`storage`). The read-only `selection.Catalog` combines visibility and matching
-without IO, a runner, prompts or mutations.
-
-`azcli.Runner.Run` captures stdout, stderr, and the exit code by default.
-Supplying `azcli.Options.Terminal` attaches the supplied streams (or the process
-terminal) and tees stderr into the result. `Options.Env` overrides inherited
-environment entries. The production runner resolves `az` once with `LookPath`.
-Login uses this attached mode: device codes on stdout or stderr are visible
-immediately, and stderr remains captured for authentication diagnostics.
-
-Search matches subscription names, profile tenant names/domains/IDs and subscription IDs without
-collapsing duplicate names. `azctx -` swaps the current and previous subscription
-across processes. The previous ID is stored privately in
-`os.UserConfigDir()/azctx/state.json`, never in the Azure configuration directory.
-Switch diagnostics and optional update-check failures are silent unless
-`--verbose` is supplied. Login progress and actionable warnings remain visible.
-
-Interactive runs check for a stable CalVer update at most once per 24 hours,
-with a two-second network deadline and a private cache at
-`os.UserCacheDir()/azctx/update.json`. Update failures never fail a switch.
-Set `AZCTX_NO_UPDATE_CHECK=1` or `updateCheck: false` to disable checks; they are also skipped when `CI`
-is set (even to an empty value) or stdout is not a terminal. State and cache
-destinations that overlap Azure configuration are rejected, including symlinks.
-
-`internal/testutil.FakeRunner` records argv and environment overrides and consumes
-canned responses. Tests also build the portable `internal/testutil/fakeaz`
-executable and put it on `PATH`. Its `FAKEAZ_FIXTURES` JSON array contains
-`args`, `stdout`, `stderr`, and `exitCode` per call; `FAKEAZ_RECORD` receives JSON
-lines with argv and only environment names listed in `FAKEAZ_ENV_KEYS`.
-Test scratch files live below the package working directory and are cleaned up.
-No real Azure CLI or credentials are needed.
-
------
-
-## Migrate from stiviik/azctx
-
-Are you an existing user of `stiviik/azctx`? Use the following commands to migrate from the old `stiviik/azctx` to the new `whiteducksoftware/azctx` repository:
-
-```bash
-brew uninstall azctx
-brew untap stiviik/tap
-brew install whiteducksoftware/tap/azctx
+```sh
+azctx login --use-device-code
+azctx login --tenant aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+azctx auth broker status
 ```
+
+Azure CLI owns browser, WAM, device-code and workload-identity authentication.
+Login streams stay attached; `--no-input` only disables azctx's prompts.
+The login child alone gets its Azure CLI subscription picker disabled.
+
+Broker enable/disable is the sole **explicitly confirmed configuration-write
+exception**, delegated to `az account clear`, platform `az config set`, then
+`az login`. azctx never directly writes Azure files. Windows needs 2.61.0+;
+macOS needs 2.91.0+, Company Portal and Enterprise SSO enrollment, and is preview.
+Linux has no broker control. Read [authentication](docs/authentication.md),
+including the confirmation matrix and unverified live acceptance checklist.
+
+## 7. Many tenants and MFA
+
+```sh
+azctx login
+azctx login --all-tenants --use-device-code
+azctx tenant
+```
+
+Ordinary user login lists reported tenant failures on stderr and asks once to
+retry only MFA-required/registration failures. Conditional Access blocks are
+not retried. Partial, declined and non-interactive unresolved sign-ins exit 3.
+Explicit all-tenant discovery needs `az account tenant list` already available;
+azctx never installs an extension. Workload-identity passthrough skips retries
+and discovery. See [many tenants and MFA](docs/multi-tenant-mfa.md).
+
+## 8. Integrations
+
+```sh
+azctx env prod --shell bash
+azctx exec prod -- terraform plan
+azctx completion zsh
+```
+
+`env` exports four GUID context variables without credentials or switching.
+Check success before evaluating shell output. `exec` isolates those variables
+to one command; it is not a sandbox. **Azure CLI ignores them**: pass
+`--subscription` to each resource command, even inside exec.
+See [integrations](docs/integrations.md) for Terraform, azd, Starship,
+oh-my-posh, Powerlevel10k, shell completion and optional fzf.
+
+## 9. Configuration
+
+```sh
+azctx config path
+azctx config
+azctx alias set prod 11111111-1111-1111-1111-111111111111
+```
+
+Strict version-1 YAML supports aliases, pinned, hidden and protected GUIDs,
+`picker: builtin|fzf` and `updateCheck`. Missing files use defaults; malformed
+files fail. `AZCTX_CONFIG_DIR` overrides private config/state/history, never
+Azure configuration or the separate update cache.
+
+`.azctx.yaml` is an untrusted, read-only project expectation, not a switch
+instruction. Review both tenant and subscription GUIDs, then run `azctx guard`.
+See [configuration](docs/configuration.md) for schema, matching, all environment
+variables and exact per-OS storage locations.
+
+## 10. Troubleshooting with doctor
+
+```sh
+azctx doctor
+azctx doctor -o json
+```
+
+Doctor works offline without a profile or installed az, invoking only
+`az version`. Findings are not fatal errors. It reports safe counts/settings,
+cached update status and a manual leftover-file cleanup command, never raw
+profile identities or token caches. Review filesystem/cloud names before
+sharing. See [troubleshooting](docs/troubleshooting.md) for cloud mismatches,
+legacy files, ambiguous selections and macOS quarantine.
+
+## 11. CI/CD
+
+```sh
+azctx guard --no-input -o json
+azctx env --format github
+azctx env --format azure-devops
+```
+
+Authenticate through reviewed Azure Login OIDC or an Azure DevOps workload
+identity service connection first. azctx exports context, not tokens.
+GitHub exports apply to subsequent steps; DevOps logging commands apply to
+later tasks, not the current shell. Stop on every failed guard, including
+mismatch exit 4; never auto-switch to satisfy an untrusted project file.
+See [CI/CD](docs/ci-cd.md) for examples and authentication prerequisites.
+Those examples have offline coverage, not live OIDC/deployment acceptance.
+
+## 12. AI agents
+
+The [Agent Skill](skills/azctx/SKILL.md) supports CLI use by Claude Code,
+GitHub Copilot, Codex and Cursor. The optional Claude plugin adds a Bash guard
+hook, not an MCP server or authorization boundary.
+
+```sh
+azctx -c -o json
+azctx list -o json
+azctx guard --no-input -o json
+```
+
+Agents inspect identities, stop on guard failures, pass explicit subscriptions
+to az and leave login, broker changes and protected switching to a human.
+Read [AI agents](docs/ai-agents.md) for installation and hook limitations,
+including notice-and-allow behavior when azctx or project expectations are
+absent. Marketplace activation still needs manual acceptance.
+
+## 13. Contributing and security
+
+Read [CONTRIBUTING](CONTRIBUTING.md), [AGENTS](AGENTS.md) and
+[development](docs/development.md). Run `make check`, `make docs` and
+`make docs-check`; CI rejects stale generated help. Tests use fake az and
+synthetic profiles, never real tenants.
+
+Report vulnerabilities privately through [SECURITY](SECURITY.md). Read
+[security boundaries and verification](docs/security.md): diagnostic token
+redaction is heuristic, Azure CLI stdout and explicit exec streams remain raw,
+and cancellation does not supervise arbitrary descendants.
+The [MIT license and required copyright attribution](LICENSE) remain intact.
+No release, merge, identity provisioning or repository administration is part
+of this documentation layer.

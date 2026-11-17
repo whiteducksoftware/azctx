@@ -1,6 +1,6 @@
-# AI agents (draft)
+# AI agents
 
-Layer 14 draft for azctx 2026.11; layer 18 finalizes this guide. This repository
+This guide describes the unreleased azctx 2026.11 source contract. This repository
 ships an [Agent Skill](../skills/azctx/SKILL.md), not an MCP server. Agents call
 the CLI directly. Resource operations can use the separate
 [Azure MCP Server](https://learn.microsoft.com/en-us/azure/developer/azure-mcp-server/overview).
@@ -8,8 +8,10 @@ Authentication is configured separately by the user.
 
 ## Install
 
-Review the skill and hook before enabling them. Install a trusted azctx 2026.11
-binary on PATH; the plugin does not download it or access credentials.
+Review the skill and hook before enabling them. Use a reviewed source build
+on PATH until a trusted 2026.11 binary is actually published and verified;
+[release readiness is blocked](releasing.md).
+The plugin does not download it or access credentials.
 
 ### Claude Code
 

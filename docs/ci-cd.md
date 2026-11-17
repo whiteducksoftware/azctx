@@ -1,9 +1,12 @@
-# CI/CD and project contexts (draft)
+# CI/CD and project contexts
 
-Layer 13 draft; layer 18 will finalize this guide. Examples assume a trusted
+Examples document the unreleased 2026.11 contract and assume a trusted
 azctx 2026.11 binary and Azure CLI >=2.61.0 are already installed in the runner
 image or devcontainer. Replace the synthetic GUIDs and connection names.
-No live authentication/deployment acceptance has been performed for this draft.
+No live OIDC, workload-identity or deployment acceptance has been performed.
+Identities, federated credentials, permissions and service connections must be
+provisioned separately by an authorized maintainer. They were not created by
+this stack. [Release readiness remains blocked](releasing.md).
 
 ## Context is not authentication
 
