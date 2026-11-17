@@ -27,7 +27,7 @@ func TestFZFProcessBoundary(t *testing.T) {
 	t.Setenv("FZF_DEFAULT_OPTS", "--bind=start:execute(touch SHOULD_NOT_EXIST)")
 	t.Setenv("FZF_DEFAULT_OPTS_FILE", filepath.Join(dir, "untrusted-options"))
 	subscriptions := []profile.Subscription{
-		{Id: productionID, Name: "--query=$(touch SHOULD_NOT_EXIST)\n0\tforged\x1b[31m", Tenant: pickerTenantID},
+		{Id: productionID, Name: "--query=$(touch SHOULD_NOT_EXIST)\n0\tforged\x1b[31m", Tenant: pickerTenantID, TenantName: "Tenant\rName\x1b[0m"},
 		{Id: productionID, Name: "Same ID, distinct tenant", Tenant: pickerHomeID},
 	}
 	var messages bytes.Buffer
@@ -49,8 +49,10 @@ func TestFZFProcessBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantArgs := []string{"--no-multi", "--no-sort", "--delimiter=\t", "--with-nth=2..", "--no-ansi", "--no-expect", "--prompt=azctx> ", "--color=bw"}
+	wantInput := "0\t--query=$(touch SHOULD_NOT_EXIST) 0 forged [31m\t" + productionID + "\tTenant Name [0m\t" + pickerTenantID +
+		"\n1\tSame ID, distinct tenant\t" + productionID + "\t" + pickerHomeID + "\t" + pickerHomeID + "\n"
 	if !reflect.DeepEqual(got.Args, wantArgs) || got.Opts != "" || got.File != "" ||
-		strings.Count(got.Input, "\n") != 2 || strings.ContainsRune(got.Input, '\x1b') ||
+		got.Input != wantInput || strings.Count(got.Input, "\n") != 2 || strings.ContainsRune(got.Input, '\x1b') ||
 		!strings.Contains(got.Input, subscriptions[1].Tenant) || !strings.HasPrefix(got.Input, "0\t") {
 		t.Fatalf("unsafe fzf boundary: %+v", got)
 	}

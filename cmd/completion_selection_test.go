@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/whiteducksoftware/azctx/cmd"
+	"github.com/whiteducksoftware/azctx/internal/match"
 	"github.com/whiteducksoftware/azctx/internal/profile"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
 )
@@ -111,6 +112,40 @@ func assertCompletion(t *testing.T, got []string, directive cobra.ShellCompDirec
 		if slices.Contains(got, value) {
 			t.Fatalf("completion unexpectedly includes %q", value)
 		}
+	}
+}
+
+func TestCompletionSlashNamesAndTenantLabelsRemainResolvable(t *testing.T) {
+	fake := &testutil.FakeRunner{}
+	deps := commandDependencies(t, fake)
+	subs := []profile.Subscription{
+		{Id: productionID, Name: "Build/Release", Tenant: tenantID, TenantName: "Engineering/Tools", TenantDomain: "tools.invalid", Environment: azureCloudName},
+		{Id: developmentID, Name: "Operations", Tenant: tenantID, TenantName: "Operations/Directory", TenantDomain: "ops/invalid", Environment: azureCloudName},
+	}
+	data, err := json.Marshal(profile.Profile{Subscriptions: subs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.FS = fstest.MapFS{profileFile: &fstest.MapFile{Data: data}}
+	root := cmd.NewRootCommand(deps)
+	want := []string{productionID, "Operations", tenantID + "/Operations"}
+	slices.Sort(want)
+	got, directive := root.ValidArgsFunction(root, nil, "")
+	assertCompletion(t, got, directive, want, []string{"Build/Release", "Engineering/Tools/Build/Release", "Operations/Directory/Operations", "ops/invalid/Operations"})
+	if !slices.Equal(got, want) {
+		t.Fatalf("slash completion candidates=%q, want %q", got, want)
+	}
+	for _, candidate := range got {
+		if matches, err := match.Find(subs, candidate); err != nil || len(matches) != 1 {
+			t.Fatalf("completion %q does not resolve to one subscription: matches=%+v err=%v", candidate, matches, err)
+		}
+	}
+	got, directive = root.ValidArgsFunction(root, nil, productionID[:8])
+	assertCompletion(t, got, directive, []string{productionID}, nil)
+	got, directive = root.ValidArgsFunction(root, nil, "Operations/")
+	assertCompletion(t, got, directive, nil, []string{"Operations/Directory/Operations"})
+	if len(got) != 0 || len(fake.Calls) != 0 {
+		t.Fatalf("invalid prefix candidates=%q calls=%+v", got, fake.Calls)
 	}
 }
 

@@ -151,8 +151,9 @@ assert(makefile.include?("CGO_ENABLED=0 go build -trimpath ."), 'make build must
 assert(makefile.include?("test: agent-check"), 'make check/test must retain hook coverage')
 test_recipe = makefile[/^test:.*\n((?:\t.*\n)+)/, 1]
 assert(test_recipe.include?("go test -race -coverpkg=./... -coverprofile=coverage.out ./...") &&
+       test_recipe.include?("python3 -B .github/scripts/check_coverage.py < coverage.out") &&
        test_recipe.include?("$(MAKE) completion-perf"),
-       'make test must retain full instrumentation and require native completion acceptance')
+       'make test must retain full instrumentation, the weighted coverage gate and native completion acceptance')
 assert(makefile.include?("GOFLAGS= go test -race=false -cover=false -tags=completionperf " \
                         "-run '^TestCompletion500SubscriptionsIsOfflineAndFast$$' -count=1 -v ./cmd"),
        'completion acceptance must run once, uncached and without inherited instrumentation')
@@ -161,4 +162,4 @@ assert(ci.fetch('jobs').fetch('test').fetch('strategy').fetch('matrix').fetch('o
        ci.fetch('jobs').fetch('test').fetch('steps').any? { |step| step['run'] == 'make test' },
        'all three native platforms must run correctness and completion performance acceptance')
 
-puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness and native completion acceptance'
+puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; no release scanner exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage; instrumented correctness, weighted coverage and native completion acceptance'

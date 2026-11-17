@@ -8,6 +8,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const (
+	terminalGetRequest = unix.TCGETS
+	terminalSetRequest = unix.TCSETS
+)
+
 func openContractPTY(t *testing.T) (*os.File, *os.File) {
 	t.Helper()
 	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR|unix.O_NOCTTY, 0)

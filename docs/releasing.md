@@ -56,8 +56,9 @@ Short-lived, automatically revoked App tokens request contents-write on only
 `homebrew-tap` or only `winget-pkgs`, never the source repository or both taps.
 `AUTH_GITHUB` is removed. The normal workflow token uploads source-repository
 release assets; only the Linux build/publisher and Ubuntu Windows-assets
-publisher have contents-write, OIDC and attestations-write. Native Windows has
-contents-read only; it cannot upload GitHub assets or mint a winget token.
+publisher have contents-write, OIDC and attestations-write. Native Windows
+package generation and the final native Chocolatey publisher have contents-read
+only; they cannot upload GitHub assets or mint a winget token.
 There is no packages-write permission. Syft scans
 the archives and `actions/attest` attests every `.tar.gz`/`.zip` archive without
 creating registry storage records. Every portable publisher runs on Ubuntu
@@ -94,8 +95,20 @@ never transferred.
 
 A dedicated Ubuntu job depends only on successful native formatting. Its
 allowlist covers GitHub checkout/API and Actions artifact transport, not Go,
-Homebrew or package registries. Only after digest-checked download does it mint
-the single-tap contents-write App token and run the Python standard-library
+Homebrew or package registries. It digest-checks both the original Linux cask
+and the normalized cask from the same run, then runs
+`publish_cask.py --check` without any token. That check parses both casks with
+a restricted grammar covering only the syntax and stanzas that the current
+GoReleaser template and `brew style --fix` emit, so unrecognized Ruby, such as
+other quoting, interpolation, modifiers, inline comments, calls, extra stanzas
+or blocks like `on_linux`, fails closed instead of being ignored. Every stanza
+must occur exactly once, each architecture's `url` must name its own release
+archive with a lowercase SHA-256, and `postflight_steps` must contain only the
+quarantine-removal `run`. All statements, including their architecture block,
+must then equal the original Linux artifact's; native style may only reorder or
+reformat them. A new GoReleaser or Homebrew output shape therefore needs a
+reviewed parser update. Only after that comparison does it mint the
+single-tap contents-write App token and run the Python standard-library
 publisher. Neither Homebrew nor a build tool runs alongside that token.
 The publisher validates the stable tag against the cask
 version, performs a SHA-based compare-and-swap, and never removes the old formula
@@ -113,13 +126,19 @@ publishing pass natively would unnecessarily expose those portable publishers.
 
 The Windows job therefore builds once with **`--skip=publish`** (also
 `--skip=chocolatey` on RC tags). It transfers only ZIP archives, their checksum
-file, SBOMs and real GoReleaser winget YAML, before any Chocolatey secret is
-injected. Only its last, stable-only `choco push` step receives
-`CHOCO_API_KEY`; no App signing key/token is referenced on Windows.
+file, SBOMs and real GoReleaser winget YAML. On stable tags it also transfers
+the same-run `azctx.*.nupkg` as a separate `chocolatey-package` artifact. It
+never pushes and receives no Chocolatey secret or App signing key/token.
 
 An Ubuntu block/allowlisted job downloads those same-run files with digest
 failure enabled, uploads the existing Windows assets to the Linux-created
-release, and attests the ZIPs. No binary is rebuilt. It verifies the three
+release, and attests the ZIPs. `upload_release_assets.py` makes the upload
+idempotent: it lists the release's assets first and skips a same-name asset
+whose GitHub `sha256:` digest matches the local bytes. A different digest, a
+missing digest or an incomplete asset fails before any upload; nothing is
+overwritten (`--clobber`) or deleted. After a partial failure, rerun the
+workflow; a mismatched or incomplete asset needs a reviewed manual cleanup
+first. No binary is rebuilt. It verifies the three
 stable winget manifests, including exact identity/version, Azure CLI floor,
 archive URLs and SHA-256 against the downloaded archives, **before** minting
 a fork-only token. `publish_winget.rb` then uses GitHub's existing contents API
@@ -127,6 +146,20 @@ to create/update only `azctx-<version>` in `whiteducksoftware/winget-pkgs`,
 preserving raw GoReleaser manifests and SHA-based updates. It does not open an
 upstream PR. RC tags neither mint the token nor run either package publisher.
 Tests use only synthetic credentials and an injected/mock API transport.
+
+A final, stable-only native `chocolatey-publish` job needs a successful
+`windows-publish`, so it never runs after a failed asset upload or for RC tags.
+It has contents-read only and downloads only the digest-checked same-run
+package. `verify_chocolatey.py` checks the package id/version against the tag
+and requires the package to contain only the nuspec, NuGet metadata and
+`tools/chocolateyinstall.ps1`; any other script, helper or binary is rejected.
+That script must match GoReleaser 2.18.3's rendered template exactly, apart
+from this release's `azctx_Windows_x86_64.zip` URL and a SHA-256 checksum, so
+other assignments or commands fail closed. It then downloads that
+exact public URL and compares the checksum with the uploaded asset's bytes.
+Only its final `choco push` step receives `CHOCO_API_KEY`, and only after that
+comparison passes. GoReleaser 2.18.3's Chocolatey package embeds only
+amd64/386 archives, so the arm64 ZIP is not part of the package.
 
 The remaining unavoidable native `choco push` cannot satisfy #98 enforcement
 on the current hosted Windows runner. Both the workflow blocker and policy
@@ -162,7 +195,9 @@ Windows. Its pinned GoReleaser action uses `install-only: true` to export the
 tool on `PATH` before either configuration check or the snapshot helper runs;
 the action's normal `args` mode does not export `PATH` for later steps.
 Only native Windows with real `choco pack` can satisfy Chocolatey
-acceptance: the job requires a nonempty `.nupkg` and inspects the packaged nuspec.
+acceptance: the job requires a nonempty `.nupkg`, inspects the packaged nuspec
+and runs `verify_chocolatey.py --archives` to compare its embedded checksum with
+the same snapshot's local x86_64 ZIP.
 The Windows job also validates the three real GoReleaser winget manifests against
 Microsoft's versioned JSON schemas using PowerShell's `Test-Json`; this is schema
 validation, not a native winget installation or submission test.
@@ -174,8 +209,13 @@ is used. Native Homebrew normalization/style runs on macOS. CI's existing lint
 job scans all workflows using actionlint and strict zizmor with no release-debt
 exceptions. A configured check is not evidence of a completed hosted-runner run.
 `make ci-check` additionally exercises the actual readiness script (expecting
-exit 1), rejection mutations for both cask artifact hops and credential scopes,
-and the portable winget publisher's mocked create/update/no-op/denial paths.
+exit 1), rejection mutations for both cask artifact hops, the Chocolatey
+package hop, upload idempotency and credential scopes, and the portable winget
+publisher's mocked create/update/no-op/denial paths. Mocked Python tests cover
+cask semantic drift and unrecognized cask syntax, Chocolatey checksum/URL
+mismatch, unrecognized install-script content and extra package entries, using
+exact real GoReleaser and `brew style --fix` fixtures, and identical, missing
+or conflicting release assets.
 It never executes a real publisher.
 
 ## Authoritative format references

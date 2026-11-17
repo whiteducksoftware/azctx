@@ -24,6 +24,8 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 - Pass explicit `--subscription` to Azure CLI resource commands; use
   `azctx exec <query> -- <cmd>` for Terraform, azd and SDK tools. Exec's isolated
   child variables do not override Azure CLI's subscription default.
+  Exec is not hook-guarded: pin its subscription/tenant GUID pair and follow the
+  [two-guard preflight](docs/ai-agents.md#exec-preflight) before each call.
 - Leave login, broker changes and protected-switch `--yes` to the user.
 - Guard, skills and protected subscriptions reduce mistakes, not authorization
   risk: Azure RBAC, PIM and Conditional Access remain the security boundary.

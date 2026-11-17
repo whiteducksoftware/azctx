@@ -22,7 +22,7 @@ func TestConfiguredFZFPreservesRankingAndProtection(t *testing.T) {
 		code, switches    int
 	}{
 		{"ranked", "", "y\n", 0, 1},
-		{"decline protected", "", selectionDecline, 0, 0},
+		{"decline protected", "", selectionDecline, 1, 0},
 		{"cancel", "1", "", 1, 0},
 		{"Ctrl+C", "130", "", 130, 0},
 	} {
@@ -46,7 +46,7 @@ func TestConfiguredFZFPreservesRankingAndProtection(t *testing.T) {
 			if tc.switches != 0 && !reflect.DeepEqual(fake.Calls[0].Args, []string{accountCommand, setCommand, subscriptionFlag, developmentID}) {
 				t.Fatalf("ranked identity lost: %+v", fake.Calls)
 			}
-			if tc.switches == 0 && configCommandOutput(t, deps, historyCommand, outputFlag, jsonFormat) != "{\"schemaVersion\":1,\"entries\":[]}\n" {
+			if tc.switches == 0 && configCommandOutput(t, deps, historyCommand, outputFlag, jsonFormat) != emptyHistoryJSON {
 				t.Fatal("canceled/unconfirmed fzf switch was recorded")
 			}
 		})

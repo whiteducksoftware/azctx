@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"golang.org/x/term"
 
@@ -31,7 +30,7 @@ func SelectFZF(ctx context.Context, subscriptions []profile.Subscription, messag
 	}
 	rows := make([]string, len(subscriptions))
 	for i, sub := range subscriptions {
-		rows[i] = strconv.Itoa(i) + "\t" + pickerText(sub.DisplayName()) + "\t" + pickerText(sub.Id) + "\t" + pickerText(sub.TenantLabel()) + "\t" + pickerText(sub.Tenant)
+		rows[i] = strconv.Itoa(i) + "\t" + DisplayText(sub.DisplayName()) + "\t" + DisplayText(sub.Id) + "\t" + DisplayText(sub.TenantLabel()) + "\t" + DisplayText(sub.Tenant)
 	}
 	command := exec.CommandContext(ctx, path, fzfArguments(messages)...)
 	// User defaults may contain execute bindings, preview commands or output flags.
@@ -67,15 +66,6 @@ func SelectFZF(ctx context.Context, subscriptions []profile.Subscription, messag
 		}
 	}
 	return -1, errors.New("invalid fzf selection")
-}
-
-func pickerText(value string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, value)
 }
 
 func fzfArguments(messages io.Writer) []string {

@@ -173,12 +173,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download original Linux cask from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: homebrew-cask
+          path: .release-check/original
+          digest-mismatch: error
+
       - name: Download normalized cask from this run
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: homebrew-cask-normalized
           path: .release-check/cask
           digest-mismatch: error
+
+      - name: Verify normalization kept the original URLs, hashes, binary and dependency
+        run: python3 -B .github/scripts/publish_cask.py --check
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
 
       - name: Create tap token
         id: publisher-token
@@ -263,17 +275,14 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Push the native Chocolatey package
+      - name: Transfer the same-run stable Chocolatey package without pushing it
         if: ${{ !contains(github.ref_name, '-') }}
-        shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)) { throw 'Chocolatey publishing requires its explicit API key' }
-          $packages = @(Get-ChildItem dist/azctx.*.nupkg)
-          if ($packages.Count -ne 1) { throw 'Expected exactly one native Chocolatey package' }
-          choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        env:
-          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: chocolatey-package
+          path: dist/azctx.*.nupkg
+          if-no-files-found: error
+          retention-days: 1
 
   windows-publish:
     name: windows-publish
@@ -310,8 +319,8 @@ jobs:
           path: .release-check/windows
           digest-mismatch: error
 
-      - name: Upload verified Windows release assets
-        run: gh release upload "$RELEASE_TAG" .release-check/windows/*.zip .release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json
+      - name: Upload verified Windows release assets idempotently by SHA-256
+        run: python3 -B .github/scripts/upload_release_assets.py .release-check/windows/*.zip .release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -345,3 +354,48 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
           RELEASE_TAG: ${{ github.ref_name }}
+
+  chocolatey-publish:
+    name: chocolatey-publish
+    needs: windows-publish
+    if: ${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}
+    runs-on: windows-latest
+    environment: release
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          # Harden-Runner v2.22.2 supports audit only on hosted Windows.
+          # Native enforcement acceptance remains blocked by release-readiness.
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the Chocolatey package from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: chocolatey-package
+          path: .release-check/chocolatey
+          digest-mismatch: error
+
+      - name: Verify the embedded checksum against the uploaded Windows archive
+        run: python -B .github/scripts/verify_chocolatey.py .release-check/chocolatey
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Push the verified native Chocolatey package
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)) { throw 'Chocolatey publishing requires its explicit API key' }
+          $packages = @(Get-ChildItem .release-check/chocolatey/azctx.*.nupkg)
+          if ($packages.Count -ne 1) { throw 'Expected exactly one native Chocolatey package' }
+          choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}

@@ -25,5 +25,4 @@ bin
 dist/
 
 /azctx
-/.integration/
 /.release-check/

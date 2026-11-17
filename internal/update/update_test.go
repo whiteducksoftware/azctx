@@ -73,6 +73,69 @@ func TestDailyCachedReleaseRedirect(t *testing.T) {
 	}
 }
 
+func TestFutureUpdateCacheExpiresWithClockRollback(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		future time.Duration
+		failed bool
+	}{
+		{name: "one nanosecond", future: time.Nanosecond},
+		{name: "two days", future: 48 * time.Hour},
+		{name: "failed attempt", future: 48 * time.Hour, failed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, requests := futureReleaseServer(tc.failed)
+			defer server.Close()
+			var output bytes.Buffer
+			checker := testChecker(t, server, &output)
+			present := time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC)
+			now := present.Add(tc.future)
+			checker.Now = func() time.Time { return now }
+			if err := checker.Check("owner", "repo"); (err != nil) != tc.failed {
+				t.Fatalf("seed future cache: %v", err)
+			}
+			now = present
+			status, err := checker.CachedStatus()
+			if err != nil || !status.Stale {
+				t.Fatalf("future cache status=%+v err=%v", status, err)
+			}
+			output.Reset()
+			if err := checker.Check("owner", "repo"); err != nil {
+				t.Fatal(err)
+			}
+			if requests.Load() != 2 || !strings.Contains(output.String(), "v2026.12.0") {
+				t.Fatalf("future cache suppressed refresh: requests=%d notice=%q", requests.Load(), &output)
+			}
+			status, err = checker.CachedStatus()
+			if err != nil || status.Stale || status.State != statusAvailable || status.LatestVersion != "2026.12.0" {
+				t.Fatalf("refreshed cache status=%+v err=%v", status, err)
+			}
+			if err := checker.Check("owner", "repo"); err != nil || requests.Load() != 2 {
+				t.Fatalf("refreshed cache not reused: requests=%d err=%v", requests.Load(), err)
+			}
+		})
+	}
+}
+
+func futureReleaseServer(failFirst bool) (*httptest.Server, *atomic.Int32) {
+	requests := &atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/latest") {
+			count := requests.Add(1)
+			if count == 1 && failFirst {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			tag := latestTag
+			if count > 1 {
+				tag = "v2026.12.0"
+			}
+			http.Redirect(w, r, "/owner/repo/releases/tag/"+tag, http.StatusFound)
+		}
+	}))
+	return server, requests
+}
+
 func TestUpdateEnvironmentAndTerminalGates(t *testing.T) {
 	for _, gate := range []string{"pipe", "CI", "empty CI", "AZCTX_NO_UPDATE_CHECK"} {
 		t.Run(gate, func(t *testing.T) {

@@ -36,9 +36,13 @@ func completeSubscriptions(deps Dependencies) func(*cobra.Command, []string, str
 		}
 		for _, sub := range subs {
 			available[strings.ToLower(sub.Id)] = true
+			if strings.Contains(sub.Name, "/") {
+				add(sub.Id)
+				continue
+			}
 			add(sub.Name)
 			for _, tenant := range []string{sub.TenantName, sub.TenantDomain, sub.Tenant} {
-				if tenant != "" {
+				if tenant != "" && !strings.Contains(tenant, "/") {
 					add(tenant + "/" + sub.Name)
 				}
 			}

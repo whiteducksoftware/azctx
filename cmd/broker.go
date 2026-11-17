@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -145,7 +146,7 @@ func confirmBroker(command *cobra.Command, deps Dependencies) (bool, error) {
 	if _, err := fmt.Fprint(command.ErrOrStderr(), "Continue? [y/N] "); err != nil {
 		return false, err
 	}
-	answer, err := readConfirmation(command.InOrStdin())
+	answer, err := readConfirmation(command.Context(), command.InOrStdin())
 	if err != nil {
 		return false, fmt.Errorf("read broker confirmation (no changes made): %w", err)
 	}
@@ -158,20 +159,31 @@ func confirmBroker(command *cobra.Command, deps Dependencies) (bool, error) {
 
 // Do not buffer ahead or replace stdin: the attached az login needs the same
 // terminal and any input following the confirmation line.
-func readConfirmation(input io.Reader) (string, error) {
+func readConfirmation(ctx context.Context, input io.Reader) (string, error) {
 	var answer strings.Builder
 	var char [1]byte
 	for range 256 {
-		if _, err := io.ReadFull(input, char[:]); err != nil {
+		if err := readPromptByte(ctx, input, char[:]); err != nil {
 			return "", err
 		}
 		switch char[0] {
 		case '\n':
-			return answer.String(), nil
+			return answer.String(), echoPromptByte(input, '\n')
 		case '\x03':
 			return "", ui.ErrInterrupted
+		case '\b', '\x7f':
+			if answer.Len() == 0 {
+				continue
+			}
+			text := answer.String()
+			answer.Reset()
+			answer.WriteString(text[:len(text)-1])
+			char[0] = '\b'
 		default:
 			answer.WriteByte(char[0])
+		}
+		if err := echoPromptByte(input, char[0]); err != nil {
+			return "", err
 		}
 	}
 	return "", errors.New("confirmation is too long")

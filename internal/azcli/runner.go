@@ -83,7 +83,7 @@ func (r *execRunner) Run(ctx context.Context, args []string, options Options) (R
 	safeStderr := redact.NewWriter(diagnostic)
 	command.Stderr = safeStderr
 	err := errors.Join(child.RunAttached(command), safeStderr.Flush())
-	if err != nil && ctx.Err() != nil {
+	if ctx.Err() != nil {
 		err = errors.Join(ctx.Err(), err)
 	}
 	result := Result{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: -1}

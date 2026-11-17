@@ -89,6 +89,40 @@ Never autonomously run `az account set`, azctx subscription/tenant switching,
 `azctx login`, `azctx auth broker`, or protected-subscription `--yes`.
 Ask the user to handle authentication and explicit protected switching.
 
+### Exec preflight
+
+**`azctx exec` is not hook-guarded**: its first literal word is `azctx`, not
+one of the hook's watched tools. Agents must perform the checks themselves.
+Resolve the chosen exec query to one schema-1 list entry and pin its subscription
+`id` and `tenantId` GUIDs. Replace the sample GUIDs with that reviewed pair and
+reuse the subscription GUID for exec, not an unresolved name or alias.
+From the same working directory as the reviewed nearest `.azctx.yaml`, run:
+
+```sh
+azctx guard --no-input -o json &&
+azctx guard --no-input --subscription 11111111-1111-1111-1111-111111111111 --tenant aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa -o json &&
+azctx exec --no-input 11111111-1111-1111-1111-111111111111 -- terraform plan -input=false
+```
+
+Execute only if both guards succeed. The first guard has no explicit overrides:
+it checks the current default against the reviewed project. The explicit guard
+flags replace project expectations: the second checks the current default
+against the resolved target, **not** the project file. With unchanged context,
+their conjunction establishes that the target meets the project expectations;
+the explicit guard alone cannot establish this. Stop on every nonzero status;
+never auto-switch or rewrite the project to repair a mismatch.
+Repeat both guards for each exec call. For azd, replace only the child command
+after `--` with `azd env get-values`.
+
+If no project file is intended, independently compare the resolved pair with
+user-reviewed GUID expectations before the explicit target guard and exec.
+That is not a project check or a fallback after a failed project guard.
+These are point-in-time checks, not a lock: re-inspect and repeat if the profile,
+project, default or intended target changes between steps. Child tool-specific
+overrides must still be checked independently.
+
+### Statuses
+
 With JSON output, data is on stdout and one azctx error object is on stderr;
 read `code` and `exit_code`, not message text. Statuses are 0 success, 1 general
 error, 2 no/ambiguous match, 3 sign-in failure, 4 guard mismatch, 130 canceled.
@@ -145,9 +179,12 @@ provider settings or azd environment. A mismatching default can therefore block
 even a correctly targeted command; ask the user to resolve it, do not bypass it.
 
 This lightweight hook is not a full shell analyzer. It does not detect wrapped
-commands (`env ... az`, `bash -c ...`), absolute executable paths, aliases,
+commands (`azctx exec ... -- terraform ...`, `env ... az`, `bash -c ...`),
+absolute executable paths, aliases,
 commands after `cd ... &&`, or commands later in a compound shell string.
 Keep context-sensitive calls as separate, directly named Bash commands.
+For exec, use the explicit [two-guard preflight](#exec-preflight); this guidance
+does not add wrapper parsing or automatic hook enforcement.
 Other tools, MCP calls, disabled hooks and skill-only installations have no
 automatic hook enforcement. Agents can ignore instructions.
 

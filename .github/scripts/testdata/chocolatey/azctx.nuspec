@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>azctx</id>
+    <version>2026.11.0</version>
+    <owners>white duck GmbH</owners>
+    <title>azctx</title>
+    <authors>white duck GmbH</authors>
+    <projectUrl>https://github.com/whiteducksoftware/azctx</projectUrl>
+    <copyright>Copyright 2026 white duck GmbH</copyright>
+    <licenseUrl>https://github.com/whiteducksoftware/azctx/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <bugTrackerUrl>https://github.com/whiteducksoftware/azctx/issues</bugTrackerUrl>
+    <tags>azctx azure cli</tags>
+    <description>Faster switching between Azure Subscriptions in your Azure CLI.</description>
+    <releaseNotes>https://github.com/whiteducksoftware/azctx/releases/tag/2026.11.0</releaseNotes>
+    <dependencies>
+      <dependency id="azure-cli" version="2.61.0" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

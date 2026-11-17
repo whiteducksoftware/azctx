@@ -107,9 +107,9 @@ func WriteError(output io.Writer, format string, err error) int {
 	if format == formatJSON {
 		_ = json.NewEncoder(output).Encode(payload)
 	} else if status != ExitInterrupted {
-		_, _ = fmt.Fprintf(output, "Error: %s\n", payload.Message)
+		_, _ = fmt.Fprintf(output, "Error: %s\n", ui.DisplayText(payload.Message))
 		for _, candidate := range payload.Candidates {
-			_, _ = fmt.Fprintf(output, "  %s/%s (%s)\n", candidate.TenantID, candidate.Name, candidate.ID)
+			_, _ = fmt.Fprintf(output, "  %s/%s (%s)\n", ui.DisplayText(candidate.TenantID), ui.DisplayText(candidate.Name), ui.DisplayText(candidate.ID))
 		}
 	}
 	return status
