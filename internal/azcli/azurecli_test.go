@@ -1,10 +1,10 @@
 package azcli_test
 
 import (
+	"io/fs"
 	"path/filepath"
 	"testing"
-
-	"github.com/spf13/afero"
+	"testing/fstest"
 
 	"github.com/whiteducksoftware/azctx/internal/azcli"
 	"github.com/whiteducksoftware/azctx/internal/testutil"
@@ -12,22 +12,15 @@ import (
 
 func TestCLIReadsInjectedConfiguration(t *testing.T) {
 	const tenant = "tenant-id"
-	files := afero.NewMemMapFs()
-	configDir := filepath.Join("fixture", "azure")
-	if err := files.MkdirAll(configDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 	profile := `{"subscriptions":[{"id":"sub","name":"Production","tenantId":"tenant-id"},{"id":"tenant-id","name":"N/A(tenant level account)","isDefault":true}]}`
-	if err := afero.WriteFile(files, filepath.Join(configDir, "azureProfile.json"), []byte(profile), 0o600); err != nil {
-		t.Fatal(err)
+	files := fstest.MapFS{
+		"azureProfile.json": &fstest.MapFile{Data: []byte(profile)},
+		"azctxTenants.json": &fstest.MapFile{Data: []byte("\xef\xbb\xbf" + `[{"tenantId":"tenant-id","displayName":"Acme"}]`)},
 	}
-	if err := afero.WriteFile(files, filepath.Join(configDir, "azctxTenants.json"), []byte("\xef\xbb\xbf"+`[{"tenantId":"tenant-id","displayName":"Acme"}]`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("AZURE_CONFIG_DIR", configDir)
+	t.Setenv("AZURE_CONFIG_DIR", filepath.Join("fixture", "azure"))
 	t.Setenv("PATH", "")
 	fake := &testutil.FakeRunner{}
-	cli, err := azcli.New(afero.NewReadOnlyFs(files), fake, "")
+	cli, err := azcli.New(files, fake, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,22 +42,18 @@ func TestCLIReadsInjectedConfiguration(t *testing.T) {
 	if len(fake.Calls) != 0 {
 		t.Fatalf("read-only operations invoked az: %+v", fake.Calls)
 	}
+	contents, err := fs.ReadFile(files, "azureProfile.json")
+	if err != nil || string(contents) != profile {
+		t.Fatalf("profile changed: %q, %v", contents, err)
+	}
 }
 
 func TestCLIConfigurationErrors(t *testing.T) {
-	files := afero.NewMemMapFs()
+	files := fstest.MapFS{}
 	if _, err := azcli.New(files, &testutil.FakeRunner{}, "absent"); err == nil {
-		t.Fatal("missing configuration directory must fail")
-	}
-	if err := files.MkdirAll("config", 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := azcli.New(files, &testutil.FakeRunner{}, "config"); err == nil {
 		t.Fatal("missing profile must fail")
 	}
-	if err := afero.WriteFile(files, filepath.Join("config", "azureProfile.json"), []byte(`{}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	files["azureProfile.json"] = &fstest.MapFile{Data: []byte(`{}`)}
 	cli, err := azcli.New(files, &testutil.FakeRunner{}, "config")
 	if err != nil {
 		t.Fatal(err)

@@ -1,4 +1,4 @@
-.PHONY: build lint test check
+.PHONY: build lint test check golden
 
 build:
 	go build .
@@ -10,3 +10,6 @@ test:
 	go test -race -cover ./...
 
 check: lint test
+
+golden:
+	go test ./internal/ui -count=1 -update

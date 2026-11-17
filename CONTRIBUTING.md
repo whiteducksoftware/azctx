@@ -22,12 +22,17 @@ From the repository root:
 make check  # Lint and race-enabled tests with coverage
 make test   # Tests alone
 make build  # Build the azctx executable
+make golden # Update picker screen goldens; review and commit intentional changes
 ```
 
 The [Makefile](Makefile) is the source of truth for available targets.
 Tests use injected dependencies and a portable fake `az`; no Azure CLI
 installation, Azure login, real tenant or credentials are needed for checks.
 Keep fixtures synthetic and follow the boundaries in [AGENTS.md](AGENTS.md).
+Picker tests run real Bubble Tea programs with bounded waits and synthetic key
+events at 60, 100 and 160 columns; they do not need an interactive terminal.
+After `make golden`, run `make check` and confirm a second `make golden` leaves
+the reviewed golden files unchanged.
 
 ## Changes and review
 
