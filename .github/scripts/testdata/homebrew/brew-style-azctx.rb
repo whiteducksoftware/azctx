@@ -6,11 +6,11 @@ cask "azctx" do
 
   on_macos do
     on_arm do
-      sha256 "d5f72de39f5a312261a8174957f876628411ca1fde36d39ad2725abfa4d0c57d"
+      sha256 "34e08860556f5c7935f52c5cc1a55142e3dab63ab2c91d886abffa280f89ecc3"
       url "https://github.com/whiteducksoftware/azctx/releases/download/#{version}/azctx_Darwin_arm64.tar.gz"
     end
     on_intel do
-      sha256 "8f9d8c59166dc08ee6cd9105dc8eace6a558d25179c3a10e70006db6b0b7e20e"
+      sha256 "efd28bb10cec8e59165a7a3d3609f7f52e688b7f824208ea7492e0071944b6ac"
       url "https://github.com/whiteducksoftware/azctx/releases/download/#{version}/azctx_Darwin_x86_64.tar.gz"
     end
   end

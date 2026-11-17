@@ -73,7 +73,7 @@ jobs:
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: v2.19.0
+          version: v2.20.2
           args: release --clean --config .release-check/release.yaml
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -244,7 +244,7 @@ jobs:
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: v2.19.0
+          version: v2.20.2
           # Chocolatey is not published for 2026.11 (#100).
           args: release --clean --skip=publish --skip=chocolatey --config .goreleaser-windows.yaml
         env:

@@ -70,7 +70,7 @@ govulncheck, zizmor, GoReleaser, Syft and Go) manually. When upgrading one:
    change them or leave pins inconsistent. With authorization, update every
    occurrence together.
 2. Update version mentions in README, AGENTS, CONTRIBUTING and `docs/` that
-   are spelled differently, such as "Go 1.27.4" or "GoReleaser 2.19.0". Leave
+   are spelled differently, such as "Go 1.27.4" or "GoReleaser 2.20.2". Leave
    released upgrade-guide history unchanged.
 3. Run `make check` and `make ci-check`.
 
@@ -80,7 +80,7 @@ manual minimum-versus-latest matrix in [integration tests](integration-tests.md)
 The maintained latest pins are the seven tool pins above, including the
 preferred Go 1.27.4 toolchain and golangci-lint v2.15.0.
 GoReleaser owns the generated package and winget manifest schema versions
-(currently 1.12.0); `check_winget.ps1` fetches Microsoft's schema matching each
+(currently 1.28.0); `check_winget.ps1` fetches Microsoft's schema matching each
 generated `ManifestVersion`. Runner-provided Python, Ruby, PowerShell,
 Homebrew, Chocolatey, Docker and hosted `*-latest` runner images are managed
 by the platform and are not pinned in this repository.
