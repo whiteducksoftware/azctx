@@ -20,9 +20,10 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
 - `internal/ui/`: Bubble Tea/Bubbles list picker, Lip Gloss rendering and screen goldens.
 - `internal/version/`: release ldflags and Go build metadata for `version -o text|json`.
 - `internal/update/`: update checks.
-- `internal/state/`: private previous-subscription ID storage.
+- `internal/state/`: private previous-subscription and recent-ID storage.
 - `internal/storage/`: atomic private files and update-check process locks outside Azure configuration.
-- `internal/config/`: documentation-only placeholder for a later layer.
+- `internal/config/`: strict version-1 YAML and shared private config paths.
+- `internal/selection/`: read-only visibility/matching catalog without IO or prompts.
 - `internal/testutil/`: recording runner and portable fake `az`.
 - `log/`: plain stderr diagnostics through slog and Lip Gloss.
 
