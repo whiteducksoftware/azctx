@@ -65,6 +65,12 @@ their changes to the table below.
 | Project guards | `guard` checks the nearest `.azctx.yaml`, requiring a single strict version-1 document with tenant/subscription GUIDs. Explicit `--subscription`/`--tenant` flags replace project expectations. | Repository and deployment authors. | Match is silent 0; mismatch 4; missing/malformed file 1. A malformed nearer file never falls back to an ancestor. Treat cloned files as untrusted: azctx never automatically switches, logs in or records state/history because of them. |
 | Current warnings and new names | Human `-c` warns on project mismatch/invalid project without failing; JSON/plain fields remain unchanged. `env`, `exec` and `guard` are now command names. | Interactive operators, prompt consumers and subscriptions with those names. | Use `azctx -- env`, `azctx -- exec` or `azctx -- guard` for literal subscription queries. Use JSON/plain current fields for machine consumers. These read-only commands never run updates or invoke Azure CLI. |
 
+## AI agents
+
+| Area | Change | Who is affected | What to do |
+| --- | --- | --- | --- |
+| Agent Skill and Claude plugin | Versioned `skills/azctx/` guidance and an optional Claude Bash `PreToolUse` guard are available through this repository's plugin marketplace. | Claude Code, Copilot, Codex and Cursor users. | See the draft [AI agent guide](ai-agents.md). Inspect JSON context, use explicit Azure CLI subscription IDs and isolated exec for environment-aware tools; leave authentication/protected switching to the user. The hook needs Python 3.10+ and azctx on PATH; absent azctx/project emits a notice and allows, any guard failure blocks. These mistake-reduction tools are no security boundary: Azure RBAC, PIM and Conditional Access still control access. |
+
 ## Upgrade checklist
 
 - Check the breaking changes above before upgrading.

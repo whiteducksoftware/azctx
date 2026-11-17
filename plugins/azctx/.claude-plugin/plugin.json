@@ -1,0 +1,10 @@
+{
+  "name": "azctx",
+  "version": "2026.11.0",
+  "description": "Use Azure context without changing the shared Azure CLI default.",
+  "author": {
+    "name": "white duck GmbH"
+  },
+  "repository": "https://github.com/whiteducksoftware/azctx",
+  "license": "MIT"
+}
