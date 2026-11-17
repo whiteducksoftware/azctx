@@ -68,7 +68,10 @@ func TestInvalidIDsNeverReachAZ(t *testing.T) {
 func TestLoginKeepsFailureCauseWithoutERRORPrefix(t *testing.T) {
 	for _, message := range []string{"", "device code expired", "ERROR: denied\n"} {
 		failure := errors.New("process failed")
-		fake := &testutil.FakeRunner{Responses: []testutil.Response{{Result: azcli.Result{Stderr: message}, Err: failure}}}
+		fake := &testutil.FakeRunner{Responses: []testutil.Response{
+			{Result: azcli.Result{Stdout: `{"azure-cli":"2.61.0"}`}},
+			{Result: azcli.Result{Stderr: message}, Err: failure},
+		}}
 		cli, err := azcli.New(fstest.MapFS{profileFilename: &fstest.MapFile{Data: []byte(`{}`)}}, fake, "")
 		if err != nil {
 			t.Fatal(err)

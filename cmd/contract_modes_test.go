@@ -16,7 +16,7 @@ func TestContractTenantSubscriptionQuery(t *testing.T) {
 			fake := &testutil.FakeRunner{Responses: []testutil.Response{{}}}
 			deps := commandDependencies(t, fake)
 			files := deps.FS.(fstest.MapFS)
-			files[tenantCacheFile] = &fstest.MapFile{Data: []byte(`[{"tenantId":"` + tenantID + `","displayName":"Acme"}]`)}
+			files[profileFile] = &fstest.MapFile{Data: []byte(strings.ReplaceAll(fixtureProfile, `"tenantDisplayName":"`+tenantID+`"`, `"tenantDisplayName":"Acme"`))}
 			root := cmd.NewRootCommand(deps)
 			root.SetArgs([]string{query})
 			if err := root.Execute(); err != nil {
@@ -31,7 +31,7 @@ func TestContractTenantSubscriptionQuery(t *testing.T) {
 
 func TestContractCurrentPlainFormats(t *testing.T) {
 	for _, tc := range []struct{ format, want string }{
-		{"id", productionID + "\n"},
+		{idFormat, productionID + "\n"},
 		{nameFormat, productionName + "\n"},
 		{"tenant", tenantID + "\n"},
 		{textFormat, "Active subscription: " + tenantID + "/" + productionName + " (" + tenantID + "/" + productionID + ")\n"},

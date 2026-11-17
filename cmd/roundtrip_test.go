@@ -23,13 +23,20 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 	if err := os.Mkdir(config, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	profilePath := filepath.Join(config, "azureProfile.json")
-	writeFixture(t, profilePath, fixtureProfile)
+	azureFiles := map[string]string{
+		profileFile:         fixtureProfile,
+		azureConfigFile:     "[cloud]\nname=AzureCloud\n[core]\nlogin_experience_v2=on\n",
+		cloudsConfigFile:    "[AzureCloud]\nsubscription=" + productionID + "\n",
+		"azctxTenants.json": "malformed obsolete-cache sentinel",
+	}
+	for name, contents := range azureFiles {
+		writeFixture(t, filepath.Join(config, name), contents)
+	}
 	fixtures, record := filepath.Join(dir, "fixtures.json"), filepath.Join(dir, "calls.jsonl")
 	writeFixture(t, fixtures, `[
-		{"args":["rest","--method","get","--url","/tenants?api-version=2020-01-01","--output","json"],"stdout":"{\"value\":[]}"},
+		{"args":["version","-o","json"],"stdout":"{\"azure-cli\":\"2.61.0\"}"},
 		{"args":["login","--use-device-code"]},
-		{"args":["rest","--method","get","--url","/tenants?api-version=2020-01-01","--output","json"],"stdout":"{\"value\":[]}"},
+		{"args":["version","-o","json"],"stdout":"{\"azure-cli\":\"2.61.0\"}"},
 		{"args":["login"],"stderr":"ERROR: denied\n","exitCode":7},
 		{"args":["account","set","--subscription","`+productionID+`"]}
 	]`)
@@ -37,7 +44,9 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 	t.Setenv("AZURE_CONFIG_DIR", config)
 	t.Setenv("FAKEAZ_FIXTURES", fixtures)
 	t.Setenv("FAKEAZ_RECORD", record)
-	t.Setenv("FAKEAZ_ENV_KEYS", "AZURE_CONFIG_DIR")
+	t.Setenv("AZURE_CLOUD_NAME", azureCloudName)
+	t.Setenv("AZURE_CORE_LOGIN_EXPERIENCE_V2", "on")
+	t.Setenv("FAKEAZ_ENV_KEYS", "AZURE_CONFIG_DIR,AZURE_CORE_LOGIN_EXPERIENCE_V2")
 	// An interruption regression must fail locally, never contact GitHub.
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:0")
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:0")
@@ -53,7 +62,7 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 		{args: []string{currentFlag}, text: "Active subscription:", data: true},
 		{args: []string{versionCommand}, text: "azctx version ", data: true},
 		{args: []string{versionCommand, outputFlag, jsonFormat}, text: `"goVersion":"go`, data: true},
-		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 0 tenants and 2 subscriptions."},
+		{args: []string{loginCommand, argumentDelimiter, deviceCodeFlag}, text: "Successfully fetched 1 tenants and 2 subscriptions."},
 		{args: []string{loginCommand}, code: 1, text: "failed to login: denied"},
 		{args: []string{productionName}},
 		{args: []string{"-"}, code: 1, text: "no previous subscription found"},
@@ -91,13 +100,29 @@ func TestBinaryFakeAZRoundTrip(t *testing.T) {
 			}
 		})
 	}
-	got, err := os.ReadFile(profilePath)
-	if err != nil || string(got) != fixtureProfile {
-		t.Fatalf("profile changed: %q, %v", got, err)
+	assertAzureRoundTrip(t, config, record, azureFiles)
+}
+
+func assertAzureRoundTrip(t *testing.T, config, record string, azureFiles map[string]string) {
+	t.Helper()
+	for name, want := range azureFiles {
+		got, err := os.ReadFile(filepath.Join(config, name))
+		if err != nil || string(got) != want {
+			t.Fatalf("Azure file %s changed: %q, %v", name, got, err)
+		}
+	}
+	entries, err := os.ReadDir(config)
+	if err != nil || len(entries) != len(azureFiles) {
+		t.Fatalf("Azure files created/deleted: %+v, %v", entries, err)
 	}
 	calls, err := os.ReadFile(record)
-	if err != nil || strings.Count(string(calls), "\n") != 5 {
+	if err != nil || strings.Count(string(calls), "\n") != 5 ||
+		strings.Count(string(calls), `"AZURE_CORE_LOGIN_EXPERIENCE_V2=off"`) != 2 ||
+		strings.Count(string(calls), `"AZURE_CORE_LOGIN_EXPERIENCE_V2=on"`) != 3 {
 		t.Fatalf("recorded calls = %s, %v", calls, err)
+	}
+	if got := os.Getenv("AZURE_CORE_LOGIN_EXPERIENCE_V2"); got != "on" {
+		t.Fatalf("parent environment changed: %q", got)
 	}
 }
 
