@@ -272,7 +272,7 @@ a PR from that fork branch to `microsoft/winget-pkgs` manually. For example,
 ```sh
 gh pr create --repo microsoft/winget-pkgs \
   --head whiteducksoftware:azctx-2026.11.0 --base master \
-  --title 'New version: whiteducksoftware.azctx version 2026.11.0' \
+  --title 'Update: whiteducksoftware.azctx to 2026.11.0' \
   --body 'Reviewed generated manifests for the published 2026.11.0 release.'
 ```
 

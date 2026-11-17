@@ -77,6 +77,8 @@ jobs:
           args: release --clean --config .release-check/release.yaml
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # An RC and its final release can share a commit; release the pushed tag.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: Attest archives
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -247,6 +249,7 @@ jobs:
           args: release --clean --skip=publish --skip=chocolatey --config .goreleaser-windows.yaml
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: Transfer only archives, checksums, SBOMs and real winget manifests
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

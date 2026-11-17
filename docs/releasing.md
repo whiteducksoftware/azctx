@@ -32,6 +32,8 @@ their output before any token exists. See
   `Microsoft.AzureCLI` >=2.61.0. Both copyright years use the release date.
   winget updates only the version branch in the `whiteducksoftware/winget-pkgs`
   fork; opening the upstream PR remains manual.
+- Both GoReleaser steps set `GORELEASER_CURRENT_TAG` to the pushed tag, so a
+  release candidate and its final release can point to the same commit.
 - Both configurations classify prereleases automatically. Cask and winget
   `skip_upload: auto` protect direct GoReleaser use; the workflow additionally
   excludes every hyphenated prerelease tag from the tap and winget publishers.
