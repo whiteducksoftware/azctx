@@ -2,7 +2,6 @@
 
 ![azctx](assets/img/DB-WD-azctx-TW-440x220px@2x.png)
 
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/whiteducksoftware/azctx/badge)](https://scorecard.dev/viewer/?uri=github.com/whiteducksoftware/azctx)
 [![CI](https://github.com/whiteducksoftware/azctx/actions/workflows/ci.yaml/badge.svg)](https://github.com/whiteducksoftware/azctx/actions/workflows/ci.yaml)
 [![Latest published release](https://img.shields.io/github/v/release/whiteducksoftware/azctx)](https://github.com/whiteducksoftware/azctx/releases)
 
