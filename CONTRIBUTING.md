@@ -3,7 +3,7 @@
 ## Setup and checks
 
 Install Git, Make and Go as declared in [go.mod](go.mod): the source minimum is
-Go 1.26 and the preferred toolchain is **Go 1.27.4**. Keep automatic toolchain
+Go 1.26.7 and the preferred toolchain is **Go 1.27.4**. Keep automatic toolchain
 selection enabled (the default, `GOTOOLCHAIN=auto`). The preferred patch supersedes
 the release plan's original 1.27.2 pin for a security fix; see
 [the upgrade guide](docs/upgrade.md).

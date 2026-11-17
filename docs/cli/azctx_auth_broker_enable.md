@@ -20,17 +20,17 @@ azctx auth broker enable [flags]
 ### Options
 
 ```
-  -h, --help   help for enable
-      --yes    Confirm account clear, persisted broker setting change and Azure sign-in
+  -h, --help[=true|false]   help for enable
+      --yes[=true|false]    Confirm account clear, persisted broker setting change and Azure sign-in
 ```
 
 ### Options inherited from parent commands
 
 ```
-      --all             Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
-      --no-input        Never open a picker or prompt (also AZCTX_NO_INPUT=1)
-  -o, --output string   Output format (depends on command)
-      --verbose         Enable debug diagnostics
+      --all[=true|false]        Expose configured hidden subscriptions; list also includes disabled, tenant-level and other-cloud accounts
+      --no-input[=true|false]   Never open a picker or prompt (also AZCTX_NO_INPUT=1)
+  -o, --output string           Output format (depends on command)
+      --verbose[=true|false]    Enable debug diagnostics
 ```
 
 ### SEE ALSO
