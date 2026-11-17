@@ -61,7 +61,9 @@ azctx is a Go CLI for switching Azure CLI subscriptions and wrapping Azure login
   environment overrides and unconfirmed non-interactive runs never mutate.
 - Doctor is profile-independent and offline: only `az version`, allowlisted
   settings and account-type counts; never raw process diagnostics or identities.
-- Validate subscription and tenant IDs as GUIDs before passing them to `az`.
+- Validate derived subscription and tenant IDs as GUIDs before passing them to
+  `az`. Only user-supplied login arguments after an explicit `--` are exempt;
+  do not enable that exception for data from profile/config/project files.
 - Tests use injected runners or the fake `az`, isolated filesystems and fixtures; never a real tenant.
 - Injected `io/fs.FS` values are read-only and rooted at the Azure config directory.
 - Keep data on stdout, messages and the picker on stderr; Ctrl+C propagates to exit 130.

@@ -120,7 +120,7 @@ func Execute() error {
 	command, err := NewRootCommand(Dependencies{}).ExecuteC()
 	// Cobra adds this hint only when command discovery fails, before invocation.
 	if err != nil && command != nil && command.CalledAs() == "" {
-		return fmt.Errorf("%w\nRun '%s --help' for usage.", err, command.CommandPath())
+		return fmt.Errorf("%w\nRun '%s --help' for usage.", err, command.CommandPath()) //nolint:revive // Preserve the public multiline command-discovery diagnostic.
 	}
 	return err
 }

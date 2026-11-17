@@ -105,7 +105,11 @@ func TestMFALoginRetriesOnlyFailedTenantsWithOneConfirmation(t *testing.T) {
 		{},
 	}}
 	deps := commandDependencies(t, fake)
-	deps.FS.(fstest.MapFS)[profileFile].Data = []byte(`{"subscriptions":[
+	files, ok := deps.FS.(fstest.MapFS)
+	if !ok {
+		t.Fatal("fixture is not a MapFS")
+	}
+	files[profileFile].Data = []byte(`{"subscriptions":[
 		{"id":"11111111-1111-1111-1111-111111111111","tenantId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","environmentName":"AzureCloud"},
 		{"id":"22222222-2222-2222-2222-222222222222","tenantId":"` + mfaTenant + `","environmentName":"AzureCloud"},
 		{"id":"33333333-3333-3333-3333-333333333333","tenantId":"` + registrationTenant + `","environmentName":"AzureCloud"}]}`)

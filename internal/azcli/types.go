@@ -20,6 +20,9 @@ type CLI struct {
 	// Context and Platform are optional login execution boundaries.
 	Context  context.Context
 	Platform string
+	// LoginPassthrough permits only the user's explicit argv after --. IDs
+	// derived by azctx must still be validated before adding them to that argv.
+	LoginPassthrough bool
 
 	// IncludeAll exposes hidden entries for listing, never for cloud switching.
 	IncludeAll bool

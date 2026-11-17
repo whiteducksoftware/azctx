@@ -11,7 +11,7 @@ import (
 
 type Profile struct {
 	Subscriptions  []Subscription `json:"subscriptions"`
-	InstallationId string         `json:"installationId"`
+	InstallationId string         `json:"installationId"` //nolint:revive // Preserve the established profile model field names without a stack-wide API rename.
 }
 
 type User struct {
@@ -20,11 +20,11 @@ type User struct {
 }
 
 type ManagedTenant struct {
-	Id string `json:"tenantId"`
+	Id string `json:"tenantId"` //nolint:revive // Preserve the established profile model field names without a stack-wide API rename.
 }
 
 type Subscription struct {
-	Id           string          `json:"id"`
+	Id           string          `json:"id"` //nolint:revive // Preserve the established profile model field names without a stack-wide API rename.
 	Name         string          `json:"name"`
 	State        string          `json:"state"`
 	User         User            `json:"user"`
@@ -33,7 +33,7 @@ type Subscription struct {
 	TenantName   string          `json:"tenantDisplayName"`
 	TenantDomain string          `json:"tenantDefaultDomain"`
 	Environment  string          `json:"environmentName"`
-	HomeTenantId string          `json:"homeTenantId"`
+	HomeTenantId string          `json:"homeTenantId"` //nolint:revive // Preserve the established profile model field names without a stack-wide API rename.
 	ManagedBy    []ManagedTenant `json:"managedByTenants"`
 }
 

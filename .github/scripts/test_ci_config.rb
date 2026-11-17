@@ -129,4 +129,34 @@ assert(audit.fetch('with').fetch('inputs') == '.github/workflows' &&
        !audit.fetch('with').key?('min-severity'),
        'zizmor must scan every workflow without hiding findings by confidence or severity')
 
-puts 'PASS: YAML parses; maintained shared action pins; audit mode and checkout protections; snapshot caches/publishers disabled; exact release exceptions; automatic toolchain diagnostics; Go 1.26 floor / 1.27.3 security patch; scanning remains enabled'
+lint = YAML.safe_load(File.read('.golangci.yml')).fetch('linters')
+%w[errcheck govet revive gocritic nilerr errorlint].each do |name|
+  assert(lint.fetch('enable').include?(name), "#{name} must be explicitly enabled")
+end
+assert(lint.fetch('settings').fetch('errorlint').fetch('asserts') == true,
+       'errorlint must check assertions')
+assert(lint.fetch('settings').fetch('errcheck').fetch('check-type-assertions') == true,
+       'errcheck must check type assertion failures')
+%w[.goreleaser.yaml .goreleaser-windows.yaml].each do |path|
+  config = YAML.safe_load(File.read(path))
+  config.fetch('builds').each do |build|
+    assert(build.fetch('env').include?('CGO_ENABLED=0') &&
+           build.fetch('flags').include?('-trimpath') &&
+           build.fetch('mod_timestamp') == '{{ .CommitTimestamp }}',
+           "#{path} must build private-path-free static binaries with a commit timestamp")
+    assert(build.fetch('ldflags').any? { |flag| flag.include?('BuildDate={{.CommitDate}}') },
+           "#{path} must not embed the wall-clock build date")
+  end
+end
+security_steps = ci.fetch('jobs').fetch('security').fetch('steps')
+assert(security_steps.any? { |step| step['run'] == 'make fuzz' },
+       'CI must exercise all three fuzzers')
+makefile = File.read('Makefile')
+%w[Profile Config Project].zip(%w[profile config project]).each do |name, package|
+  assert(makefile.include?("go test ./internal/#{package} -run '^$$' -fuzz '^Fuzz#{name}$$' -fuzztime=60s"),
+         "#{name} must get its own 60-second fuzz run")
+end
+assert(makefile.include?("CGO_ENABLED=0 go build -trimpath ."), 'make build must use the hardened build flags')
+assert(makefile.include?("test: agent-check"), 'make check/test must retain hook coverage')
+
+puts 'PASS: YAML; shared action pins; audit/checkout protections; publisher-disabled snapshots; exact release exceptions; toolchain diagnostics; scanners; explicit strict linters/assertions; three 60s fuzzers; reproducible build flags; hook coverage'

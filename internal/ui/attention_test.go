@@ -31,7 +31,10 @@ func TestPickerAttentionColumns(t *testing.T) {
 			model := teatest.NewTestModel(t, ui.NewPicker(subs, width, 15), teatest.WithInitialTermSize(width, 15))
 			model.Send(tea.KeyMsg{Type: tea.KeyDown})
 			model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-			final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+			final, ok := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+			if !ok {
+				t.Fatal("final model is not a picker")
+			}
 			if index, err := final.Selection(); err != nil || index != 1 || subs[index].Id != productionID {
 				t.Fatalf("labeled identity index=%d err=%v", index, err)
 			}

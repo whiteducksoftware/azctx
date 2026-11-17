@@ -21,7 +21,7 @@ func TestPickerFiltersTenantAndSubscriptionID(t *testing.T) {
 		model.Type("/" + query)
 		model.Send(tea.KeyMsg{Type: tea.KeyEnter})
 		model.Send(tea.KeyMsg{Type: tea.KeyEnter})
-		final := model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(ui.Picker)
+		final := requirePicker(t, model.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)))
 		index, err := final.Selection()
 		if err != nil || index != 0 || strings.Contains(final.View(), "Production Engineering Platform") {
 			t.Fatalf("query=%q selection=%d, %v; view=%s", query, index, err, final.View())
