@@ -5,68 +5,343 @@ on:
     tags:
       - '*'
 
-permissions:
-  contents: write
-  packages: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  release-readiness:
+    if: github.repository == 'whiteducksoftware/azctx'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Block release until native publishing has supported egress enforcement
+        shell: bash
+        run: |
+          echo '::error::BLOCKED (#98): native Chocolatey publishing has audit-only egress on hosted Windows. Native macOS style also has audit-only egress. A reviewed, supported enforcement design and native acceptance are required before release.' >&2
+          exit 1
+
   goreleaser-linux:
     name: goreleaser-linux
+    needs: release-readiness
+    if: github.repository == 'whiteducksoftware/azctx'
     runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_MAKE_LATEST: ${{ vars.RELEASE_MAKE_LATEST || 'false' }}
+      SYFT_CHECK_FOR_APP_UPDATE: 'false'
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443 api.github.com:443 uploads.github.com:443
+            raw.githubusercontent.com:443 objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
+            proxy.golang.org:443 sum.golang.org:443 storage.googleapis.com:443
+            go.dev:443 dl.google.com:443
+            fulcio.sigstore.dev:443 rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443 tuf-repo.github.com:443
+            timestamp.github.com:443
+
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Fetch all tags
-        run: git fetch --force --tags
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 #v5.3.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Validate latest policy
+        shell: bash
+        run: |
+          case "$RELEASE_MAKE_LATEST" in
+            true|false) ;;
+            *) echo "RELEASE_MAKE_LATEST must be true or false" >&2; exit 1 ;;
+          esac
 
       - name: Download Syft
-        uses: anchore/sbom-action/download-syft@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 #v0.18.0
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.55.0
+
+      - name: Defer cask upload until native formatting
+        run: ruby .github/scripts/release_snapshot.rb defer-homebrew
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 #v6.2.1
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: '~> v2'
-          args: release --clean --config .goreleaser.yaml
+          version: v2.18.3
+          args: release --clean --config .release-check/release.yaml
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AUTH_GITHUB: ${{ secrets.AUTH_GITHUB }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Attest archives
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/*.tar.gz
+          create-storage-record: false
+
+      - name: Transfer only the rendered cask
+        if: ${{ !contains(github.ref_name, '-') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: homebrew-cask
+          path: dist/homebrew/Casks/azctx.rb
+          if-no-files-found: error
+          retention-days: 1
+
+  homebrew:
+    name: homebrew
+    needs: goreleaser-linux
+    if: ${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          # Harden-Runner v2.22.2 supports audit only on hosted macOS.
+          # Native enforcement acceptance remains blocked by release-readiness.
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download rendered cask from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: homebrew-cask
+          path: release-cask/Casks
+          digest-mismatch: error
+
+      - name: Normalize and check native Homebrew style
+        run: |
+          brew style --fix release-cask/Casks/azctx.rb
+          brew style release-cask/Casks/azctx.rb
+
+      - name: Transfer only the normalized style-checked cask
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: homebrew-cask-normalized
+          path: release-cask/Casks/azctx.rb
+          if-no-files-found: error
+          retention-days: 1
+
+  homebrew-publish:
+    name: homebrew-publish
+    needs: homebrew
+    if: ${{ github.repository == 'whiteducksoftware/azctx' && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443 api.github.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download normalized cask from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: homebrew-cask-normalized
+          path: .release-check/cask
+          digest-mismatch: error
+
+      - name: Create tap token
+        id: publisher-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: whiteducksoftware
+          repositories: homebrew-tap
+          permission-contents: write
+
+      - name: Publish the style-checked cask
+        run: python3 -B .github/scripts/publish_cask.py
+        env:
+          GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
 
   goreleaser-windows:
     name: goreleaser-windows
     needs: goreleaser-linux
+    if: github.repository == 'whiteducksoftware/azctx'
     runs-on: windows-latest
+    environment: release
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      RELEASE_MAKE_LATEST: ${{ vars.RELEASE_MAKE_LATEST || 'false' }}
+      SYFT_CHECK_FOR_APP_UPDATE: 'false'
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          # Harden-Runner v2.22.2 supports audit only on hosted Windows.
+          # Native enforcement acceptance remains blocked by release-readiness.
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Fetch all tags
-        run: git fetch --force --tags
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 #v5.3.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Download Syft
-        uses: anchore/sbom-action/download-syft@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 #v0.18.0
+          cache: false
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 #v6.2.1
+      - name: Validate latest policy and native Chocolatey
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_MAKE_LATEST -notin @('true', 'false')) {
+            throw 'RELEASE_MAKE_LATEST must be true or false'
+          }
+          choco --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Download Syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.55.0
+
+      - name: Build native Windows packages without publishing
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: '~> v2'
-          args: release --clean --config .goreleaser-windows.yaml
+          version: v2.18.3
+          args: release --clean --skip=publish --config .goreleaser-windows.yaml ${{ contains(github.ref_name, '-') && '--skip=chocolatey' || '' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AUTH_GITHUB: ${{ secrets.AUTH_GITHUB }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Transfer only archives, checksums, SBOMs and real winget manifests
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-release-files
+          path: |
+            dist/*.zip
+            dist/*_Windows_checksums.txt
+            dist/*.sbom.json
+            dist/winget/**/*.yaml
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Push the native Chocolatey package
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CHOCO_API_KEY)) { throw 'Chocolatey publishing requires its explicit API key' }
+          $packages = @(Get-ChildItem dist/azctx.*.nupkg)
+          if ($packages.Count -ne 1) { throw 'Expected exactly one native Chocolatey package' }
+          choco push $packages[0].FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
           CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+
+  windows-publish:
+    name: windows-publish
+    needs: goreleaser-windows
+    if: github.repository == 'whiteducksoftware/azctx'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443 api.github.com:443 uploads.github.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
+            fulcio.sigstore.dev:443 rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443 tuf-repo.github.com:443
+            timestamp.github.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download Windows release files from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-release-files
+          path: .release-check/windows
+          digest-mismatch: error
+
+      - name: Upload verified Windows release assets
+        run: gh release upload "$RELEASE_TAG" .release-check/windows/*.zip .release-check/windows/*_Windows_checksums.txt .release-check/windows/*.sbom.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Attest archives
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: .release-check/windows/*.zip
+          create-storage-record: false
+
+      - name: Verify stable winget manifests against the downloaded archives
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: ruby .github/scripts/publish_winget.rb --check
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Create winget fork token
+        if: ${{ !contains(github.ref_name, '-') }}
+        id: publisher-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: whiteducksoftware
+          repositories: winget-pkgs
+          permission-contents: write
+
+      - name: Publish only the verified winget version branch
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: ruby .github/scripts/publish_winget.rb
+        env:
+          GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
