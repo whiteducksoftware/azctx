@@ -8,9 +8,9 @@ Authentication is configured separately by the user.
 
 ## Install
 
-Review the skill and hook before enabling them. Use a reviewed source build
-on PATH until a trusted 2026.11 binary is actually published and verified;
-see [release configuration](releasing.md).
+Review the skill and hook before enabling them. Install azctx 2026.11 or later
+on PATH from a package manager or a release archive you have
+[verified](security.md#verify-a-release).
 The plugin does not download it or access credentials.
 
 ### Claude Code

@@ -132,10 +132,9 @@ xattr -d com.apple.quarantine "$HOME/.local/bin/azctx"
 
 Use the actual reviewed binary path. This is an explicit local security
 decision, not an authenticity check; do not disable Gatekeeper globally.
-The future cask declares a narrow staged-binary quarantine-removal step.
-No cask install, signing/notarization or Gatekeeper acceptance was performed
-for this layer. Do not uninstall a working formula until the replacement
-cask is actually published and verified.
+The Homebrew cask declares a narrow staged-binary quarantine-removal step, so
+cask users do not need this command. See [upgrading](upgrade.md#macos-homebrew)
+for the move from the formula to the cask.
 
 ## Logs and cancellation
 

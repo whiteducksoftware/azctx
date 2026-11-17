@@ -259,13 +259,10 @@ native Windows build and Homebrew style jobs therefore run audit-only and hold
 no credentials; see [accepted audit-only native jobs](releasing.md#accepted-audit-only-native-jobs).
 Chocolatey is not published for 2026.11.
 
-When a separately authorized release is ready,
-the reviewed workflow uses the protected `release` environment and scoped,
-short-lived App tokens. Environment reviewers, App installation, secrets,
-federated identities, repository settings and tap migration were not provisioned
-by this stack. Do not run a direct publishing GoReleaser pass to test them.
+The workflow uses the protected `release` environment and scoped, short-lived
+App tokens. Do not run a direct publishing GoReleaser pass to test them.
 
-The future stable workflow updates only `azctx-<version>` in
+The stable workflow updates only `azctx-<version>` in
 `whiteducksoftware/winget-pkgs`. It never opens the upstream PR automatically.
 An authorized maintainer must inspect the generated three manifests, hashes,
 archive URLs, Azure CLI minimum version and official schema results, then open
@@ -279,10 +276,7 @@ gh pr create --repo microsoft/winget-pkgs \
   --body 'Reviewed generated manifests for the published 2026.11.0 release.'
 ```
 
-This example is not run by any test and no PR was opened here. Wait for upstream
-acceptance and real package installation/upgrade checks. Homebrew
-trust/migration, live attestations and broker/
-OIDC/MFA acceptance remain separate manual/hosted gates.
+The PR author must have accepted the Microsoft CLA. Wait for upstream
+acceptance and real package installation/upgrade checks.
 Latest promotion remains manual, only after package availability is verified;
-`RELEASE_MAKE_LATEST` defaults to `false`. No tag, release, merge or promotion
-is part of this documentation change.
+`RELEASE_MAKE_LATEST` defaults to `false`.
