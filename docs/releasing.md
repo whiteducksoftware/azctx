@@ -73,7 +73,7 @@ until their authorized acceptance runs.
 ### Accepted audit-only native jobs
 
 The pinned
-[Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner/blob/v2.22.2/README.md#environment-compatibility-matrix)
+[Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner/blob/v2.22.4/README.md#environment-compatibility-matrix)
 supports **audit only** on GitHub-hosted Windows and macOS. Those jobs explicitly
 use audit mode, not a fictitious effective block policy. This is an accepted
 deviation from #98's block-mode requirement, limited to two jobs:
