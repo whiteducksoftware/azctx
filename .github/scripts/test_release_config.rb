@@ -108,6 +108,9 @@ class ReleaseConfigurationTest < Minitest::Test
       end
       raise 'unbounded egress' if endpoints.include?('*:443')
       publisher = steps.find { |step| step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
+      raise 'release exactly the pushed tag' unless publisher.fetch('env') == {
+        'GITHUB_TOKEN' => '${{ github.token }}', 'GORELEASER_CURRENT_TAG' => '${{ github.ref_name }}'
+      }
       raise 'defer cask upload until native formatting' unless publisher.fetch('with').fetch('args').include?(
         '--config .release-check/release.yaml'
       ) && steps.any? { |step| step.fetch('run', '').include?('ruby .github/scripts/release_snapshot.rb defer-homebrew') }
@@ -223,7 +226,7 @@ class ReleaseConfigurationTest < Minitest::Test
     build = steps.find { |step| step.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
     raise 'native GoReleaser never publishes and skips Chocolatey' unless build.fetch('with').fetch('args') ==
       'release --clean --skip=publish --skip=chocolatey --config .goreleaser-windows.yaml' &&
-      build.fetch('env') == { 'GITHUB_TOKEN' => '${{ github.token }}' }
+      build.fetch('env') == { 'GITHUB_TOKEN' => '${{ github.token }}', 'GORELEASER_CURRENT_TAG' => '${{ github.ref_name }}' }
     validate_uploads(steps, 'windows-release-files' => WINDOWS_TRANSFER)
     raise 'native package generation never pushes or receives package credentials' if
       job.to_s.match?(/secrets\.|choco push|CHOCO_API_KEY|nupkg/)
@@ -288,6 +291,12 @@ class ReleaseConfigurationTest < Minitest::Test
       'native implicit GoReleaser publishing' => ->(w) do
         build = w['jobs']['goreleaser-windows']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
         build['with']['args'].sub!('--skip=publish ', '')
+      end,
+      'Linux release guesses the tag' => ->(w) do
+        w['jobs']['goreleaser-linux']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }['env'].delete('GORELEASER_CURRENT_TAG')
+      end,
+      'native build guesses the tag' => ->(w) do
+        w['jobs']['goreleaser-windows']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }['env'].delete('GORELEASER_CURRENT_TAG')
       end,
       'native build packs Chocolatey' => ->(w) do
         build = w['jobs']['goreleaser-windows']['steps'].find { |s| s.fetch('uses', '').start_with?('goreleaser/goreleaser-action@') }
