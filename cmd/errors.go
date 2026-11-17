@@ -12,7 +12,7 @@ import (
 	"github.com/whiteducksoftware/azctx/internal/ui"
 )
 
-// Exit statuses are the public process boundary, including the reserved guard status.
+// Exit statuses are the public process boundary; exec children retain their own status.
 const (
 	ExitSuccess        = 0
 	ExitFailure        = 1
@@ -33,7 +33,7 @@ const (
 )
 
 // ExitError carries a classified failure without exiting inside a command.
-// Status 3 classifies sign-in failures; status 4 is reserved for the guard layer.
+// Status 3 classifies sign-in failures; status 4 classifies guard mismatches.
 type ExitError struct {
 	Code       string
 	Message    string
@@ -45,6 +45,18 @@ type ExitError struct {
 func (e *ExitError) Error() string { return e.Message }
 func (e *ExitError) Unwrap() error { return e.Cause }
 
+// ChildExitError preserves an attached exec child's status. Its own streams are
+// the diagnostic; WriteError must not append an azctx text or JSON error.
+type ChildExitError struct {
+	Status int
+	Cause  error
+}
+
+func (e *ChildExitError) Error() string {
+	return fmt.Sprintf("command exited with status %d", e.Status)
+}
+func (e *ChildExitError) Unwrap() error { return e.Cause }
+
 // ExitCode is the single mapping from errors to process statuses.
 func ExitCode(err error) int {
 	if err == nil {
@@ -52,6 +64,10 @@ func ExitCode(err error) int {
 	}
 	if errors.Is(err, ui.ErrInterrupted) || errors.Is(err, context.Canceled) {
 		return ExitInterrupted
+	}
+	var child *ChildExitError
+	if errors.As(err, &child) {
+		return child.Status
 	}
 	var classified *ExitError
 	if errors.As(err, &classified) {
@@ -68,6 +84,10 @@ func ExitCode(err error) int {
 func WriteError(output io.Writer, format string, err error) int {
 	status := ExitCode(err)
 	if err == nil {
+		return status
+	}
+	var child *ChildExitError
+	if errors.As(err, &child) {
 		return status
 	}
 	payload := struct {

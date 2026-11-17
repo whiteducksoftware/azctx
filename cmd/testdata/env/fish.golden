@@ -1,0 +1,4 @@
+set -gx ARM_SUBSCRIPTION_ID '11111111-1111-1111-1111-111111111111';
+set -gx ARM_TENANT_ID 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+set -gx AZURE_SUBSCRIPTION_ID '11111111-1111-1111-1111-111111111111';
+set -gx AZURE_TENANT_ID 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';

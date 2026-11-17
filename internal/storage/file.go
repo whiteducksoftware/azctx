@@ -129,6 +129,11 @@ func Write(path, azureDir string, data []byte) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
+	return replace(path, azureDir, data)
+}
+
+func replace(path, azureDir string, data []byte) error {
+	dir := filepath.Dir(path)
 	file, err := os.CreateTemp(dir, ".azctx-*")
 	if err != nil {
 		return err
@@ -143,6 +148,9 @@ func Write(path, azureDir string, data []byte) error {
 		return err
 	}
 	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := validate(path, azureDir); err != nil {
 		return err
 	}
 	if err := os.Rename(file.Name(), path); err != nil {

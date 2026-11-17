@@ -1,0 +1,4 @@
+##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]11111111-1111-1111-1111-111111111111
+##vso[task.setvariable variable=ARM_TENANT_ID]aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID]11111111-1111-1111-1111-111111111111
+##vso[task.setvariable variable=AZURE_TENANT_ID]aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa

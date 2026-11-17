@@ -41,6 +41,30 @@ directories on Unix. Locations within either the resolved or environment Azure
 configuration directory are rejected before reads/writes, including symlinks.
 No credentials, token caches or Azure files are written.
 
+## Project context
+
+`.azctx.yaml` is a separate, untrusted, read-only project expectation, not an
+azctx user configuration file:
+
+```yaml
+version: 1
+tenant: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+subscription: 11111111-1111-1111-1111-111111111111
+```
+
+All three keys are required. GUIDs are compared case-insensitively; unknown or
+duplicate keys, invalid types/GUIDs, unsupported versions and extra documents
+are explicit filename/line errors. Only regular files up to 64 KiB are accepted;
+symlinks are rejected. `guard` searches from the current directory to the
+filesystem root and stops at the nearest file, even if it is malformed.
+Missing files exit 1; mismatches exit 4 without switching. Supplied guard flags
+replace the file's expectations entirely.
+
+No project file can trigger switching, login, state/history writes or updates.
+`env` and `exec` ignore it when resolving their targets. Human current output
+warns about mismatches/invalid projects; JSON/plain-field current output does not
+read the file. See [CI/CD](ci-cd.md) for exact export/guard contracts and examples.
+
 ## Aliases and matching
 
 ```sh
