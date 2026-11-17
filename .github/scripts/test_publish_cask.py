@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import re
 import unittest
 from unittest.mock import patch
 import urllib.error
@@ -11,12 +12,12 @@ import publish_cask
 
 
 TESTDATA = Path(__file__).resolve().parent / "testdata" / "homebrew"
-# Exact real outputs: GoReleaser 2.18.3 `release_snapshot.rb unix stable` (publisher
+# Exact real outputs: GoReleaser 2.19.0 `release_snapshot.rb unix stable` (publisher
 # disabled), and that file after native `brew style --fix` (strict `brew style`: no offenses).
 ORIGINAL = (TESTDATA / "goreleaser-azctx.rb").read_text(encoding="utf-8")
 CASK = (TESTDATA / "brew-style-azctx.rb").read_text(encoding="utf-8")
-ARM = "84ef92e7985f99db78672d9e72adbc3b2cde4daf951d38701139dc1569485507"
-INTEL = "5cc8e3e0ba9ebe60dd3b5988b099abbc0506ca766827892f4fdc9309c523b5e7"
+ARM = "d5f72de39f5a312261a8174957f876628411ca1fde36d39ad2725abfa4d0c57d"
+INTEL = "8f9d8c59166dc08ee6cd9105dc8eace6a558d25179c3a10e70006db6b0b7e20e"
 ARM_URL = "https://github.com/whiteducksoftware/azctx/releases/download/#{version}/azctx_Darwin_arm64.tar.gz"
 INTEL_URL = ARM_URL.replace("arm64", "x86_64")
 RUN = 'run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{staged_path}}/azctx"]'
@@ -27,8 +28,55 @@ class Response(io.BytesIO):
 
 
 class PublishCaskTest(unittest.TestCase):
+    def test_requires_exact_azure_cli_cask_dependency(self):
+        def with_dependency(declaration):
+            return re.sub(
+                r'  depends_on (?:formula|cask): (?:\[[^\]]*\]|"[^"]*")\n',
+                f"  depends_on {declaration}\n",
+                CASK,
+            )
+
+        for declaration in ('cask: "azure-cli"', 'cask: ["azure-cli"]',
+                            'cask: [\n    "azure-cli",\n  ]'):
+            cask = with_dependency(declaration)
+            with self.subTest(declaration=declaration):
+                publish_cask.verify_normalized(cask, cask)
+                publish_cask.payload(cask, "2026.11.0", None)
+        for declaration in ('formula: "azure-cli"', 'formula: ["azure-cli"]',
+                            'cask: "azure-cli@2"', 'cask: []',
+                            'cask: ["azure-cli", "jq"]'):
+            cask = with_dependency(declaration)
+            with self.subTest(declaration=declaration):
+                with self.assertRaises(ValueError):
+                    publish_cask.verify_normalized(cask, cask)
+                with self.assertRaises(ValueError):
+                    self.invoke([], casks=(cask, cask), argv=("--check",))
+                with self.assertRaises(ValueError):
+                    publish_cask.payload(cask, "2026.11.0", None)
+
+    def test_homebrew_no_zap_marker_is_inert_but_other_cleanup_is_rejected(self):
+        self.assertIn("# No zap stanza required", ORIGINAL)
+        self.assertIn("  zap :not_required\n", CASK)
+        publish_cask.verify_normalized(ORIGINAL, CASK)
+        for replacement in (
+            "zap :not_required\n  zap :not_required",
+            "zap :required",
+            "zap :macos",
+            "zap :not_required_extra",
+            "zap :not_required if false",
+            'zap trash: "~/.azure"',
+            "depends_on :not_required",
+            "postflight_steps do\n    zap :not_required\n  end",
+        ):
+            cask = CASK.replace("zap :not_required", replacement)
+            with self.subTest(replacement=replacement):
+                with self.assertRaises(ValueError):
+                    publish_cask.verify_normalized(cask, cask)
+                with self.assertRaises(ValueError):
+                    publish_cask.payload(cask, "2026.11.0", None)
+
     def test_goreleaser_2_19_macos_only_cask_preserves_exact_native_semantics(self):
-        # Exact publisher-disabled GoReleaser 2.19.0 output and Homebrew 7.0.10 normalization.
+        # Exact publisher-disabled GoReleaser 2.19.0 output and Homebrew 7.0.12 normalization.
         original = (TESTDATA / "goreleaser-2.19-azctx.rb").read_text(encoding="utf-8")
         normalized = (TESTDATA / "brew-style-2.19-azctx.rb").read_text(encoding="utf-8")
         publish_cask.verify_normalized(original, normalized)
@@ -37,10 +85,9 @@ class PublishCaskTest(unittest.TestCase):
         self.assertEqual([], self.invoke([], casks=(original, normalized), argv=("--check",)))
         with self.assertRaises(ValueError):
             publish_cask.verify_normalized(original, normalized.replace("  depends_on :macos\n", ""))
-        with self.assertRaises(ValueError):
-            publish_cask.verify_normalized(ORIGINAL, normalized)
+        publish_cask.verify_normalized(ORIGINAL, normalized)
         for replacement in ("depends_on :linux", "depends_on :macosx", "depends_on :macos_foo",
-                            "depends_on formula: :macos", "depends_on :macos if false",
+                            "depends_on cask: :macos", "depends_on :macos if false",
                             "depends_on :macos\n  depends_on :macos"):
             changed = normalized.replace("depends_on :macos", replacement)
             with self.subTest(replacement=replacement), self.assertRaises(ValueError):
@@ -76,19 +123,19 @@ class PublishCaskTest(unittest.TestCase):
             (arm, "url", (("", ARM_URL),)),
             (intel, "sha256", (("", INTEL),)),
             (intel, "url", (("", INTEL_URL),)),
-            (("cask",), "depends_on", (("formula", "azure-cli"),)),
+            (("cask",), "depends_on", (("cask", "azure-cli"),)),
             (("cask",), "binary", (("", "azctx"),)),
             (("cask", "postflight_steps"), "run",
              (("", "/usr/bin/xattr"), ("args", ("-dr", "com.apple.quarantine", "{{staged_path}}/azctx")))),
         ):
             self.assertIn(entry, semantics)
-        self.assertEqual(18, len(semantics))
+        self.assertEqual(19, len(semantics))
         # Formatting brew may change: continued arrays, indentation, trailing commas,
         # order, blank lines, whole-line comments, and a one-element versus scalar dependency.
         for name, cask in {
             "multi-line run": CASK.replace(RUN, RUN.replace("[", "[\n      ").replace('", "', '",\n      "')),
-            "one-line dependency": CASK.replace('formula: [\n    "azure-cli",\n  ]', 'formula: ["azure-cli"]'),
-            "scalar dependency": CASK.replace('formula: [\n    "azure-cli",\n  ]', 'formula: "azure-cli"'),
+            "one-line dependency": CASK.replace('cask: [\n    "azure-cli",\n  ]', 'cask: ["azure-cli"]'),
+            "scalar dependency": CASK.replace('cask: [\n    "azure-cli",\n  ]', 'cask: "azure-cli"'),
             "reordered": CASK.replace('  binary "azctx"\n', "").replace('  name "azctx"\n', '  name "azctx"\n  binary "azctx"\n'),
             "comment line": CASK.replace("  on_macos do\n", "  # macOS only\n  on_macos do\n"),
             "tabs": CASK.replace('  binary "azctx"', '\tbinary "azctx"'),
@@ -108,8 +155,8 @@ class PublishCaskTest(unittest.TestCase):
             "missing binary": CASK.replace('  binary "azctx"\n', ""),
             "dependency": CASK.replace('"azure-cli",', '"azure-cli@2",'),
             "extra dependency": CASK.replace('"azure-cli",', '"azure-cli",\n    "jq",'),
-            "missing dependency": CASK.replace('  depends_on formula: [\n    "azure-cli",\n  ]\n', ""),
-            "dependency kind": CASK.replace("depends_on formula:", "depends_on cask:"),
+            "missing dependency": CASK.replace('  depends_on cask: [\n    "azure-cli",\n  ]\n', ""),
+            "dependency kind": CASK.replace("depends_on cask:", "depends_on formula:"),
             "extra url": CASK.replace('  binary "azctx"', '  url "https://example.com/x.tar.gz"\n  binary "azctx"'),
             "moved out of architecture block": CASK.replace(
                 "    on_intel do\n", "    end\n    on_intel do\n", 1
@@ -141,7 +188,7 @@ class PublishCaskTest(unittest.TestCase):
             "uninstall stanza": CASK.replace('  binary "azctx"', '  binary "azctx"\n  uninstall delete: "/"'),
             "caveats stanza": CASK.replace('  binary "azctx"', '  binary "azctx"\n  caveats "x"'),
             # Ruby syntax the old tokenizer silently dropped.
-            "single-quoted dependency": CASK.replace('"azure-cli",\n', '"azure-cli",\n    \'evil-formula\',\n'),
+            "single-quoted dependency": CASK.replace('"azure-cli",\n', '"azure-cli",\n    \'evil-cask\',\n'),
             "single-quoted string": CASK.replace('binary "azctx"', "binary 'azctx'"),
             "modifier": CASK.replace('binary "azctx"', "binary \"azctx\", '/usr/local/bin/backdoor' if false"),
             "if modifier": CASK.replace('binary "azctx"', 'binary "azctx" if false'),
@@ -151,14 +198,14 @@ class PublishCaskTest(unittest.TestCase):
             "instance interpolation": CASK.replace('desc "Switch', 'desc "#@x Switch'),
             "escape": CASK.replace('desc "Switch', 'desc "\\x41Switch'),
             "parentheses": CASK.replace('binary "azctx"', 'binary("azctx")'),
-            "symbol": CASK.replace('formula: [\n    "azure-cli",\n  ]', "formula: :azure_cli"),
-            "percent array": CASK.replace('formula: [\n    "azure-cli",\n  ]', "formula: %w[azure-cli]"),
+            "symbol": CASK.replace('cask: [\n    "azure-cli",\n  ]', "cask: :azure_cli"),
+            "percent array": CASK.replace('cask: [\n    "azure-cli",\n  ]', "cask: %w[azure-cli]"),
             "bare word argument": CASK.replace('binary "azctx"', "binary azctx"),
             "string concatenation": CASK.replace('binary "azctx"', 'binary "az" "ctx"'),
             "constant call": CASK.replace('  binary "azctx"', '  binary "azctx"\n  File.write("x", "y")'),
             "heredoc": CASK.replace('desc "Switch Azure CLI subscriptions"', "desc <<~EOS\n    x\n  EOS"),
             "block comment": CASK.replace("  name ", "=begin\n=end\n  name ", 1),
-            "comment inside continued array": CASK.replace('formula: [\n', 'formula: [\n    # x\n'),
+            "comment inside continued array": CASK.replace('cask: [\n', 'cask: [\n    # x\n'),
             "CRLF": CASK.replace("\n", "\r\n"),
             # Block headers and architecture bindings.
             "other cask": CASK.replace('cask "azctx" do', 'cask "other" do'),
@@ -189,13 +236,13 @@ class PublishCaskTest(unittest.TestCase):
                     publish_cask.payload(cask, "2026.11.0", None)
 
     def test_rejects_original_without_comparable_semantics(self):
-        for stanza in ('  binary "azctx"\n', '  depends_on formula: [\n      "azure-cli",\n    ]\n'):
+        for stanza in ('  binary "azctx"\n', '  depends_on cask: [\n      "azure-cli",\n    ]\n'):
             self.assertIn(stanza, ORIGINAL)
             original = ORIGINAL.replace(stanza, "")
             with self.subTest(stanza), self.assertRaises(ValueError):
                 publish_cask.verify_normalized(original, original)
         for broken in (ORIGINAL + "end\n", ORIGINAL.replace("  livecheck do\n", "  livecheck do\n  on_arm do\n"),
-                       ORIGINAL.replace('formula: [\n', 'formula: [[\n'), ORIGINAL + 'binary "azctx",\n'):
+                       ORIGINAL.replace('cask: [\n', 'cask: [[\n'), ORIGINAL + 'binary "azctx",\n'):
             with self.assertRaises(ValueError):
                 publish_cask.cask_semantics(broken)
 

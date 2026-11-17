@@ -8,11 +8,11 @@ cask "azctx" do
 
   on_macos do
     on_arm do
-      sha256 "84ef92e7985f99db78672d9e72adbc3b2cde4daf951d38701139dc1569485507"
+      sha256 "d5f72de39f5a312261a8174957f876628411ca1fde36d39ad2725abfa4d0c57d"
       url "https://github.com/whiteducksoftware/azctx/releases/download/#{version}/azctx_Darwin_arm64.tar.gz"
     end
     on_intel do
-      sha256 "5cc8e3e0ba9ebe60dd3b5988b099abbc0506ca766827892f4fdc9309c523b5e7"
+      sha256 "8f9d8c59166dc08ee6cd9105dc8eace6a558d25179c3a10e70006db6b0b7e20e"
       url "https://github.com/whiteducksoftware/azctx/releases/download/#{version}/azctx_Darwin_x86_64.tar.gz"
     end
   end
@@ -24,7 +24,8 @@ cask "azctx" do
   livecheck do
     skip "Auto-generated on release."
   end
-  depends_on formula: [
+  depends_on :macos
+  depends_on cask: [
       "azure-cli",
     ]
 
